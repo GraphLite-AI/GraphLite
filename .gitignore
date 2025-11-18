@@ -1,0 +1,52 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# Database files and runtime data
+*.db
+mydb/
+*.wal
+*.log
+
+# IDE and editor files
+.vscode/
+.idea/
+.gradle/
+*.swp
+*.swo
+*~
+*.iml
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Python artifacts (for bindings)
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+dist/
+build/
+.venv/
+venv/
+*.so
+
+# Java artifacts (for bindings)
+*.class
+.gradle/
+gradle/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+
+# Runtime database directories
+graphlite-ffi/data/

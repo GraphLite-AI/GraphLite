@@ -1,0 +1,30 @@
+[package]
+name = "graphlite-sdk"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "High-level SDK for GraphLite - ergonomic API on top of GraphLite core"
+documentation = "https://docs.rs/graphlite-sdk"
+readme = "../README.md"
+keywords = ["gql", "graph", "sdk", "api", "graphlite"]
+categories = ["database", "api-bindings"]
+
+[lib]
+name = "graphlite_sdk"
+path = "src/lib.rs"
+doctest = false
+
+[dependencies]
+# Core GraphLite library
+graphlite = { path = "../graphlite", version = "0.0.1" }
+
+# Re-export commonly needed dependencies
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

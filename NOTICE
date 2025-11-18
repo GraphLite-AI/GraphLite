@@ -1,0 +1,47 @@
+GraphLite
+Copyright 2024-2025 DeepGraph Inc. and contributors
+
+This product includes software developed by DeepGraph Inc. (https://deepgraphai.com/)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+================================================================================
+
+This product is based on grammar optimized from the OpenGQL project:
+  * OpenGQL (https://github.com/opengql/grammar)
+  * Copyright: OpenGQL Contributors
+  * License: Apache License 2.0
+
+================================================================================
+
+AI-Assisted Development:
+
+This software was developed using claude code as a pair programmer, with occasional contributions from other similar coding agents. However, there was rigorous human oversight of AI generated code including thorough testing and manual review.
+
+All AI-generated code was reviewed, tested, and approved by human contributors.
+
+The use of AI tools does not alter the terms of the Apache License, Version 2.0, under which this project is licensed. All contributors—past, present, and future—provide their contributions under the same license and disclaimers.
+
+================================================================================
+
+Third-Party Dependencies:
+
+For a complete list of dependencies and their licenses, run:
+  cargo license
+
+All dependencies use licenses compatible with Apache-2.0.
+See LICENSE file for full Apache License 2.0 text.
+
+================================================================================
+
+For questions, see: https://github.com/GraphLite-AI/GraphLite

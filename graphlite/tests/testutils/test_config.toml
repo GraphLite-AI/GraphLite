@@ -1,0 +1,12 @@
+[storage]
+data_dir = "/tmp/graphlite_shared_test_env"
+method = "RocksDB"
+storage_type = "Disk"
+
+[logging]
+level = "info"
+log_dir = "/tmp/graphlite_shared_test_env/logs"
+
+[server]
+host = "127.0.0.1"
+port = 8080

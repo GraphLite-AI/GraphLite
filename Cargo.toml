@@ -1,0 +1,64 @@
+[workspace]
+resolver = "2"
+members = [
+    "graphlite",
+    "graphlite-cli",
+    "graphlite-sdk",
+    "graphlite-ffi",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+authors = ["GraphLite Contributors"]
+license = "Apache-2.0"
+repository = "https://github.com/GraphLite-AI/GraphLite"
+description = "GraphLite - A lightweight ISO GQL Graph Database"
+
+[workspace.dependencies]
+# Core parsing and AST
+nom = { version = "7.1", features = ["alloc"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+regex = "1.0"
+
+# Date/time support (for GQL temporal types)
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.8"
+
+# Async runtime and concurrency
+tokio = { version = "1.0", features = ["full"] }
+async-trait = "0.1"
+parking_lot = "0.12"
+rayon = "1.8"
+
+# Storage and serialization
+bincode = "1.3"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Logging
+log = "0.4"
+env_logger = "0.10"
+
+# Graph-specific
+fastrand = "2.0"
+
+# CLI dependencies
+clap = { version = "4.5", features = ["derive"] }
+rustyline = "13.0"
+rpassword = "7.0"
+colored = "2.1"
+comfy-table = "7.0"
+
+# Storage backend
+sled = { version = "0.34" }
+
+# Additional utilities
+once_cell = "1.21.3"
+lazy_static = "1.4"
+crc32fast = "1.3"
+petgraph = "0.6"
+
+# Dev dependencies
+tempfile = "3.8"

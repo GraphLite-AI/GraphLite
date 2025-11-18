@@ -1,0 +1,11 @@
+# GraphLite Cargo Configuration
+# This file configures cargo behavior for the GraphLite project
+
+[env]
+# Run tests single-threaded by default to avoid database state conflicts
+# GraphLite tests share database instances and must not run in parallel
+# to prevent race conditions and state interference between tests.
+#
+# Users can override this setting if needed:
+#   RUST_TEST_THREADS=4 cargo test
+RUST_TEST_THREADS = "1"

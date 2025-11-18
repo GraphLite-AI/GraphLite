@@ -1,0 +1,33 @@
+[package]
+name = "graphlite-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Command-line interface for GraphLite"
+documentation = "https://docs.rs/graphlite-cli"
+readme = "../README.md"
+keywords = ["gql", "graph", "cli", "database"]
+categories = ["command-line-utilities", "database"]
+
+[[bin]]
+name = "graphlite"
+path = "src/main.rs"
+
+[dependencies]
+# Core library dependency
+graphlite = { path = "../graphlite", version = "0.0.1" }
+
+# CLI-specific dependencies
+clap = { workspace = true }
+rustyline = { workspace = true }
+colored = { workspace = true }
+comfy-table = { workspace = true }
+rpassword = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+env_logger = { workspace = true }
+log = { workspace = true }
+thiserror = { workspace = true }

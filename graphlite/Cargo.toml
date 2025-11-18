@@ -1,0 +1,64 @@
+[package]
+name = "graphlite"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description.workspace = true
+documentation = "https://docs.rs/graphlite"
+readme = "../README.md"
+keywords = ["gql", "graph", "query", "database", "iso-gql"]
+categories = ["database", "parser-implementations"]
+
+[lib]
+name = "graphlite"
+path = "src/lib.rs"
+doctest = false
+
+[features]
+default = ["sled-backend"]
+memory = []
+sled-backend = ["dep:sled"]
+
+[dependencies]
+# Use workspace dependencies
+nom = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+regex = { workspace = true }
+
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
+
+tokio = { workspace = true }
+async-trait = { workspace = true }
+parking_lot = { workspace = true }
+rayon = { workspace = true }
+
+bincode = { workspace = true }
+uuid = { workspace = true }
+
+log = { workspace = true }
+env_logger = { workspace = true }
+
+fastrand = { workspace = true }
+
+sled = { workspace = true, optional = true }
+
+once_cell = { workspace = true }
+lazy_static = { workspace = true }
+crc32fast = { workspace = true }
+petgraph = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[[example]]
+name = "simple_usage"
+path = "../examples-core/simple_usage.rs"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

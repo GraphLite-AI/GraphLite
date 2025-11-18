@@ -1,0 +1,306 @@
+# ISO GQL Standard Grammar - Compressed BNF
+# Optimized for reduced code generation while preserving type safety
+# Intermediate nodes eliminated where semantically safe
+
+# ==============================================================================
+# CORE PROGRAM STRUCTURE
+# ==============================================================================
+
+<gql-program> ::= (<session-activity> | <transaction-activity>) ["SESSION" "CLOSE"] <EOF>
+                | "SESSION" "CLOSE" <EOF>
+
+<session-activity> ::= "SESSION" "RESET" [<session-reset-args>]
+                     | "SESSION" "SET" <session-set-clause> ("SESSION" "RESET" [<session-reset-args>])*
+
+<session-set-clause> ::= "SCHEMA" <schema-reference>
+                       | ["PROPERTY"] "GRAPH" <graph-expression>
+                       | "TIME" "ZONE" <time-zone-string>
+                       | ["PROPERTY"] "GRAPH" ["IF" "NOT" "EXISTS"] <parameter> <graph-initializer>
+                       | ["BINDING"] "TABLE" ["IF" "NOT" "EXISTS"] <parameter> <binding-table-initializer>
+                       | "VALUE" ["IF" "NOT" "EXISTS"] <parameter> <value-initializer>
+
+<session-reset-args> ::= ["ALL"] ("PARAMETERS" | "CHARACTERISTICS")
+                       | "SCHEMA" | ["PROPERTY"] "GRAPH" | "TIME" "ZONE"
+                       | ["PARAMETER"] <parameter>
+
+<transaction-activity> ::= "START" "TRANSACTION" [<transaction-mode> ("," <transaction-mode>)*] [<procedure-body> [<transaction-end>]]
+                         | <procedure-body> [<transaction-end>]
+                         | <transaction-end>
+
+<transaction-mode> ::= "READ" ("ONLY" | "WRITE")
+
+<transaction-end> ::= "ROLLBACK" | "COMMIT"
+
+# ==============================================================================
+# PROCEDURE BODY AND STATEMENTS
+# ==============================================================================
+
+<procedure-body> ::= ["AT" <schema-reference>] [<variable-definition>+] <statement> ("NEXT" [<yield-clause>] <statement>)*
+
+<variable-definition> ::= [<type-spec>] <identifier> ["=" <expression>]
+
+<statement> ::= <catalog-statement>
+              | <data-statement> 
+              | <query-statement>
+
+# ==============================================================================
+# CATALOG STATEMENTS (DDL)
+# ==============================================================================
+
+<catalog-statement> ::= "CREATE" "SCHEMA" ["IF" "NOT" "EXISTS"] <schema-path>
+                      | "DROP" "SCHEMA" ["IF" "EXISTS"] <schema-path> ["CASCADE" | "RESTRICT"]
+                      | "CREATE" (["PROPERTY"] "GRAPH" ["IF" "NOT" "EXISTS"] | "OR" "REPLACE" ["PROPERTY"] "GRAPH") <graph-path> [<graph-type-spec>] ["AS" <query-statement>]
+                      | "DROP" ["PROPERTY"] "GRAPH" ["IF" "EXISTS"] <graph-path>
+                      | "CREATE" (["PROPERTY"] "GRAPH" "TYPE" ["IF" "NOT" "EXISTS"] | "OR" "REPLACE" ["PROPERTY"] "GRAPH" "TYPE") <graph-type-path> ["COPY" "OF" <graph-type-reference>] <graph-type-spec>
+                      | "DROP" ["PROPERTY"] "GRAPH" "TYPE" ["IF" "EXISTS"] <graph-type-path> ["CASCADE" | "RESTRICT"]
+
+# ==============================================================================
+# DATA MODIFICATION STATEMENTS (DML)
+# ==============================================================================
+
+<data-statement> ::= "INSERT" <graph-pattern>
+                   | "SET" <set-item> ("," <set-item>)*
+                   | "REMOVE" <remove-item> ("," <remove-item>)*
+                   | ["DETACH" | "NODETACH"] "DELETE" <expression> ("," <expression>)*
+
+<set-item> ::= <property-reference> "=" <expression>
+             | <identifier> "=" <expression>
+             | <identifier> ("IS" | ":") <label-expression>
+
+<remove-item> ::= <property-reference>
+                | <identifier> ("IS" | ":") <label-expression>
+
+# ==============================================================================
+# QUERY STATEMENTS
+# ==============================================================================
+
+<query-statement> ::= <query-term> (("UNION" | "EXCEPT") ["ALL"] <query-term> | "INTERSECT" ["ALL"] <query-term>)*
+
+<query-term> ::= <query-primary>
+               | "(" <query-statement> ")"
+
+<query-primary> ::= <match-statement>
+                  | <let-statement>
+                  | <for-statement>
+                  | <filter-statement>
+                  | <return-statement>
+                  | <select-statement>
+                  | <call-statement>
+
+<match-statement> ::= "MATCH" [<match-mode>] <path-pattern> ("," <path-pattern>)* ["KEEP" <path-prefix>] ["WHERE" <expression>] [<yield-clause>]
+
+<match-mode> ::= ("REPEATABLE" | "DIFFERENT") ("ELEMENT" | "ELEMENTS" | "EDGE" | "EDGES") ["BINDINGS"]
+
+<path-pattern> ::= [<identifier> "="] [<path-prefix>] <path-expression>
+
+<path-prefix> ::= ("WALK" | "TRAIL" | "SIMPLE" ["PATH"] | "ACYCLIC" ["PATH"])
+                | (["ALL" | "ANY"] ["SHORTEST"] [<path-prefix>] ["PATHS" | "PATH"])
+
+<path-expression> ::= <path-factor> (<path-factor>)*
+
+<path-factor> ::= <element-pattern> [<quantifier>] ["?"]
+
+<element-pattern> ::= "(" [<identifier>] [("IS" | ":") <label-expression>] [("WHERE" <expression> | "{" <property-list> "}")] ")"
+                    | <edge-pattern>
+
+<edge-pattern> ::= ("<-[" | "~[" | "-[" | "<~[") [<identifier>] [("IS" | ":") <label-expression>] [("WHERE" <expression> | "{" <property-list> "}")] ("]--" | "]~" | "]->" | "]~>")
+                 | "<-" | "~" | "->" | "<~" | "~>" | "<->" | "-"
+
+<quantifier> ::= "{" <integer> ["," [<integer>]] "}"
+
+<property-list> ::= <identifier> ":" <expression> ("," <identifier> ":" <expression>)*
+
+<let-statement> ::= "LET" <variable-definition> ("," <variable-definition>)*
+
+<for-statement> ::= "FOR" [<identifier> ":"] <identifier> "IN" <expression>
+
+<filter-statement> ::= "FILTER" ["WHERE" <expression>]
+
+<return-statement> ::= "RETURN" ["DISTINCT" | "ALL"] ("*" | <return-item> ("," <return-item>)*) [<group-by>]
+
+<select-statement> ::= "SELECT" ["DISTINCT" | "ALL"] ("*" | <return-item> ("," <return-item>)*) ["FROM" (<graph-expression> [<match-statement>] ("," <graph-expression> [<match-statement>])* | <query-statement>)] [<where-clause>] [<group-by>] [<having-clause>] [<order-by>] [<offset-limit>]
+
+<return-item> ::= <expression> ["AS" <identifier>]
+
+<call-statement> ::= ["OPTIONAL"] "CALL" <procedure-reference> ["(" <expression> ("," <expression>)* ")"] [<yield-clause>]
+
+<yield-clause> ::= "YIELD" <identifier> ["AS" <identifier>] ("," <identifier> ["AS" <identifier>])*
+
+<where-clause> ::= "WHERE" <expression>
+<group-by> ::= "GROUP" "BY" <expression> ("," <expression>)*
+<having-clause> ::= "HAVING" <expression>
+<order-by> ::= "ORDER" "BY" <expression> [("ASC" | "ASCENDING" | "DESC" | "DESCENDING")] [("NULLS" "FIRST" | "NULLS" "LAST")] ("," <expression> [("ASC" | "ASCENDING" | "DESC" | "DESCENDING")] [("NULLS" "FIRST" | "NULLS" "LAST")])*
+<offset-limit> ::= ["OFFSET" <expression>] ["LIMIT" <expression>]
+
+# ==============================================================================
+# EXPRESSIONS
+# ==============================================================================
+
+<expression> ::= <or-expr>
+
+<or-expr> ::= <xor-expr> ("OR" <xor-expr>)*
+
+<xor-expr> ::= <and-expr> ("XOR" <and-expr>)*
+
+<and-expr> ::= <not-expr> ("AND" <not-expr>)*
+
+<not-expr> ::= ["NOT"] <comparison>
+
+<comparison> ::= <additive> [<comp-op> <additive>]
+               | <additive> ("=" | "<>" | "!=" | "<" | ">" | "<=" | ">=") ("ALL" | "ANY" | "SOME") "(" <expression> ")"
+               | "EXISTS" "{" <match-statement> ["WHERE" <expression>] "}"
+               | <predicate>
+
+<comp-op> ::= "=" | "<>" | "!=" | "<" | ">" | "<=" | ">="
+
+<predicate> ::= <additive> "IS" ["NOT"] ("NULL" | "NORMALIZED" | "DIRECTED" | "TRUE" | "FALSE" | "UNKNOWN")
+              | <additive> ("IS" | ":") <label-expression>
+              | <additive> "IS" ["NOT"] ("SOURCE" | "DESTINATION") ["OF" <additive>]
+              | <additive> "IS" ["NOT"] "TYPED" <type-spec>
+              | <string-expr> ("STARTS" "WITH" | "ENDS" "WITH" | "CONTAINS" | "LIKE" | "~") <string-expr>
+              | <additive> "IN" <additive>
+              | "ALL_DIFFERENT" "(" <expression> ("," <expression>)* ")"
+              | "SAME" "(" <expression> "," <expression> ")"
+              | "PROPERTY_EXISTS" "(" <property-reference> ")"
+
+<additive> ::= <multiplicative> (("+" | "-") <multiplicative>)*
+
+<multiplicative> ::= <factor> (("*" | "/" | "%") <factor>)*
+
+<factor> ::= [("+" | "-")] <primary>
+
+<primary> ::= "(" <expression> ")"
+            | <function-call>
+            | <property-reference>
+            | <variable-reference>
+            | <literal>
+            | <parameter>
+            | <constructor>
+            | <case-expr>
+            | "CAST" "(" <expression> "AS" <type-spec> ")"
+
+<function-call> ::= <identifier> "(" [<expression> ("," <expression>)*] ")"
+
+<property-reference> ::= <primary> "." <identifier>
+
+<variable-reference> ::= <identifier>
+
+<constructor> ::= "[" [<expression> ("," <expression>)*] "]"
+                | "{" [<identifier> ":" <expression> ("," <identifier> ":" <expression>)*] "}"
+                | "PATH" "[" <expression> ("," <expression>)* "]"
+
+<case-expr> ::= "CASE" <expression> ("WHEN" <expression> ("," <expression>)* "THEN" <expression>)+ ["ELSE" <expression>] "END"
+              | "CASE" ("WHEN" <expression> "THEN" <expression>)+ ["ELSE" <expression>] "END"
+              | "NULLIF" "(" <expression> "," <expression> ")"
+              | "COALESCE" "(" <expression> ("," <expression>)* ")"
+
+# ==============================================================================
+# STRING EXPRESSIONS
+# ==============================================================================
+
+<string-expr> ::= <string-factor> ("||" <string-factor>)*
+
+<string-factor> ::= <primary>
+                  | ("UPPER" | "LOWER") "(" <string-expr> ")"
+                  | "TRIM" "(" [("LEADING" | "TRAILING" | "BOTH") [<string-expr>] "FROM"] <string-expr> ")"
+                  | "SUBSTRING" "(" <string-expr> "FROM" <expression> ["FOR" <expression>] ")"
+                  | "REPLACE" "(" <string-expr> "," <string-expr> "," <string-expr> ")"
+                  | "REVERSE" "(" <string-expr> ")"
+
+# ==============================================================================
+# LITERALS AND TYPES
+# ==============================================================================
+
+<literal> ::= ("TRUE" | "FALSE")
+            | <quoted-string>
+            | <number>
+            | "NULL"
+            | ("DATE" | "TIME" | "DATETIME") <quoted-string>
+            | "DURATION" <quoted-string>
+            | "[" [<expression> ("," <expression>)*] "]"
+            | "{" [<identifier> ":" <expression> ("," <identifier> ":" <expression>)*] "}"
+
+<type-spec> ::= ("BOOLEAN" | "BOOL")
+              | ("STRING" | "VARCHAR") ["(" <integer> ")"]
+              | ("BYTES" | "BYTE" "VARYING") ["(" <integer> ")"]
+              | ("DECIMAL" | "DEC" | "NUMERIC") ["(" <integer> ["," <integer>] ")"]
+              | ("INTEGER" | "INT" | "BIGINT" | "SMALLINT" | "INT128" | "INT256")
+              | ("FLOAT" ["(" <integer> ")"] | "REAL" | "DOUBLE" ["PRECISION"])
+              | ("DATE" | "TIME" [<integer>] [("WITH" | "WITHOUT") "TIME" "ZONE"] | "TIMESTAMP" [<integer>] [("WITH" | "WITHOUT") "TIME" "ZONE"])
+              | ("ZONED" | "LOCAL") ("TIME" | "DATETIME" | "TIMESTAMP") [<integer>]
+              | "DURATION" [<integer>]
+              | "REF" ["(" <type-spec> ")"]
+              | "PATH"
+              | <type-spec> "LIST" ["[" <integer> "]"]
+              | "LIST" ["[" <integer> "]"]
+              | ("RECORD" | "REC")
+              | ["PROPERTY"] "GRAPH" [<graph-type-spec>]
+              | ("BINDING" | "TABLE")
+
+<graph-type-spec> ::= "(" [("VERTEX" | "NODE") ("TYPE" | "TYPES") <vertex-type> ("," <vertex-type>)*] ["EDGE" ("TYPE" | "TYPES") <edge-type> ("," <edge-type>)*] ")"
+
+<vertex-type> ::= [<identifier>] [("IS" | ":") <label-expression>] ["{" <property-type> ("," <property-type>)* "}"]
+
+<edge-type> ::= [<identifier>] [("IS" | ":") <label-expression>] ["{" <property-type> ("," <property-type>)* "}"] ["SOURCE" <identifier>] ["DESTINATION" <identifier>]
+
+<property-type> ::= <identifier> <type-spec>
+
+<label-expression> ::= <label-term> ("|" <label-term>)*
+
+<label-term> ::= <label-factor> ("!" <label-factor>)*
+
+<label-factor> ::= <identifier> | "%" | "(" <label-expression> ")"
+
+# ==============================================================================
+# REFERENCES AND IDENTIFIERS
+# ==============================================================================
+
+<graph-expression> ::= <graph-reference>
+                     | <graph-expression> "UNION" ["ALL"] <graph-expression>
+                     | ("CURRENT_PROPERTY_GRAPH" | "CURRENT_GRAPH")
+
+<graph-reference> ::= ("HOME_PROPERTY_GRAPH" | "HOME_GRAPH")
+                    | <parameter>
+                    | <catalog-path>
+
+<schema-reference> ::= <catalog-path>
+
+<procedure-reference> ::= <catalog-path>
+
+<graph-type-reference> ::= <catalog-path>
+
+<catalog-path> ::= <identifier> ("/" <identifier>)*
+                 | "/" <identifier> ("/" <identifier>)*
+
+<schema-path> ::= <catalog-path>
+<graph-path> ::= <catalog-path>
+<graph-type-path> ::= <catalog-path>
+
+<parameter> ::= "$" <identifier>
+
+<identifier> ::= <regular-id> | "`" <delimited-id-chars> "`"
+
+<regular-id> ::= (<letter> | "_") (<letter> | <digit> | "_")*
+
+<delimited-id-chars> ::= (<letter> | <digit> | <special-char> | "``")*
+
+<quoted-string> ::= "'" (<string-char> | "''")* "'"
+
+<time-zone-string> ::= <quoted-string>
+
+<graph-initializer> ::= "=" <graph-expression>
+<binding-table-initializer> ::= "=" <query-statement>
+<value-initializer> ::= "=" <expression>
+
+<number> ::= [("-" | "+")] <digit>+ ["." <digit>+] [("E" | "e") [("-" | "+")] <digit>+]
+
+<integer> ::= <digit>+
+
+<letter> ::= "A".."Z" | "a".."z"
+<digit> ::= "0".."9"
+<special-char> ::= " " | "!" | "#".."/" | ":".."@" | "[".."_" | "{".."~"
+<string-char> ::= <letter> | <digit> | <special-char>
+
+# ==============================================================================
+# END OF COMPRESSED BNF GRAMMAR
+# ==============================================================================

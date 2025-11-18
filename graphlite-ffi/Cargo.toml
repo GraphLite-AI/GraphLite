@@ -1,0 +1,23 @@
+[package]
+name = "graphlite-ffi"
+version = "0.0.1"
+edition = "2021"
+license = "Apache-2.0"
+authors = ["DeepGraph Inc."]
+description = "C-compatible FFI layer for GraphLite graph database"
+repository = "https://github.com/GraphLite-AI/GraphLite"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]  # Support dynamic, static, and Rust linking
+doctest = false
+
+[dependencies]
+graphlite = { path = "../graphlite", version = "0.0.1" }
+libc = "0.2"
+serde_json = "1.0"
+
+[build-dependencies]
+cbindgen = "0.27"
+
+[features]
+default = []
