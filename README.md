@@ -94,8 +94,7 @@ cd GraphLite
 
 After building, the binary will be available at `target/release/graphlite`.
 
-<details>
-<summary><b>Advanced Build Options</b></summary>
+### Advanced Build Options
 
 ```bash
 # Development build (faster compilation, slower runtime)
@@ -110,10 +109,8 @@ After building, the binary will be available at `target/release/graphlite`.
 # View all options
 ./scripts/build_all.sh --help
 ```
-</details>
 
-<details>
-<summary><b>Alternative: Manual Build with Cargo</b></summary>
+### Alternative: Manual Build with Cargo
 
 If you prefer to build manually without the script:
 
@@ -147,9 +144,6 @@ GraphLite includes a comprehensive cleanup script to uninstall and remove all pr
 - `--all`: Everything above plus database files, configuration, logs
 
 **Safety**: The script requires an explicit option to prevent accidental cleanup.
-
-```
-</details>
 
 ### Step 2: Initialize Database
 
