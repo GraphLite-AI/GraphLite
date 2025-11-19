@@ -40,8 +40,49 @@ class QueryResult:
     def __init__(self, data: Dict[str, Any]):
         self._data = data
         self.variables = data.get("variables", [])
-        self.rows = data.get("rows", [])
+        # Flatten rows from nested structure
+        raw_rows = data.get("rows", [])
+        self.rows = [self._flatten_row(row) for row in raw_rows]
         self.row_count = len(self.rows)
+
+    def _flatten_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        """Flatten a row from nested value structure to simple dict"""
+        if "values" not in row:
+            return row
+
+        flattened = {}
+        for key, value_wrapper in row["values"].items():
+            flattened[key] = self._extract_value(value_wrapper)
+        return flattened
+
+    def _extract_value(self, value_wrapper: Any) -> Any:
+        """Extract value from Rust enum wrapper like {'String': 'foo'} or {'Number': 42}"""
+        if not isinstance(value_wrapper, dict):
+            return value_wrapper
+
+        # Handle Rust enum variants
+        if "String" in value_wrapper:
+            return value_wrapper["String"]
+        elif "Number" in value_wrapper:
+            num = value_wrapper["Number"]
+            # Convert to int if it's a whole number
+            return int(num) if isinstance(num, float) and num.is_integer() else num
+        elif "Boolean" in value_wrapper:
+            return value_wrapper["Boolean"]
+        elif "Null" in value_wrapper:
+            return None
+        elif "List" in value_wrapper:
+            return [self._extract_value(v) for v in value_wrapper["List"]]
+        elif "Map" in value_wrapper:
+            return {k: self._extract_value(v) for k, v in value_wrapper["Map"].items()}
+        elif "Node" in value_wrapper:
+            return value_wrapper  # Return node reference as-is
+        elif "Edge" in value_wrapper:
+            return value_wrapper  # Return edge reference as-is
+        elif "Path" in value_wrapper:
+            return value_wrapper  # Return path as-is
+        else:
+            return value_wrapper
 
     def __repr__(self):
         return f"QueryResult(rows={self.row_count}, variables={self.variables})"
@@ -112,7 +153,7 @@ _lib.graphlite_create_session.argtypes = [
     ctypes.c_char_p,
     ctypes.POINTER(ctypes.c_int)
 ]
-_lib.graphlite_create_session.restype = ctypes.c_char_p
+_lib.graphlite_create_session.restype = ctypes.c_void_p
 
 _lib.graphlite_query.argtypes = [
     ctypes.POINTER(_GraphLiteDB),
@@ -120,7 +161,7 @@ _lib.graphlite_query.argtypes = [
     ctypes.c_char_p,
     ctypes.POINTER(ctypes.c_int)
 ]
-_lib.graphlite_query.restype = ctypes.c_char_p
+_lib.graphlite_query.restype = ctypes.c_void_p
 
 _lib.graphlite_close_session.argtypes = [
     ctypes.POINTER(_GraphLiteDB),
@@ -129,14 +170,14 @@ _lib.graphlite_close_session.argtypes = [
 ]
 _lib.graphlite_close_session.restype = ctypes.c_int
 
-_lib.graphlite_free_string.argtypes = [ctypes.c_char_p]
+_lib.graphlite_free_string.argtypes = [ctypes.c_void_p]
 _lib.graphlite_free_string.restype = None
 
 _lib.graphlite_close.argtypes = [ctypes.POINTER(_GraphLiteDB)]
 _lib.graphlite_close.restype = None
 
 _lib.graphlite_version.argtypes = []
-_lib.graphlite_version.restype = ctypes.c_char_p
+_lib.graphlite_version.restype = ctypes.c_void_p
 
 
 class GraphLite:
@@ -207,7 +248,8 @@ class GraphLite:
                 f"Failed to create session for user '{username}'"
             )
 
-        session_id = session_id_ptr.decode('utf-8')
+        # Copy the string before freeing
+        session_id = ctypes.string_at(session_id_ptr).decode('utf-8')
         _lib.graphlite_free_string(session_id_ptr)
         self._sessions.add(session_id)
 
@@ -245,7 +287,8 @@ class GraphLite:
             )
 
         try:
-            result_json = result_ptr.decode('utf-8')
+            # Copy the string before freeing
+            result_json = ctypes.string_at(result_ptr).decode('utf-8')
             result_data = json.loads(result_json)
             return QueryResult(result_data)
         except json.JSONDecodeError as e:
@@ -325,7 +368,7 @@ class GraphLite:
         """Get GraphLite version"""
         version_ptr = _lib.graphlite_version()
         if version_ptr:
-            version = version_ptr.decode('utf-8')
-            _lib.graphlite_free_string(version_ptr)
+            # Don't free - version() returns a static string
+            version = ctypes.string_at(version_ptr).decode('utf-8')
             return version
         return "unknown"

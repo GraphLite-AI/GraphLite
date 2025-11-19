@@ -31,9 +31,9 @@ def main():
         # 3. Create schema and graph
         print("3. Setting up schema and graph...")
         db.execute(session, "CREATE SCHEMA IF NOT EXISTS example")
-        db.execute(session, "USE SCHEMA example")
+        db.execute(session, "SESSION SET SCHEMA example")
         db.execute(session, "CREATE GRAPH IF NOT EXISTS social")
-        db.execute(session, "USE GRAPH social")
+        db.execute(session, "SESSION SET GRAPH social")
         print("   ✓ Schema and graph created\n")
 
         # 4. Insert data
