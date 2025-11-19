@@ -29,6 +29,12 @@ db = GraphLite("./mydb")
 # Create session
 session = db.create_session("admin")
 
+# Set up schema and graph
+db.execute(session, "CREATE SCHEMA IF NOT EXISTS example")
+db.execute(session, "SESSION SET SCHEMA example")
+db.execute(session, "CREATE GRAPH IF NOT EXISTS social")
+db.execute(session, "SESSION SET GRAPH social")
+
 # Execute queries
 db.execute(session, "CREATE (p:Person {name: 'Alice', age: 30})")
 
