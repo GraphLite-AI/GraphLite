@@ -73,27 +73,27 @@ def main() -> int:
         result = session.query("MATCH (p:Person) RETURN p.name as name, p.age as age")
         print(f"   Found {len(result.rows)} persons:")
         for row in result.rows:
-            name = row.get_value("name")
-            age = row.get_value("age")
+            name = row.get("name")
+            age = row.get("age")
             if name is not None and age is not None:
                 print(f"   - Name: {name}, Age: {age}")
         print()
 
-        # # 6. Use query builder
-        # print("6. Using query builder...")
-        # result = (session.query_builder()
-        #     .match_pattern("(p:Person)")
-        #     .where_clause("p.age > 25")
-        #     .return_clause("p.name as name, p.age as age")
-        #     .order_by("p.age DESC")
-        #     .execute())
-        # print(f"   Found {len(result.rows)} persons over 25:")
-        # for row in result.rows:
-        #     name = row.get_value("name")
-        #     age = row.get_value("age")
-        #     if name is not None and age is not None:
-        #         print(f"   - Name: {name}, Age: {age}")
-        # print()
+        # 6. Use query builder
+        print("6. Using query builder...")
+        result = (session.query_builder()
+            .match_pattern("(p:Person)")
+            .where_clause("p.age > 25")
+            .return_clause("p.name as name, p.age as age")
+            .order_by("p.age DESC")
+            .execute())
+        print(f"   Found {len(result.rows)} persons over 25:")
+        for row in result.rows:
+            name = row.get("name")
+            age = row.get("age")
+            if name is not None and age is not None:
+                print(f"   - Name: {name}, Age: {age}")
+        print()
 
         # # 7. Typed deserialization
         # print("7. Using typed deserialization...")
@@ -120,11 +120,11 @@ def main() -> int:
         # # 9. Verify rollback
         # result = session.query("MATCH (p:Person) RETURN count(p) as count")
         # if result.rows:
-        #     count = result.rows[0].get_value("count")
+        #     count = result.rows[0].get("count")
         #     print(f"   Person count after rollback: {count}\n")
 
-        # print("=== Example completed successfully ===")
-        # return 0
+        print("=== Example completed successfully ===")
+        return 0
 
     except GraphLiteError as e:
         print(f"\n❌ GraphLite Error: {e}")

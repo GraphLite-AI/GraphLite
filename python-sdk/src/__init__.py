@@ -61,28 +61,16 @@ Your Application
 from .error import GraphLiteError
 from .connection import GraphLite, Session
 from .transaction import Transaction
-# from .query import QueryBuilder
+from .query import QueryBuilder
 # from .result import TypedResult
 
 __version__ = "0.1.0"
 
 __all__ = [
-    # Main API
     "GraphLite",
     "Session",
-
-    # Transaction support
     "Transaction",
-
-    # Query building
-    # "QueryBuilder",
-
-    # Result handling
+    "QueryBuilder",
     # "TypedResult",
-
-    # Errors
     "GraphLiteError",
-
-    # Version
-    "__version__",
 ]

@@ -153,5 +153,22 @@ class Session:
         from .transaction import Transaction
         return Transaction(self)
 
+    def query_builder(self):
+        """
+        Create a new query builder for fluent query construction
+
+        Returns:
+            QueryBuilder instance
+
+        Examples:
+            >>> builder = session.query_builder()
+            >>> result = builder.match_pattern("(p:Person)") \\
+            ...     .where_clause("p.age > 25") \\
+            ...     .return_clause("p.name, p.age") \\
+            ...     .execute()
+        """
+        from .query import QueryBuilder
+        return QueryBuilder(self)
+
 
 __all__ = ['GraphLite', 'Session', 'QueryResult']
