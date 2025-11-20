@@ -22,30 +22,33 @@ impl TypeCoercion {
 
         match (from, to) {
             // Numeric coercions - widening integer types
-            (GqlType::SmallInt, GqlType::Integer | GqlType::BigInt | GqlType::Int128 | GqlType::Int256) => {
-                Ok(CoercionStrategy::IntegerWidening)
-            }
+            (
+                GqlType::SmallInt,
+                GqlType::Integer | GqlType::BigInt | GqlType::Int128 | GqlType::Int256,
+            ) => Ok(CoercionStrategy::IntegerWidening),
             (GqlType::Integer, GqlType::BigInt | GqlType::Int128 | GqlType::Int256) => {
                 Ok(CoercionStrategy::IntegerWidening)
             }
             (GqlType::BigInt, GqlType::Int128 | GqlType::Int256) => {
                 Ok(CoercionStrategy::IntegerWidening)
             }
-            (GqlType::Int128, GqlType::Int256) => {
-                Ok(CoercionStrategy::IntegerWidening)
-            }
+            (GqlType::Int128, GqlType::Int256) => Ok(CoercionStrategy::IntegerWidening),
 
             // Integer to decimal
-            (GqlType::SmallInt | GqlType::Integer | GqlType::BigInt | GqlType::Int128 | GqlType::Int256, 
-             GqlType::Decimal { .. }) => {
-                Ok(CoercionStrategy::IntegerToDecimal)
-            }
+            (
+                GqlType::SmallInt
+                | GqlType::Integer
+                | GqlType::BigInt
+                | GqlType::Int128
+                | GqlType::Int256,
+                GqlType::Decimal { .. },
+            ) => Ok(CoercionStrategy::IntegerToDecimal),
 
             // Integer to float
-            (GqlType::SmallInt | GqlType::Integer, 
-             GqlType::Float { .. } | GqlType::Real | GqlType::Double) => {
-                Ok(CoercionStrategy::IntegerToFloat)
-            }
+            (
+                GqlType::SmallInt | GqlType::Integer,
+                GqlType::Float { .. } | GqlType::Real | GqlType::Double,
+            ) => Ok(CoercionStrategy::IntegerToFloat),
 
             // Float widening
             (GqlType::Float { .. } | GqlType::Real, GqlType::Double) => {
@@ -58,12 +61,15 @@ impl TypeCoercion {
             }
 
             // Temporal coercions
-            (GqlType::Date, GqlType::Timestamp { .. }) => {
-                Ok(CoercionStrategy::DateToTimestamp)
-            }
+            (GqlType::Date, GqlType::Timestamp { .. }) => Ok(CoercionStrategy::DateToTimestamp),
 
             // REF type coercions
-            (GqlType::Reference { target_type: Some(ref_type) }, target) => {
+            (
+                GqlType::Reference {
+                    target_type: Some(ref_type),
+                },
+                target,
+            ) => {
                 // Can coerce REF(T) to T (dereference)
                 if Self::coerce(ref_type, target).is_ok() {
                     Ok(CoercionStrategy::ReferenceDeference)
@@ -74,7 +80,12 @@ impl TypeCoercion {
                     ))
                 }
             }
-            (source, GqlType::Reference { target_type: Some(ref_type) }) => {
+            (
+                source,
+                GqlType::Reference {
+                    target_type: Some(ref_type),
+                },
+            ) => {
                 // Can coerce T to REF(T) (create reference)
                 if Self::coerce(source, ref_type).is_ok() {
                     Ok(CoercionStrategy::CreateReference)
@@ -112,14 +123,19 @@ impl TypeCoercion {
             (GqlType::Integer, GqlType::BigInt) | (GqlType::BigInt, GqlType::Integer) => {
                 Some(GqlType::BigInt)
             }
-            (_, GqlType::Double) | (GqlType::Double, _) => {
-                Some(GqlType::Double)
-            }
+            (_, GqlType::Double) | (GqlType::Double, _) => Some(GqlType::Double),
 
             // String types - use unbounded if different
-            (GqlType::String { max_length: Some(l1) }, GqlType::String { max_length: Some(l2) }) => {
-                Some(GqlType::String { max_length: Some(*l1.max(l2)) })
-            }
+            (
+                GqlType::String {
+                    max_length: Some(l1),
+                },
+                GqlType::String {
+                    max_length: Some(l2),
+                },
+            ) => Some(GqlType::String {
+                max_length: Some(*l1.max(l2)),
+            }),
             (GqlType::String { .. }, GqlType::String { .. }) => {
                 Some(GqlType::String { max_length: None })
             }
@@ -169,10 +185,10 @@ mod tests {
     fn test_numeric_coercion() {
         let small = GqlType::SmallInt;
         let big = GqlType::BigInt;
-        
+
         let result = TypeCoercion::coerce(&small, &big).unwrap();
         assert_eq!(result, CoercionStrategy::IntegerWidening);
-        
+
         assert!(TypeCoercion::coerce(&big, &small).is_err());
     }
 
@@ -180,7 +196,7 @@ mod tests {
     fn test_find_common_type() {
         let int = GqlType::Integer;
         let bigint = GqlType::BigInt;
-        
+
         let common = TypeCoercion::find_common_type(&int, &bigint).unwrap();
         assert_eq!(common, GqlType::BigInt);
     }

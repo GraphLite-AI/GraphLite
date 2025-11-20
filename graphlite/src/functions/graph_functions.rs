@@ -5,7 +5,7 @@
 //!
 //! This module implements standard GQL graph functions like LABELS, TYPE, ID, PROPERTIES
 
-use super::function_trait::{Function, FunctionContext, FunctionResult, FunctionError};
+use super::function_trait::{Function, FunctionContext, FunctionError, FunctionResult};
 use crate::storage::Value;
 
 /// LABELS function - returns list of node labels
@@ -16,7 +16,7 @@ impl LabelsFunction {
     pub fn new() -> Self {
         Self
     }
-    
+
     /// Extract labels from a node string representation
     /// Handles common node string formats like "node_id" or "id:Label1:Label2"
     fn extract_labels_from_node_string(&self, node_str: &str) -> Option<Vec<Value>> {
@@ -25,7 +25,8 @@ impl LabelsFunction {
             let parts: Vec<&str> = node_str.split(':').collect();
             if parts.len() > 1 {
                 // Skip the first part (assumed to be ID) and treat rest as labels
-                let labels: Vec<Value> = parts[1..].iter()
+                let labels: Vec<Value> = parts[1..]
+                    .iter()
                     .map(|label| Value::String(label.to_string()))
                     .collect();
                 if !labels.is_empty() {
@@ -33,48 +34,49 @@ impl LabelsFunction {
                 }
             }
         }
-        
+
         // No extractable labels found
         None
     }
-    
 }
 
 impl Function for LabelsFunction {
     fn name(&self) -> &str {
         "LABELS"
     }
-    
+
     fn description(&self) -> &str {
         "Returns a list of labels for a node"
     }
-    
+
     fn argument_count(&self) -> usize {
         1
     }
-    
+
     fn return_type(&self) -> &str {
         "LIST<STRING>"
     }
-    
+
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         if context.arguments.len() != 1 {
             return Err(FunctionError::InvalidArgumentCount {
                 expected: 1,
-                actual: context.arguments.len()
+                actual: context.arguments.len(),
             });
         }
-        
+
         let node_ref = &context.arguments[0];
-        
+
         // Handle direct Node values (from query execution)
         match node_ref {
             Value::Node(node) => {
-                let labels: Vec<Value> = node.labels.iter()
+                let labels: Vec<Value> = node
+                    .labels
+                    .iter()
                     .map(|label| Value::String(label.clone()))
                     .collect();
                 return Ok(Value::List(labels));
-            },
+            }
             Value::String(variable_name) => {
                 // First, check if this is a variable name in the aggregation context
                 // Look through the rows to find the actual node data
@@ -83,7 +85,9 @@ impl Function for LabelsFunction {
                     for row in &context.rows {
                         if let Some(node_value) = row.get_value(variable_name) {
                             if let Value::Node(node) = node_value {
-                                let labels: Vec<Value> = node.labels.iter()
+                                let labels: Vec<Value> = node
+                                    .labels
+                                    .iter()
                                     .map(|label| Value::String(label.clone()))
                                     .collect();
                                 return Ok(Value::List(labels));
@@ -98,33 +102,40 @@ impl Function for LabelsFunction {
                 // Method 1: Try current_graph first (fastest)
                 if let Some(ref current_graph) = context.current_graph {
                     if let Some(node) = current_graph.get_node(&node_id) {
-                        let labels: Vec<Value> = node.labels.iter()
+                        let labels: Vec<Value> = node
+                            .labels
+                            .iter()
                             .map(|label| Value::String(label.clone()))
                             .collect();
                         return Ok(Value::List(labels));
                     }
                 }
-                
+
                 // Method 2: Try storage_manager with graph_name
-                if let (Some(ref storage_manager), Some(ref graph_name)) = 
-                    (&context.storage_manager, &context.graph_name) {
+                if let (Some(ref storage_manager), Some(ref graph_name)) =
+                    (&context.storage_manager, &context.graph_name)
+                {
                     if let Ok(Some(graph)) = storage_manager.get_graph(graph_name) {
                         if let Some(node) = graph.get_node(&node_id) {
-                            let labels: Vec<Value> = node.labels.iter()
+                            let labels: Vec<Value> = node
+                                .labels
+                                .iter()
                                 .map(|label| Value::String(label.clone()))
                                 .collect();
                             return Ok(Value::List(labels));
                         }
                     }
                 }
-                
+
                 // Method 3: Try storage_manager with all available graphs
                 if let Some(ref storage_manager) = context.storage_manager {
                     if let Ok(graph_names) = storage_manager.get_graph_names() {
                         for graph_name in graph_names {
                             if let Ok(Some(graph)) = storage_manager.get_graph(&graph_name) {
                                 if let Some(node) = graph.get_node(&node_id) {
-                                    let labels: Vec<Value> = node.labels.iter()
+                                    let labels: Vec<Value> = node
+                                        .labels
+                                        .iter()
                                         .map(|label| Value::String(label.clone()))
                                         .collect();
                                     return Ok(Value::List(labels));
@@ -133,13 +144,13 @@ impl Function for LabelsFunction {
                         }
                     }
                 }
-            },
+            }
             _ => {
                 // For unsupported input types, return empty labels
                 return Ok(Value::List(vec![]));
             }
         }
-        
+
         // If no labels found in storage, return empty list
         // Note: Once storage access is fully working, we may want to remove
         // the fallback behavior and return an error instead
@@ -155,7 +166,7 @@ impl Function for LabelsFunction {
                 }
             }
         }
-        
+
         // Fallback: return empty labels
         Ok(Value::List(vec![]))
     }
@@ -192,7 +203,7 @@ impl Function for TypeFunction {
         if context.arguments.len() != 1 {
             return Err(FunctionError::InvalidArgumentCount {
                 expected: 1,
-                actual: context.arguments.len()
+                actual: context.arguments.len(),
             });
         }
 
@@ -233,29 +244,29 @@ impl Function for IdFunction {
     fn name(&self) -> &str {
         "ID"
     }
-    
+
     fn description(&self) -> &str {
         "Returns the identifier of a node or edge"
     }
-    
+
     fn argument_count(&self) -> usize {
         1
     }
-    
+
     fn return_type(&self) -> &str {
         "STRING"
     }
-    
+
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         if context.arguments.len() != 1 {
             return Err(FunctionError::InvalidArgumentCount {
                 expected: 1,
-                actual: context.arguments.len()
+                actual: context.arguments.len(),
             });
         }
-        
+
         let element_ref = &context.arguments[0];
-        
+
         // For ID function, the argument should already be the ID itself
         // In GQL, node/edge references typically contain the actual ID
         match element_ref {
@@ -263,7 +274,7 @@ impl Function for IdFunction {
                 // Return the ID string directly
                 Ok(Value::String(ref_str.clone()))
             }
-            _ => Ok(Value::String("unknown_id".to_string()))
+            _ => Ok(Value::String("unknown_id".to_string())),
         }
     }
 }
@@ -277,12 +288,15 @@ impl InferredLabelsFunction {
     pub fn new() -> Self {
         Self
     }
-    
+
     /// Infer node labels from available properties
     /// This is a workaround when storage access is not available
-    fn infer_labels_from_properties(&self, variables: &std::collections::HashMap<String, Value>) -> Vec<String> {
+    fn infer_labels_from_properties(
+        &self,
+        variables: &std::collections::HashMap<String, Value>,
+    ) -> Vec<String> {
         let mut labels = Vec::new();
-        
+
         // Collect property names to analyze
         let mut properties = std::collections::HashSet::new();
         for (var_name, _) in variables {
@@ -291,9 +305,9 @@ impl InferredLabelsFunction {
                 properties.insert(prop_name);
             }
         }
-        
+
         // Infer labels based on property patterns
-        
+
         // Person indicators
         if properties.contains("email") && properties.contains("age") {
             labels.push("Person".to_string());
@@ -302,26 +316,26 @@ impl InferredLabelsFunction {
         } else if properties.contains("age") && properties.contains("salary") {
             labels.push("Person".to_string());
         }
-        
-        // Company indicators  
+
+        // Company indicators
         if properties.contains("revenue") && properties.contains("industry") {
             labels.push("Company".to_string());
         } else if properties.contains("founded") && properties.contains("industry") {
             labels.push("Organization".to_string());
         }
-        
+
         // Project indicators
         if properties.contains("budget") && properties.contains("status") {
             labels.push("Project".to_string());
         } else if properties.contains("start_date") && properties.contains("budget") {
             labels.push("Project".to_string());
         }
-        
+
         // Department indicators
         if properties.contains("floor") && !properties.contains("budget") {
             labels.push("Department".to_string());
         }
-        
+
         // Fallback: try to infer from values
         if labels.is_empty() {
             // Check specific property values
@@ -330,14 +344,14 @@ impl InferredLabelsFunction {
                     labels.push("Person".to_string());
                 }
             }
-            
+
             if let Some(Value::String(status)) = variables.get("n.status") {
                 if status == "active" || status == "inactive" || status == "completed" {
                     labels.push("Project".to_string());
                 }
             }
         }
-        
+
         // If still no labels, use generic based on ID pattern
         if labels.is_empty() {
             if let Some(Value::String(node_id)) = variables.get("n") {
@@ -355,7 +369,7 @@ impl InferredLabelsFunction {
                 }
             }
         }
-        
+
         labels
     }
 }
@@ -364,36 +378,37 @@ impl Function for InferredLabelsFunction {
     fn name(&self) -> &str {
         "INFERRED_LABELS"
     }
-    
+
     fn description(&self) -> &str {
         "Returns inferred labels for a node based on its properties (workaround for storage access issues)"
     }
-    
+
     fn argument_count(&self) -> usize {
         1
     }
-    
+
     fn return_type(&self) -> &str {
         "LIST<STRING>"
     }
-    
+
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         if context.arguments.len() != 1 {
             return Err(FunctionError::InvalidArgumentCount {
                 expected: 1,
-                actual: context.arguments.len()
+                actual: context.arguments.len(),
             });
         }
-        
+
         // Infer labels from node properties
         let inferred_labels = self.infer_labels_from_properties(&context.variables);
-        let label_values: Vec<Value> = inferred_labels.into_iter()
+        let label_values: Vec<Value> = inferred_labels
+            .into_iter()
             .map(|label| Value::String(label))
             .collect();
-        
+
         Ok(Value::List(label_values))
     }
-    
+
     fn graph_context_required(&self) -> bool {
         false // This function works with context variables only
     }
@@ -443,12 +458,16 @@ impl Function for KeysFunction {
                 if let Some(ref current_graph) = context.current_graph {
                     // Try node first, then edge
                     if let Some(node) = current_graph.get_node(element_id) {
-                        let keys: Vec<Value> = node.properties.keys()
+                        let keys: Vec<Value> = node
+                            .properties
+                            .keys()
                             .map(|key| Value::String(key.clone()))
                             .collect();
                         return Ok(Value::List(keys));
                     } else if let Some(edge) = current_graph.get_edge(element_id) {
-                        let keys: Vec<Value> = edge.properties.keys()
+                        let keys: Vec<Value> = edge
+                            .properties
+                            .keys()
                             .map(|key| Value::String(key.clone()))
                             .collect();
                         return Ok(Value::List(keys));
@@ -460,7 +479,7 @@ impl Function for KeysFunction {
             }
 
             _ => Err(FunctionError::InvalidArgumentType {
-                message: "KEYS requires a node or edge argument".to_string()
+                message: "KEYS requires a node or edge argument".to_string(),
             }),
         }
     }
@@ -484,40 +503,40 @@ impl Function for PropertiesFunction {
     fn name(&self) -> &str {
         "PROPERTIES"
     }
-    
+
     fn description(&self) -> &str {
         "Returns all properties of a node or edge as a record"
     }
-    
+
     fn argument_count(&self) -> usize {
         1
     }
-    
+
     fn return_type(&self) -> &str {
         "LIST"
     }
-    
+
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         if context.arguments.len() != 1 {
             return Err(FunctionError::InvalidArgumentCount {
                 expected: 1,
-                actual: context.arguments.len()
+                actual: context.arguments.len(),
             });
         }
-        
+
         let element_ref = &context.arguments[0];
-        
+
         // Handle both Node objects and element ID strings
         match element_ref {
             Value::Node(node) => {
                 // Directly extract properties from the Node object
-                let properties: Vec<Value> = node.properties.iter()
-                    .map(|(key, value)| {
-                        Value::String(format!("{}: {}", key, value))
-                    })
+                let properties: Vec<Value> = node
+                    .properties
+                    .iter()
+                    .map(|(key, value)| Value::String(format!("{}: {}", key, value)))
                     .collect();
                 return Ok(Value::List(properties));
-            },
+            }
             Value::String(element_str) => {
                 // Continue with the original logic for element IDs
                 let element_id = element_str.clone();
@@ -526,17 +545,17 @@ impl Function for PropertiesFunction {
                 if let Some(ref current_graph) = context.current_graph {
                     // Try node first, then edge
                     if let Some(node) = current_graph.get_node(&element_id) {
-                        let properties: Vec<Value> = node.properties.iter()
-                            .map(|(key, value)| {
-                                Value::String(format!("{}: {}", key, value))
-                            })
+                        let properties: Vec<Value> = node
+                            .properties
+                            .iter()
+                            .map(|(key, value)| Value::String(format!("{}: {}", key, value)))
                             .collect();
                         return Ok(Value::List(properties));
                     } else if let Some(edge) = current_graph.get_edge(&element_id) {
-                        let properties: Vec<Value> = edge.properties.iter()
-                            .map(|(key, value)| {
-                                Value::String(format!("{}: {}", key, value))
-                            })
+                        let properties: Vec<Value> = edge
+                            .properties
+                            .iter()
+                            .map(|(key, value)| Value::String(format!("{}: {}", key, value)))
                             .collect();
                         return Ok(Value::List(properties));
                     }
@@ -544,31 +563,36 @@ impl Function for PropertiesFunction {
 
                 // If we reach here with a String element_id, try storage manager as fallback
                 if let (Some(ref storage_manager), Some(ref graph_name)) =
-                    (&context.storage_manager, &context.graph_name) {
+                    (&context.storage_manager, &context.graph_name)
+                {
                     // Try to get graph from storage manager
                     match storage_manager.get_graph(graph_name) {
                         Ok(Some(graph)) => {
                             // Try node first, then edge
                             if let Some(node) = graph.get_node(&element_id) {
-                                let properties: Vec<Value> = node.properties.iter()
+                                let properties: Vec<Value> = node
+                                    .properties
+                                    .iter()
                                     .map(|(key, value)| {
                                         Value::String(format!("{}: {}", key, value))
                                     })
                                     .collect();
                                 return Ok(Value::List(properties));
                             } else if let Some(edge) = graph.get_edge(&element_id) {
-                                let properties: Vec<Value> = edge.properties.iter()
+                                let properties: Vec<Value> = edge
+                                    .properties
+                                    .iter()
                                     .map(|(key, value)| {
                                         Value::String(format!("{}: {}", key, value))
                                     })
                                     .collect();
                                 return Ok(Value::List(properties));
                             }
-                        },
+                        }
                         _ => {}
                     }
                 }
-            },
+            }
             _ => {
                 return Ok(Value::List(vec![]));
             }
@@ -610,7 +634,7 @@ impl Function for SizeFunction {
         if context.arguments.len() != 1 {
             return Err(FunctionError::InvalidArgumentCount {
                 expected: 1,
-                actual: context.arguments.len()
+                actual: context.arguments.len(),
             });
         }
 

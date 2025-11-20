@@ -3,11 +3,11 @@
 //
 // RevokeRoleExecutor - Implements REVOKE ROLE statement execution
 use crate::ast::ast::RevokeRoleStatement;
-use crate::exec::ExecutionError;
-use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
-use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
 use crate::catalog::manager::CatalogManager;
-use crate::catalog::operations::{CatalogOperation, EntityType, QueryType, CatalogResponse};
+use crate::catalog::operations::{CatalogOperation, CatalogResponse, EntityType, QueryType};
+use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
+use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
+use crate::exec::ExecutionError;
 use crate::storage::StorageManager;
 use crate::txn::state::OperationType;
 use serde_json::json;
@@ -28,7 +28,10 @@ impl StatementExecutor for RevokeRoleExecutor {
     }
 
     fn operation_description(&self, _context: &ExecutionContext) -> String {
-        format!("REVOKE ROLE '{}' FROM '{}'", self.statement.role_name, self.statement.username)
+        format!(
+            "REVOKE ROLE '{}' FROM '{}'",
+            self.statement.role_name, self.statement.username
+        )
     }
 }
 
@@ -58,10 +61,13 @@ impl DDLStatementExecutor for RevokeRoleExecutor {
         }
 
         // First, verify the role exists
-        let role_query_result = catalog_manager.execute("security", CatalogOperation::Query {
-            query_type: QueryType::GetRole,
-            params: json!({ "name": role_name }),
-        });
+        let role_query_result = catalog_manager.execute(
+            "security",
+            CatalogOperation::Query {
+                query_type: QueryType::GetRole,
+                params: json!({ "name": role_name }),
+            },
+        );
         let _role_response = match role_query_result {
             Ok(response) => response,
             Err(_) => {
@@ -73,10 +79,13 @@ impl DDLStatementExecutor for RevokeRoleExecutor {
         };
 
         // Get the current user to check their roles
-        let user_query_result = catalog_manager.execute("security", CatalogOperation::Query {
-            query_type: QueryType::GetUser,
-            params: json!({ "name": username }),
-        });
+        let user_query_result = catalog_manager.execute(
+            "security",
+            CatalogOperation::Query {
+                query_type: QueryType::GetUser,
+                params: json!({ "name": username }),
+            },
+        );
         let user_response = match user_query_result {
             Ok(response) => response,
             Err(_) => {
@@ -101,7 +110,8 @@ impl DDLStatementExecutor for RevokeRoleExecutor {
         // Extract current roles from user
         let current_roles: Vec<String> = if let Some(roles_value) = current_user.get("roles") {
             if let Some(roles_array) = roles_value.as_array() {
-                roles_array.iter()
+                roles_array
+                    .iter()
                     .filter_map(|v| v.as_str().map(|s| s.to_string()))
                     .collect()
             } else {
@@ -113,7 +123,10 @@ impl DDLStatementExecutor for RevokeRoleExecutor {
 
         // Check if user has this role
         if !current_roles.contains(role_name) {
-            return Ok((format!("User '{}' does not have role '{}'", username, role_name), 0));
+            return Ok((
+                format!("User '{}' does not have role '{}'", username, role_name),
+                0,
+            ));
         }
 
         // Remove the role using the remove_roles format
@@ -136,22 +149,20 @@ impl DDLStatementExecutor for RevokeRoleExecutor {
                 if let Err(e) = persist_result {
                     return Err(ExecutionError::RuntimeError(format!(
                         "Failed to persist role revocation for user '{}': {}",
-                        username,
-                        e
+                        username, e
                     )));
                 }
 
-                let message = format!("Role '{}' revoked from user '{}' successfully", role_name, username);
+                let message = format!(
+                    "Role '{}' revoked from user '{}' successfully",
+                    role_name, username
+                );
                 Ok((message, 1))
             }
-            Err(catalog_error) => {
-                Err(ExecutionError::RuntimeError(format!(
-                    "Failed to revoke role '{}' from user '{}': {}",
-                    role_name,
-                    username,
-                    catalog_error
-                )))
-            }
+            Err(catalog_error) => Err(ExecutionError::RuntimeError(format!(
+                "Failed to revoke role '{}' from user '{}': {}",
+                role_name, username, catalog_error
+            ))),
         }
     }
 }

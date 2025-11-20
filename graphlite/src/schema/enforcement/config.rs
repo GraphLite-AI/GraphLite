@@ -3,8 +3,8 @@
 //
 // Schema enforcement configuration
 
-use serde::{Deserialize, Serialize};
 use crate::schema::types::SchemaEnforcementMode;
+use serde::{Deserialize, Serialize};
 
 /// Configuration for schema enforcement behavior
 #[derive(Debug, Clone, Serialize, Deserialize)]

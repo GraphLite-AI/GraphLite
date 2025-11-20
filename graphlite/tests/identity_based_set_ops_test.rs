@@ -13,14 +13,32 @@ fn test_intersect_with_identity_tracking() {
     let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Create a test graph
-    fixture.query(&format!("CREATE GRAPH /{}/identity_test", fixture.schema_name())).unwrap();
-    fixture.query(&format!("SESSION SET GRAPH /{}/identity_test", fixture.schema_name())).unwrap();
+    fixture
+        .query(&format!(
+            "CREATE GRAPH /{}/identity_test",
+            fixture.schema_name()
+        ))
+        .unwrap();
+    fixture
+        .query(&format!(
+            "SESSION SET GRAPH /{}/identity_test",
+            fixture.schema_name()
+        ))
+        .unwrap();
 
     // Insert test data - same people but we'll project different properties
-    fixture.query(r#"INSERT (p1:Person {name: "Alice", age: 30, city: "NYC", salary: 100000})"#).unwrap();
-    fixture.query(r#"INSERT (p2:Person {name: "Bob", age: 25, city: "LA", salary: 80000})"#).unwrap();
-    fixture.query(r#"INSERT (p3:Person {name: "Charlie", age: 35, city: "Chicago", salary: 120000})"#).unwrap();
-    fixture.query(r#"INSERT (p4:Person {name: "Diana", age: 28, city: "NYC", salary: 95000})"#).unwrap();
+    fixture
+        .query(r#"INSERT (p1:Person {name: "Alice", age: 30, city: "NYC", salary: 100000})"#)
+        .unwrap();
+    fixture
+        .query(r#"INSERT (p2:Person {name: "Bob", age: 25, city: "LA", salary: 80000})"#)
+        .unwrap();
+    fixture
+        .query(r#"INSERT (p3:Person {name: "Charlie", age: 35, city: "Chicago", salary: 120000})"#)
+        .unwrap();
+    fixture
+        .query(r#"INSERT (p4:Person {name: "Diana", age: 28, city: "NYC", salary: 95000})"#)
+        .unwrap();
 
     // Test 1: INTERSECT with same nodes but different property projections
     log::debug!("\n=== Test 1: Identity-based INTERSECT ===");
@@ -37,7 +55,10 @@ fn test_intersect_with_identity_tracking() {
     // Query 2: Get high earners, project name and salary
     let query2 = r#"MATCH (p:Person) WHERE p.salary > 90000 RETURN p.name, p.salary"#;
     let result2 = fixture.query(query2).unwrap();
-    log::debug!("\nQuery 2 (salary>90000, name+salary): {} rows", result2.rows.len());
+    log::debug!(
+        "\nQuery 2 (salary>90000, name+salary): {} rows",
+        result2.rows.len()
+    );
     for row in &result2.rows {
         log::debug!("  Row: {:?}", row.values);
         log::debug!("  Entities tracked: {:?}", row.source_entities);
@@ -59,19 +80,37 @@ fn test_intersect_with_identity_tracking() {
     // Alice is in NYC (query1) and has salary > 90000 (100000)
     // Diana is in NYC (query1) and has salary > 90000 (95000)
     // So we should get 2 rows
-    assert_eq!(intersect_result.rows.len(), 2, "INTERSECT should return 2 common nodes");
+    assert_eq!(
+        intersect_result.rows.len(),
+        2,
+        "INTERSECT should return 2 common nodes"
+    );
 }
 
 #[test]
 fn test_union_deduplicates_by_identity() {
     let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
-    fixture.query(&format!("CREATE GRAPH /{}/union_identity_test", fixture.schema_name())).unwrap();
-    fixture.query(&format!("SESSION SET GRAPH /{}/union_identity_test", fixture.schema_name())).unwrap();
+    fixture
+        .query(&format!(
+            "CREATE GRAPH /{}/union_identity_test",
+            fixture.schema_name()
+        ))
+        .unwrap();
+    fixture
+        .query(&format!(
+            "SESSION SET GRAPH /{}/union_identity_test",
+            fixture.schema_name()
+        ))
+        .unwrap();
 
     // Insert test nodes
-    fixture.query(r#"INSERT (p1:Person {name: "Alice", age: 30, dept: "Engineering"})"#).unwrap();
-    fixture.query(r#"INSERT (p2:Person {name: "Bob", age: 25, dept: "Sales"})"#).unwrap();
+    fixture
+        .query(r#"INSERT (p1:Person {name: "Alice", age: 30, dept: "Engineering"})"#)
+        .unwrap();
+    fixture
+        .query(r#"INSERT (p2:Person {name: "Bob", age: 25, dept: "Sales"})"#)
+        .unwrap();
 
     log::debug!("\n=== Test 2: Identity-based UNION deduplication ===");
 
@@ -106,20 +145,40 @@ fn test_union_deduplicates_by_identity() {
 
     // With identity-based deduplication, we should get 1 row (same node)
     // Without it, we'd get 2 rows (different projections)
-    assert_eq!(union_result.rows.len(), 1, "UNION should deduplicate the same node");
+    assert_eq!(
+        union_result.rows.len(),
+        1,
+        "UNION should deduplicate the same node"
+    );
 }
 
 #[test]
 fn test_except_removes_by_identity() {
     let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
-    fixture.query(&format!("CREATE GRAPH /{}/except_identity_test", fixture.schema_name())).unwrap();
-    fixture.query(&format!("SESSION SET GRAPH /{}/except_identity_test", fixture.schema_name())).unwrap();
+    fixture
+        .query(&format!(
+            "CREATE GRAPH /{}/except_identity_test",
+            fixture.schema_name()
+        ))
+        .unwrap();
+    fixture
+        .query(&format!(
+            "SESSION SET GRAPH /{}/except_identity_test",
+            fixture.schema_name()
+        ))
+        .unwrap();
 
     // Insert test nodes
-    fixture.query(r#"INSERT (p1:Person {name: "Alice", active: true, score: 100})"#).unwrap();
-    fixture.query(r#"INSERT (p2:Person {name: "Bob", active: true, score: 50})"#).unwrap();
-    fixture.query(r#"INSERT (p3:Person {name: "Charlie", active: false, score: 75})"#).unwrap();
+    fixture
+        .query(r#"INSERT (p1:Person {name: "Alice", active: true, score: 100})"#)
+        .unwrap();
+    fixture
+        .query(r#"INSERT (p2:Person {name: "Bob", active: true, score: 50})"#)
+        .unwrap();
+    fixture
+        .query(r#"INSERT (p3:Person {name: "Charlie", active: false, score: 75})"#)
+        .unwrap();
 
     log::debug!("\n=== Test 3: Identity-based EXCEPT ===");
 
@@ -146,7 +205,11 @@ fn test_except_removes_by_identity() {
     }
 
     // Should exclude Alice (score >= 100) but keep Bob and Charlie
-    assert_eq!(except_result.rows.len(), 2, "EXCEPT should exclude high scorers by identity");
+    assert_eq!(
+        except_result.rows.len(),
+        2,
+        "EXCEPT should exclude high scorers by identity"
+    );
 }
 
 #[test]
@@ -154,10 +217,22 @@ fn test_identity_tracking_debug() {
     // Simple test to verify entity tracking is working
     let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
-    fixture.query(&format!("CREATE GRAPH /{}/debug_test", fixture.schema_name())).unwrap();
-    fixture.query(&format!("SESSION SET GRAPH /{}/debug_test", fixture.schema_name())).unwrap();
+    fixture
+        .query(&format!(
+            "CREATE GRAPH /{}/debug_test",
+            fixture.schema_name()
+        ))
+        .unwrap();
+    fixture
+        .query(&format!(
+            "SESSION SET GRAPH /{}/debug_test",
+            fixture.schema_name()
+        ))
+        .unwrap();
 
-    fixture.query(r#"INSERT (p:Person {name: "Test Person"})"#).unwrap();
+    fixture
+        .query(r#"INSERT (p:Person {name: "Test Person"})"#)
+        .unwrap();
 
     // Simple query to check if entities are being tracked
     let result = fixture.query("MATCH (p:Person) RETURN p.name").unwrap();
@@ -179,5 +254,8 @@ fn test_identity_tracking_debug() {
         }
     }
 
-    assert!(result.rows[0].has_entities(), "Entities should be tracked for pattern-matched nodes");
+    assert!(
+        result.rows[0].has_entities(),
+        "Entities should be tracked for pattern-matched nodes"
+    );
 }

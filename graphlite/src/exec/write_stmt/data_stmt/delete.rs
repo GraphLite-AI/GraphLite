@@ -4,11 +4,11 @@
 use std::collections::HashMap;
 
 use crate::ast::ast::{DeleteStatement, Expression};
-use crate::exec::ExecutionError;
-use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
 use crate::exec::write_stmt::data_stmt::DataStatementExecutor;
+use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
+use crate::exec::ExecutionError;
 use crate::storage::{GraphCache, Node, Value};
-use crate::txn::{UndoOperation, state::OperationType};
+use crate::txn::{state::OperationType, UndoOperation};
 
 /// Executor for DELETE statements
 pub struct DeleteExecutor {
@@ -20,7 +20,7 @@ impl DeleteExecutor {
     pub fn new(statement: DeleteStatement) -> Self {
         Self { statement }
     }
-    
+
     /// Check if a node matches a given pattern
     fn node_matches_pattern(node: &Node, pattern: &crate::ast::ast::Node) -> bool {
         // Check labels
@@ -32,14 +32,14 @@ impl DeleteExecutor {
                 }
             }
         }
-        
+
         // Check properties
         if let Some(pattern_props) = &pattern.properties {
             for prop in &pattern_props.properties {
                 let key = &prop.key;
                 // Get the property value from the node
                 let node_value = node.properties.get(key);
-                
+
                 // For now, we'll do simple literal matching
                 // TODO: Support more complex expressions
                 match &prop.value {
@@ -56,19 +56,21 @@ impl DeleteExecutor {
                                 return false;
                             }
                         };
-                        
+
                         if node_value != Some(&expected_value) {
                             return false;
                         }
                     }
                     _ => {
-                        log::warn!("Complex property expressions in DELETE patterns not yet supported");
+                        log::warn!(
+                            "Complex property expressions in DELETE patterns not yet supported"
+                        );
                         return false;
                     }
                 }
             }
         }
-        
+
         true
     }
 }
@@ -77,16 +79,17 @@ impl StatementExecutor for DeleteExecutor {
     fn operation_type(&self) -> OperationType {
         OperationType::Delete
     }
-    
+
     fn operation_description(&self, context: &ExecutionContext) -> String {
-        let graph_name = context.get_graph_name().unwrap_or_else(|_| "unknown".to_string());
+        let graph_name = context
+            .get_graph_name()
+            .unwrap_or_else(|_| "unknown".to_string());
         let prefix = if self.statement.detach { "DETACH " } else { "" };
         format!("{}DELETE nodes/edges in graph '{}'", prefix, graph_name)
     }
 }
 
 impl DataStatementExecutor for DeleteExecutor {
-    
     fn execute_modification(
         &self,
         graph: &mut GraphCache,
@@ -95,24 +98,27 @@ impl DataStatementExecutor for DeleteExecutor {
         let graph_name = context.get_graph_name()?;
         let mut undo_operations = Vec::new();
         let mut deleted_count = 0;
-        
+
         // Process each expression in DELETE statement
         for expr in &self.statement.expressions {
             match expr {
                 Expression::Pattern(pattern_expr) => {
                     // Handle pattern-based deletion (e.g., (c:Company {name: 'Google'}))
                     let pattern = &pattern_expr.pattern;
-                    
+
                     // For now, we only support simple node patterns, not full path patterns
                     if pattern.elements.len() == 1 {
-                        if let crate::ast::ast::PatternElement::Node(node_pattern) = &pattern.elements[0] {
+                        if let crate::ast::ast::PatternElement::Node(node_pattern) =
+                            &pattern.elements[0]
+                        {
                             // Collect nodes that match the pattern
-                            let node_ids_to_delete: Vec<String> = graph.get_all_nodes()
+                            let node_ids_to_delete: Vec<String> = graph
+                                .get_all_nodes()
                                 .iter()
                                 .filter(|node| Self::node_matches_pattern(node, node_pattern))
                                 .map(|node| node.id.clone())
                                 .collect();
-                            
+
                             // Delete matching nodes
                             for node_id in node_ids_to_delete {
                                 // Get the node data before deleting it for undo
@@ -122,14 +128,17 @@ impl DataStatementExecutor for DeleteExecutor {
                                     log::error!("Node {} not found for deletion", node_id);
                                     continue;
                                 };
-                                
+
                                 // Check for connected edges
-                                let connected_edge_ids: Vec<String> = graph.get_all_edges()
+                                let connected_edge_ids: Vec<String> = graph
+                                    .get_all_edges()
                                     .iter()
-                                    .filter(|edge| edge.from_node == node_id || edge.to_node == node_id)
+                                    .filter(|edge| {
+                                        edge.from_node == node_id || edge.to_node == node_id
+                                    })
                                     .map(|edge| edge.id.clone())
                                     .collect();
-                                
+
                                 if self.statement.detach {
                                     // DETACH DELETE: remove all connected edges first
                                     for edge_id in connected_edge_ids {
@@ -140,14 +149,22 @@ impl DataStatementExecutor for DeleteExecutor {
                                             log::error!("Edge {} not found for deletion", edge_id);
                                             continue;
                                         };
-                                        
+
                                         if let Err(e) = graph.remove_edge(&edge.id) {
-                                            log::error!("Failed to remove edge {} during DETACH DELETE: {}", edge.id, e);
+                                            log::error!(
+                                                "Failed to remove edge {} during DETACH DELETE: {}",
+                                                edge.id,
+                                                e
+                                            );
                                             continue;
                                         }
-                                        
-                                        log::debug!("Removed edge {} during DETACH DELETE of node {}", edge.id, node_id);
-                                        
+
+                                        log::debug!(
+                                            "Removed edge {} during DETACH DELETE of node {}",
+                                            edge.id,
+                                            node_id
+                                        );
+
                                         // Add undo operation for edge
                                         undo_operations.push(UndoOperation::DeleteEdge {
                                             graph_path: graph_name.clone(),
@@ -162,16 +179,16 @@ impl DataStatementExecutor for DeleteExecutor {
                                         node_id
                                     )));
                                 }
-                                
+
                                 // Delete the node
                                 if let Err(e) = graph.remove_node(&node_id) {
                                     log::error!("Failed to delete node {}: {}", node_id, e);
                                     continue;
                                 }
-                                
+
                                 log::debug!("Deleted node {} matching pattern", node_id);
                                 deleted_count += 1;
-                                
+
                                 // Add undo operation for node
                                 undo_operations.push(UndoOperation::DeleteNode {
                                     graph_path: graph_name.clone(),
@@ -187,18 +204,19 @@ impl DataStatementExecutor for DeleteExecutor {
                     } else {
                         log::warn!("Complex path patterns in DELETE not yet supported");
                     }
-                },
+                }
                 Expression::Variable(var) => {
                     // Delete nodes/edges identified by variable
                     let var_name = &var.name;
-                    
+
                     // First, collect nodes to delete
-                    let node_ids_to_delete: Vec<String> = graph.get_all_nodes()
+                    let node_ids_to_delete: Vec<String> = graph
+                        .get_all_nodes()
                         .iter()
                         .filter(|node| node.id == *var_name || node.labels.contains(var_name))
                         .map(|node| node.id.clone())
                         .collect();
-                    
+
                     // Delete nodes
                     for node_id in node_ids_to_delete {
                         // Get the node data before deleting it for undo
@@ -208,14 +226,15 @@ impl DataStatementExecutor for DeleteExecutor {
                             log::error!("Node {} not found for deletion", node_id);
                             continue;
                         };
-                        
+
                         // Check for connected edges
-                        let connected_edge_ids: Vec<String> = graph.get_all_edges()
+                        let connected_edge_ids: Vec<String> = graph
+                            .get_all_edges()
                             .iter()
                             .filter(|edge| edge.from_node == node_id || edge.to_node == node_id)
                             .map(|edge| edge.id.clone())
                             .collect();
-                        
+
                         if self.statement.detach {
                             // DETACH DELETE: remove all connected edges first
                             for edge_id in connected_edge_ids {
@@ -226,14 +245,22 @@ impl DataStatementExecutor for DeleteExecutor {
                                     log::error!("Edge {} not found for deletion", edge_id);
                                     continue;
                                 };
-                                
+
                                 if let Err(e) = graph.remove_edge(&edge.id) {
-                                    log::error!("Failed to remove edge {} during DETACH DELETE: {}", edge.id, e);
+                                    log::error!(
+                                        "Failed to remove edge {} during DETACH DELETE: {}",
+                                        edge.id,
+                                        e
+                                    );
                                     continue;
                                 }
-                                
-                                log::debug!("Removed edge {} during DETACH DELETE of node {}", edge.id, node_id);
-                                
+
+                                log::debug!(
+                                    "Removed edge {} during DETACH DELETE of node {}",
+                                    edge.id,
+                                    node_id
+                                );
+
                                 // Add undo operation for edge
                                 undo_operations.push(UndoOperation::DeleteEdge {
                                     graph_path: graph_name.clone(),
@@ -248,16 +275,16 @@ impl DataStatementExecutor for DeleteExecutor {
                                 node_id
                             )));
                         }
-                        
+
                         // Delete the node
                         if let Err(e) = graph.remove_node(&node_id) {
                             log::error!("Failed to delete node {}: {}", node_id, e);
                             continue;
                         }
-                        
+
                         log::debug!("Deleted node {}", node_id);
                         deleted_count += 1;
-                        
+
                         // Add undo operation for node
                         undo_operations.push(UndoOperation::DeleteNode {
                             graph_path: graph_name.clone(),
@@ -265,14 +292,15 @@ impl DataStatementExecutor for DeleteExecutor {
                             deleted_node: node,
                         });
                     }
-                    
+
                     // Also look for edges to delete directly (when deleting edge variables)
-                    let edge_ids_to_delete: Vec<String> = graph.get_all_edges()
+                    let edge_ids_to_delete: Vec<String> = graph
+                        .get_all_edges()
                         .iter()
                         .filter(|edge| edge.id == *var_name)
                         .map(|edge| edge.id.clone())
                         .collect();
-                    
+
                     for edge_id in edge_ids_to_delete {
                         // Get edge data before deleting for undo
                         let edge = if let Some(edge) = graph.get_edge(&edge_id) {
@@ -281,15 +309,15 @@ impl DataStatementExecutor for DeleteExecutor {
                             log::error!("Edge {} not found for deletion", edge_id);
                             continue;
                         };
-                        
+
                         if let Err(e) = graph.remove_edge(&edge.id) {
                             log::error!("Failed to delete edge {}: {}", edge.id, e);
                             continue;
                         }
-                        
+
                         log::debug!("Deleted edge {}", edge.id);
                         deleted_count += 1;
-                        
+
                         // Add undo operation for edge
                         undo_operations.push(UndoOperation::DeleteEdge {
                             graph_path: graph_name.clone(),
@@ -297,26 +325,31 @@ impl DataStatementExecutor for DeleteExecutor {
                             deleted_edge: edge,
                         });
                     }
-                },
+                }
                 _ => {
-                    log::warn!("Complex expressions in DELETE not yet supported: {:?}", expr);
+                    log::warn!(
+                        "Complex expressions in DELETE not yet supported: {:?}",
+                        expr
+                    );
                 }
             }
         }
-        
+
         // Return the first undo operation if any
-        let undo_op = undo_operations.into_iter().next().unwrap_or_else(|| {
-            UndoOperation::DeleteNode {
-                graph_path: graph_name,
-                node_id: "no_operations".to_string(),
-                deleted_node: Node {
-                    id: "no_operations".to_string(),
-                    labels: vec![],
-                    properties: HashMap::new(),
-                },
-            }
-        });
-        
+        let undo_op =
+            undo_operations
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| UndoOperation::DeleteNode {
+                    graph_path: graph_name,
+                    node_id: "no_operations".to_string(),
+                    deleted_node: Node {
+                        id: "no_operations".to_string(),
+                        labels: vec![],
+                        properties: HashMap::new(),
+                    },
+                });
+
         Ok((undo_op, deleted_count))
     }
 }

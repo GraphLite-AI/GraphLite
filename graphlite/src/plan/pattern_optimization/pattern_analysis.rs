@@ -2,15 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //! Pattern Connectivity Analysis
-//! 
+//!
 //! Data structures for analyzing connectivity between MATCH patterns
 //! to determine optimal execution strategies.
 
-use std::collections::HashMap;
 use petgraph::Graph;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-use crate::ast::ast::{PathPattern, Edge};
+use crate::ast::ast::{Edge, PathPattern};
 
 /// Analysis result for a set of patterns, capturing their connectivity
 ///
@@ -77,18 +77,18 @@ pub enum PatternPlanStrategy {
     /// Execute as a single path traversal (most efficient for linear paths)
     PathTraversal(LinearPath),
     /// Execute using hash joins
-    HashJoin { 
-        patterns: Vec<PathPattern>, 
+    HashJoin {
+        patterns: Vec<PathPattern>,
         join_order: Vec<JoinStep>,
         estimated_cost: f64,
     },
     /// Execute using nested loop joins  
-    NestedLoopJoin { 
+    NestedLoopJoin {
         patterns: Vec<PathPattern>,
         estimated_cost: f64,
     },
     /// Execute as Cartesian product (when no shared variables)
-    CartesianProduct { 
+    CartesianProduct {
         patterns: Vec<PathPattern>,
         estimated_cost: f64,
     },
@@ -165,9 +165,7 @@ impl LinearPath {
     /// Create a new linear path
     pub fn new(start_pattern: PathPattern, steps: Vec<TraversalStep>) -> Self {
         let variables = Self::extract_variables(&start_pattern, &steps);
-        let estimated_selectivity = steps.iter()
-            .map(|s| s.selectivity)
-            .product();
+        let estimated_selectivity = steps.iter().map(|s| s.selectivity).product();
 
         LinearPath {
             start_pattern,
@@ -180,7 +178,7 @@ impl LinearPath {
     /// Extract all variables involved in this path
     fn extract_variables(start_pattern: &PathPattern, steps: &[TraversalStep]) -> Vec<String> {
         let mut variables = Vec::new();
-        
+
         // Add variables from start pattern
         for element in &start_pattern.elements {
             match element {
@@ -200,7 +198,7 @@ impl LinearPath {
                 }
             }
         }
-        
+
         // Add variables from steps
         for step in steps {
             if !variables.contains(&step.from_var) {
@@ -210,7 +208,7 @@ impl LinearPath {
                 variables.push(step.to_var.clone());
             }
         }
-        
+
         variables
     }
 
@@ -328,21 +326,21 @@ impl JoinType {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::ast::{Node, Location};
+    use crate::ast::ast::{Location, Node};
 
     #[test]
     fn test_pattern_connectivity_creation() {
         let patterns = vec![];
         let connectivity = PatternConnectivity::new(patterns);
-        
+
         assert!(!connectivity.has_shared_variables());
         assert_eq!(connectivity.connected_components(), 0);
     }
 
     #[test]
     fn test_linear_path_variables() {
-        use crate::ast::ast::{PatternElement, Location};
-        
+        use crate::ast::ast::{Location, PatternElement};
+
         // Create a simple pattern: (a)-[:R]->(b)
         let start_pattern = PathPattern {
             assignment: None,
@@ -372,25 +370,23 @@ mod tests {
             location: Location::default(),
         };
 
-        let steps = vec![
-            TraversalStep {
-                from_var: "b".to_string(),
-                relationship: Edge {
-                    identifier: Some("r2".to_string()),
-                    labels: vec!["R2".to_string()],
-                    properties: None,
-                    direction: crate::ast::ast::EdgeDirection::Outgoing,
-                    quantifier: None,
-                    location: Location::default(),
-                },
-                to_var: "c".to_string(),
-                selectivity: 0.1,
-                pattern_index: 1,
+        let steps = vec![TraversalStep {
+            from_var: "b".to_string(),
+            relationship: Edge {
+                identifier: Some("r2".to_string()),
+                labels: vec!["R2".to_string()],
+                properties: None,
+                direction: crate::ast::ast::EdgeDirection::Outgoing,
+                quantifier: None,
+                location: Location::default(),
             },
-        ];
+            to_var: "c".to_string(),
+            selectivity: 0.1,
+            pattern_index: 1,
+        }];
 
         let path = LinearPath::new(start_pattern, steps);
-        
+
         assert_eq!(path.length(), 1);
         assert!(path.is_simple_path());
         assert_eq!(path.end_variable(), Some(&"c".to_string()));
@@ -401,12 +397,7 @@ mod tests {
 
     #[test]
     fn test_join_step_creation() {
-        let join_step = JoinStep::new(
-            0,
-            1,
-            vec!["x".to_string()],
-            JoinType::Hash,
-        );
+        let join_step = JoinStep::new(0, 1, vec!["x".to_string()], JoinType::Hash);
 
         assert!(join_step.is_hash_join());
         assert!(!join_step.is_index_join());

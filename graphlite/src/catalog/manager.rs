@@ -7,13 +7,13 @@
 //! code should use to interact with the catalog system. It provides a unified API
 //! for all catalog operations and manages the underlying registry.
 
-use std::sync::Arc;
-use crate::storage::StorageManager;
-use super::registry::CatalogRegistry;
-use super::operations::{CatalogOperation, CatalogResponse, EntityType, QueryType};
-use super::traits::CatalogSchema;
 use super::error::{CatalogError, CatalogResult};
-use serde::{Serialize, Deserialize};
+use super::operations::{CatalogOperation, CatalogResponse, EntityType, QueryType};
+use super::registry::CatalogRegistry;
+use super::traits::CatalogSchema;
+use crate::storage::StorageManager;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 /// Information about a catalog
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,7 +42,8 @@ pub struct CatalogManager {
     /// Internal registry managing all catalog providers
     registry: CatalogRegistry,
     /// Reference to storage manager for persistence
-    #[allow(dead_code)] // FALSE POSITIVE - Used in initialization (line 61) and passed to registry. Compiler limitation with field access detection.
+    #[allow(dead_code)]
+    // FALSE POSITIVE - Used in initialization (line 61) and passed to registry. Compiler limitation with field access detection.
     storage: Arc<StorageManager>,
 }
 
@@ -63,7 +64,7 @@ impl CatalogManager {
             storage,
         }
     }
-    
+
     /// Execute operation on specific catalog
     ///
     /// This is the main entry point for all catalog operations. The operation
@@ -80,7 +81,7 @@ impl CatalogManager {
     pub fn execute(
         &mut self,
         catalog_name: &str,
-        operation: CatalogOperation
+        operation: CatalogOperation,
     ) -> CatalogResult<CatalogResponse> {
         self.registry
             .get_mut(catalog_name)
@@ -110,17 +111,14 @@ impl CatalogManager {
     ) -> CatalogResult<CatalogResponse> {
         use crate::catalog::operations::CatalogOperation;
 
-        let operation = CatalogOperation::Query {
-            query_type,
-            params,
-        };
+        let operation = CatalogOperation::Query { query_type, params };
 
         self.registry
             .get(catalog_name)
             .ok_or_else(|| CatalogError::CatalogNotFound(catalog_name.to_string()))?
             .execute_read_only(operation)
     }
-    
+
     /// Get catalog metadata without knowing the specific type
     ///
     /// Returns information about a catalog's capabilities, supported entities,
@@ -139,7 +137,7 @@ impl CatalogManager {
             supported_operations: cat.supported_operations(),
         })
     }
-    
+
     /// List all available catalogs
     ///
     /// Returns a list of all registered catalog names. This can be used
@@ -150,7 +148,7 @@ impl CatalogManager {
     pub fn list_catalogs(&self) -> Vec<String> {
         self.registry.list_catalog_names()
     }
-    
+
     /// Check if a catalog exists
     ///
     /// # Arguments
@@ -161,7 +159,7 @@ impl CatalogManager {
     pub fn has_catalog(&self, catalog_name: &str) -> bool {
         self.registry.has_catalog(catalog_name)
     }
-    
+
     /// Get information about all available catalogs
     ///
     /// Returns detailed information about all registered catalogs,
@@ -175,7 +173,7 @@ impl CatalogManager {
             .filter_map(|name| self.get_catalog_info(&name))
             .collect()
     }
-    
+
     /// Save all catalogs to storage
     ///
     /// Persists the state of all registered catalogs to storage.
@@ -188,7 +186,7 @@ impl CatalogManager {
         // Storage operations are sync, just wrap in async context
         self.registry.save_all()
     }
-    
+
     /// Load all catalogs from storage
     ///
     /// Loads the state of all registered catalogs from storage.
@@ -201,7 +199,7 @@ impl CatalogManager {
         // Storage operations are sync, just wrap in async context
         self.registry.load_all()
     }
-    
+
     /// Save a specific catalog to storage
     ///
     /// Persists the state of a single catalog to storage.
@@ -217,7 +215,7 @@ impl CatalogManager {
         // Storage operations are sync
         self.registry.save_catalog(catalog_name)
     }
-    
+
     /// Load a specific catalog from storage
     ///
     /// Loads the state of a single catalog from storage.
@@ -233,14 +231,14 @@ impl CatalogManager {
         if !self.registry.has_catalog(catalog_name) {
             return Err(CatalogError::CatalogNotFound(catalog_name.to_string()));
         }
-        
+
         // TODO: Implement catalog-specific storage methods in StorageManager
         // For now, this is a placeholder for the storage integration
         log::debug!("Loading catalog '{}'", catalog_name);
-        
+
         Ok(())
     }
-    
+
     /// Get the number of registered catalogs
     ///
     /// # Returns
@@ -278,12 +276,9 @@ impl CatalogManager {
         query_type: QueryType,
         params: serde_json::Value,
     ) -> CatalogResult<CatalogResponse> {
-        self.execute(catalog_name, CatalogOperation::Query {
-            query_type,
-            params,
-        })
+        self.execute(catalog_name, CatalogOperation::Query { query_type, params })
     }
-    
+
     /// Create an entity with convenience method
     ///
     /// Convenience method for creating entities with commonly used parameters.
@@ -304,13 +299,16 @@ impl CatalogManager {
         name: &str,
         params: serde_json::Value,
     ) -> CatalogResult<CatalogResponse> {
-        self.execute(catalog_name, CatalogOperation::Create {
-            entity_type,
-            name: name.to_string(),
-            params,
-        })
+        self.execute(
+            catalog_name,
+            CatalogOperation::Create {
+                entity_type,
+                name: name.to_string(),
+                params,
+            },
+        )
     }
-    
+
     /// List entities with convenience method
     ///
     /// Convenience method for listing entities with optional filters.
@@ -329,9 +327,12 @@ impl CatalogManager {
         entity_type: EntityType,
         filters: Option<serde_json::Value>,
     ) -> CatalogResult<CatalogResponse> {
-        self.execute(catalog_name, CatalogOperation::List {
-            entity_type,
-            filters,
-        })
+        self.execute(
+            catalog_name,
+            CatalogOperation::List {
+                entity_type,
+                filters,
+            },
+        )
     }
 }

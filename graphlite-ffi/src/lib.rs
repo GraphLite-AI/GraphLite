@@ -16,12 +16,12 @@
 //! - Database handles are closed with `graphlite_close`
 //! - No concurrent access to the same handle without synchronization
 
+use graphlite::QueryCoordinator;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
-use std::ptr;
 use std::panic::{self, AssertUnwindSafe};
+use std::ptr;
 use std::sync::Arc;
-use graphlite::QueryCoordinator;
 
 /// Opaque handle to a GraphLite database instance
 ///
@@ -168,18 +168,16 @@ pub extern "C" fn graphlite_create_session(
 
         // Create session
         match db_ref.coordinator.create_simple_session(username_str) {
-            Ok(session_id) => {
-                match CString::new(session_id) {
-                    Ok(c_string) => {
-                        set_error(error_out, GraphLiteErrorCode::Success);
-                        c_string.into_raw()
-                    }
-                    Err(_) => {
-                        set_error(error_out, GraphLiteErrorCode::InvalidUtf8);
-                        ptr::null_mut()
-                    }
+            Ok(session_id) => match CString::new(session_id) {
+                Ok(c_string) => {
+                    set_error(error_out, GraphLiteErrorCode::Success);
+                    c_string.into_raw()
                 }
-            }
+                Err(_) => {
+                    set_error(error_out, GraphLiteErrorCode::InvalidUtf8);
+                    ptr::null_mut()
+                }
+            },
             Err(_) => {
                 set_error(error_out, GraphLiteErrorCode::SessionError);
                 ptr::null_mut()
@@ -265,18 +263,16 @@ pub extern "C" fn graphlite_query(
             Ok(result) => {
                 // Serialize to JSON
                 match serde_json::to_string(&result) {
-                    Ok(json) => {
-                        match CString::new(json) {
-                            Ok(c_string) => {
-                                set_error(error_out, GraphLiteErrorCode::Success);
-                                c_string.into_raw()
-                            }
-                            Err(_) => {
-                                set_error(error_out, GraphLiteErrorCode::JsonError);
-                                ptr::null_mut()
-                            }
+                    Ok(json) => match CString::new(json) {
+                        Ok(c_string) => {
+                            set_error(error_out, GraphLiteErrorCode::Success);
+                            c_string.into_raw()
                         }
-                    }
+                        Err(_) => {
+                            set_error(error_out, GraphLiteErrorCode::JsonError);
+                            ptr::null_mut()
+                        }
+                    },
                     Err(_) => {
                         set_error(error_out, GraphLiteErrorCode::JsonError);
                         ptr::null_mut()

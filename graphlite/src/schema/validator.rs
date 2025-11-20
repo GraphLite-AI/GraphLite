@@ -3,16 +3,14 @@
 //
 // Schema validator implementation
 
-use std::collections::HashMap;
-use std::sync::Arc;
 use parking_lot::RwLock;
 use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::{CatalogResponse, QueryType};
-use crate::schema::types::{
-    GraphTypeDefinition, NodeTypeDefinition, DataType, Constraint
-};
+use crate::schema::types::{Constraint, DataType, GraphTypeDefinition, NodeTypeDefinition};
 
 /// Schema validation errors
 #[derive(Debug, thiserror::Error)]
@@ -67,7 +65,10 @@ impl SchemaValidator {
 
     /// Create a new schema validator with custom configuration
     #[allow(dead_code)] // ROADMAP v0.4.0 - Configurable validation for different use cases
-    pub fn with_config(catalog_manager: Arc<RwLock<CatalogManager>>, allow_unknown_properties: bool) -> Self {
+    pub fn with_config(
+        catalog_manager: Arc<RwLock<CatalogManager>>,
+        allow_unknown_properties: bool,
+    ) -> Self {
         Self {
             catalog_manager,
             allow_unknown_properties,
@@ -94,7 +95,6 @@ impl SchemaValidator {
         label: &str,
         properties: &HashMap<String, Value>,
     ) -> Result<(), ValidationError> {
-
         // Find node type definition
         let node_type = graph_type
             .node_types
@@ -114,11 +114,7 @@ impl SchemaValidator {
 
         // Validate property types
         for (prop_name, prop_value) in properties {
-            if let Some(prop_def) = node_type
-                .properties
-                .iter()
-                .find(|p| p.name == *prop_name)
-            {
+            if let Some(prop_def) = node_type.properties.iter().find(|p| p.name == *prop_name) {
                 self.validate_property_type(prop_value, &prop_def.data_type)?;
             }
         }
@@ -146,11 +142,7 @@ impl SchemaValidator {
 
         // Only validate the properties that are being updated
         for (prop_name, prop_value) in properties {
-            if let Some(prop_def) = node_type
-                .properties
-                .iter()
-                .find(|p| p.name == *prop_name)
-            {
+            if let Some(prop_def) = node_type.properties.iter().find(|p| p.name == *prop_name) {
                 self.validate_property_type(prop_value, &prop_def.data_type)?;
 
                 // Validate individual property constraints
@@ -212,11 +204,7 @@ impl SchemaValidator {
 
         // Validate property types
         for (prop_name, prop_value) in properties {
-            if let Some(prop_def) = edge_def
-                .properties
-                .iter()
-                .find(|p| p.name == *prop_name)
-            {
+            if let Some(prop_def) = edge_def.properties.iter().find(|p| p.name == *prop_name) {
                 self.validate_property_type(prop_value, &prop_def.data_type)?;
             }
         }
@@ -299,14 +287,10 @@ impl SchemaValidator {
             .map_err(|e| ValidationError::CatalogError(e.to_string()))?;
 
         match graph_type_response {
-            CatalogResponse::Success { data: Some(data) } => {
-                serde_json::from_value(data)
-                    .map_err(|e| ValidationError::CatalogError(e.to_string()))
-            }
-            CatalogResponse::Query { results } => {
-                serde_json::from_value(results)
-                    .map_err(|e| ValidationError::CatalogError(e.to_string()))
-            }
+            CatalogResponse::Success { data: Some(data) } => serde_json::from_value(data)
+                .map_err(|e| ValidationError::CatalogError(e.to_string())),
+            CatalogResponse::Query { results } => serde_json::from_value(results)
+                .map_err(|e| ValidationError::CatalogError(e.to_string())),
             _ => Err(ValidationError::NoGraphType(graph_name.to_string())),
         }
     }
@@ -356,7 +340,11 @@ impl SchemaValidator {
                     if s.len() < *min {
                         return Err(ValidationError::ConstraintViolation {
                             constraint: "MinLength".to_string(),
-                            message: format!("String length {} is less than minimum {}", s.len(), min),
+                            message: format!(
+                                "String length {} is less than minimum {}",
+                                s.len(),
+                                min
+                            ),
                         });
                     }
                 }
@@ -450,7 +438,6 @@ impl SchemaValidator {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_validate_property_type() {

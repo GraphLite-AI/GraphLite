@@ -4,8 +4,8 @@
 //! Tests must not access internal components - use only public QueryCoordinator API.
 
 use graphlite::{QueryCoordinator, QueryResult, Value};
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Test fixture with isolated database instance
 /// Uses ONLY the public QueryCoordinator API - no internal components
@@ -45,7 +45,8 @@ impl TestFixture {
             .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
 
         // Create session using public API
-        let session_id = coordinator.create_simple_session("admin")
+        let session_id = coordinator
+            .create_simple_session("admin")
             .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
 
         // Use a unique schema name for test isolation (prevents concurrent test interference)
@@ -58,10 +59,8 @@ impl TestFixture {
         );
 
         // Set the schema as the session default
-        let _ = coordinator.process_query(
-            &format!("SESSION SET SCHEMA /{}", schema_name),
-            &session_id,
-        );
+        let _ =
+            coordinator.process_query(&format!("SESSION SET SCHEMA /{}", schema_name), &session_id);
 
         let fixture = TestFixture {
             coordinator,
@@ -96,7 +95,9 @@ impl TestFixture {
         for i in 1..=20 {
             self.query(&format!(
                 "INSERT (n:TestNode {{id: {}, name: 'Node {}', value: {}}})",
-                i, i, i * 10
+                i,
+                i,
+                i * 10
             ))?;
         }
 
@@ -105,7 +106,9 @@ impl TestFixture {
             self.query(&format!(
                 "MATCH (a:TestNode {{id: {}}}), (b:TestNode {{id: {}}})
                  INSERT (a)-[:CONNECTS_TO {{weight: {}}}]->(b)",
-                i, i + 1, i * 2
+                i,
+                i + 1,
+                i * 2
             ))?;
         }
 
@@ -177,7 +180,10 @@ impl TestFixture {
             self.query(&format!(
                 "MATCH (a:Account {{id: {}}}), (m:Merchant {{id: {}}})
                  INSERT (a)-[:Purchase {{amount: {}, timestamp: {}}}]->(m)",
-                account_id, merchant_id, amount, i + 100
+                account_id,
+                merchant_id,
+                amount,
+                i + 100
             ))?;
         }
 
@@ -188,13 +194,22 @@ impl TestFixture {
     /// Use this at the start of each test to ensure isolation
     pub fn setup_graph(&self, graph_name: &str) -> Result<(), String> {
         // Drop graph if it exists (ignore errors if it doesn't exist)
-        let _ = self.query(&format!("DROP GRAPH IF EXISTS /{}/{}", self.schema_name, graph_name));
+        let _ = self.query(&format!(
+            "DROP GRAPH IF EXISTS /{}/{}",
+            self.schema_name, graph_name
+        ));
 
         // Create fresh graph
-        self.query(&format!("CREATE GRAPH /{}/{}", self.schema_name, graph_name))?;
+        self.query(&format!(
+            "CREATE GRAPH /{}/{}",
+            self.schema_name, graph_name
+        ))?;
 
         // Set as session graph
-        self.query(&format!("SESSION SET GRAPH /{}/{}", self.schema_name, graph_name))?;
+        self.query(&format!(
+            "SESSION SET GRAPH /{}/{}",
+            self.schema_name, graph_name
+        ))?;
 
         Ok(())
     }
@@ -218,7 +233,8 @@ impl TestFixture {
             Err(e) => assert!(
                 e.contains(expected_error),
                 "Expected error containing '{}', got: {}",
-                expected_error, e
+                expected_error,
+                e
             ),
         }
     }
@@ -228,40 +244,88 @@ impl TestFixture {
         let result = self.assert_query_succeeds(query);
         assert!(!result.rows.is_empty(), "Query returned no rows: {}", query);
 
-        let actual = result.rows[0].values.get(column)
+        let actual = result.rows[0]
+            .values
+            .get(column)
             .unwrap_or_else(|| panic!("Column '{}' not found", column));
 
-        assert_eq!(actual, &expected, "Column '{}': expected {:?}, got {:?}", column, expected, actual);
+        assert_eq!(
+            actual, &expected,
+            "Column '{}': expected {:?}, got {:?}",
+            column, expected, actual
+        );
     }
 
     /// Execute query and return aggregate statistics
-    pub fn assert_aggregates(&self, query: &str, _expected_stats: AggregateStats) -> AggregateStats {
+    pub fn assert_aggregates(
+        &self,
+        query: &str,
+        _expected_stats: AggregateStats,
+    ) -> AggregateStats {
         let result = self.assert_query_succeeds(query);
         assert!(!result.rows.is_empty(), "Query returned no rows: {}", query);
 
         let row = &result.rows[0].values;
 
         AggregateStats {
-            count: row.get("count")
-                .and_then(|v| if let Value::Number(n) = v { Some(*n) } else { None })
+            count: row
+                .get("count")
+                .and_then(|v| {
+                    if let Value::Number(n) = v {
+                        Some(*n)
+                    } else {
+                        None
+                    }
+                })
                 .unwrap_or(0.0),
-            sum: row.get("sum")
-                .and_then(|v| if let Value::Number(n) = v { Some(*n) } else { None })
+            sum: row
+                .get("sum")
+                .and_then(|v| {
+                    if let Value::Number(n) = v {
+                        Some(*n)
+                    } else {
+                        None
+                    }
+                })
                 .unwrap_or(0.0),
-            avg: row.get("avg")
-                .and_then(|v| if let Value::Number(n) = v { Some(*n) } else { None })
+            avg: row
+                .get("avg")
+                .and_then(|v| {
+                    if let Value::Number(n) = v {
+                        Some(*n)
+                    } else {
+                        None
+                    }
+                })
                 .unwrap_or(0.0),
-            min: row.get("min")
-                .and_then(|v| if let Value::Number(n) = v { Some(*n) } else { None })
+            min: row
+                .get("min")
+                .and_then(|v| {
+                    if let Value::Number(n) = v {
+                        Some(*n)
+                    } else {
+                        None
+                    }
+                })
                 .unwrap_or(0.0),
-            max: row.get("max")
-                .and_then(|v| if let Value::Number(n) = v { Some(*n) } else { None })
+            max: row
+                .get("max")
+                .and_then(|v| {
+                    if let Value::Number(n) = v {
+                        Some(*n)
+                    } else {
+                        None
+                    }
+                })
                 .unwrap_or(0.0),
         }
     }
 
     /// Create with large data
-    pub fn with_large_data(_num_nodes: usize, _avg_degree: f64) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn with_large_data(
+        _num_nodes: usize,
+        _avg_degree: f64,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         Self::empty()
     }
 }
@@ -316,7 +380,12 @@ pub struct TestCaseResult {
 impl TestSuiteResults {
     pub fn print_summary(&self) {
         println!("\n=== Test Suite: {} ===", self.suite_name);
-        println!("Passed: {}, Failed: {}, Total: {}", self.passed, self.failed, self.passed + self.failed);
+        println!(
+            "Passed: {}, Failed: {}, Total: {}",
+            self.passed,
+            self.failed,
+            self.passed + self.failed
+        );
     }
 }
 
@@ -352,14 +421,14 @@ impl TestSuite {
             FixtureType::Simple => {
                 fixture.setup_graph("test_suite_simple")?;
                 fixture.insert_simple_data()?;
-            },
+            }
             FixtureType::Fraud => {
                 fixture.setup_graph("test_suite_fraud")?;
                 fixture.insert_fraud_data()?;
-            },
+            }
             FixtureType::Empty => {
                 fixture.setup_graph("test_suite_empty")?;
-            },
+            }
         };
 
         // Run each test case
@@ -375,11 +444,14 @@ impl TestSuite {
                         if query_result.rows.len() == expected_rows {
                             (true, None)
                         } else {
-                            (false, Some(format!(
-                                "Expected {} rows, got {}",
-                                expected_rows,
-                                query_result.rows.len()
-                            )))
+                            (
+                                false,
+                                Some(format!(
+                                    "Expected {} rows, got {}",
+                                    expected_rows,
+                                    query_result.rows.len()
+                                )),
+                            )
                         }
                     } else {
                         (true, None)
@@ -390,18 +462,23 @@ impl TestSuite {
                     if e.contains(expected_err) {
                         (true, None)
                     } else {
-                        (false, Some(format!(
-                            "Expected error containing '{}', got: {}",
-                            expected_err, e
-                        )))
+                        (
+                            false,
+                            Some(format!(
+                                "Expected error containing '{}', got: {}",
+                                expected_err, e
+                            )),
+                        )
                     }
                 }
-                (Ok(_), Some(expected_err)) => {
-                    (false, Some(format!("Expected error '{}', but query succeeded", expected_err)))
-                }
-                (Err(e), None) => {
-                    (false, Some(format!("Unexpected error: {}", e)))
-                }
+                (Ok(_), Some(expected_err)) => (
+                    false,
+                    Some(format!(
+                        "Expected error '{}', but query succeeded",
+                        expected_err
+                    )),
+                ),
+                (Err(e), None) => (false, Some(format!("Unexpected error: {}", e))),
             };
 
             if success {

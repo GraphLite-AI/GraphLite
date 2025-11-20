@@ -3,11 +3,11 @@
 //
 // DropRoleExecutor - Implements DROP ROLE statement execution
 use crate::ast::ast::DropRoleStatement;
-use crate::exec::ExecutionError;
-use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
-use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::{CatalogOperation, EntityType};
+use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
+use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
+use crate::exec::ExecutionError;
 use crate::storage::StorageManager;
 use crate::txn::state::OperationType;
 
@@ -64,8 +64,7 @@ impl DDLStatementExecutor for DropRoleExecutor {
                 if let Err(e) = persist_result {
                     return Err(ExecutionError::RuntimeError(format!(
                         "Failed to persist role deletion '{}' to storage: {}",
-                        role_name,
-                        e
+                        role_name, e
                     )));
                 }
 
@@ -85,8 +84,7 @@ impl DDLStatementExecutor for DropRoleExecutor {
                 } else {
                     Err(ExecutionError::RuntimeError(format!(
                         "Failed to drop role '{}': {}",
-                        role_name,
-                        catalog_error
+                        role_name, catalog_error
                     )))
                 }
             }

@@ -5,24 +5,26 @@
 //!
 //! This module provides multi-level caching for:
 //! - Query results
-//! - Compiled query plans 
+//! - Compiled query plans
 //! - Subquery results
 //! - Metadata lookups
 //! - Statistics and cardinality estimates
 
-pub mod result_cache;
-pub mod plan_cache;
-pub mod subquery_cache;
-pub mod cache_manager;
 pub mod cache_config;
+pub mod cache_manager;
 pub mod invalidation;
+pub mod plan_cache;
+pub mod result_cache;
+pub mod subquery_cache;
 
-pub use result_cache::ResultCache;
-pub use plan_cache::{PlanCache, PlanCacheEntry, PlanCacheKey};
-pub use subquery_cache::{SubqueryCache, SubqueryResult, SubqueryCacheKey, SubqueryType, SubqueryCacheHit};
-pub use cache_manager::CacheManager;
 pub use cache_config::{CacheConfig, EvictionPolicy};
+pub use cache_manager::CacheManager;
 pub use invalidation::{InvalidationEvent, InvalidationManager};
+pub use plan_cache::{PlanCache, PlanCacheEntry, PlanCacheKey};
+pub use result_cache::ResultCache;
+pub use subquery_cache::{
+    SubqueryCache, SubqueryCacheHit, SubqueryCacheKey, SubqueryResult, SubqueryType,
+};
 
 use std::time::{Duration, Instant};
 
@@ -32,7 +34,7 @@ pub enum CacheLevel {
     /// L1: Hot data, frequently accessed (in-memory, small, fast)
     L1,
     /// L2: Warm data, occasionally accessed (in-memory, larger, moderate speed)
-    L2, 
+    L2,
     /// L3: Cold data, infrequently accessed (disk-backed, large, slower)
     L3,
 }
@@ -62,17 +64,17 @@ impl CacheEntryMetadata {
             tags: Vec::new(),
         }
     }
-    
+
     pub fn with_ttl(mut self, ttl: Duration) -> Self {
         self.ttl = Some(ttl);
         self
     }
-    
+
     pub fn with_tags(mut self, tags: Vec<String>) -> Self {
         self.tags = tags;
         self
     }
-    
+
     pub fn is_expired(&self) -> bool {
         if let Some(ttl) = self.ttl {
             self.created_at.elapsed() > ttl
@@ -80,7 +82,7 @@ impl CacheEntryMetadata {
             false
         }
     }
-    
+
     pub fn update_access(&mut self) {
         self.last_accessed = Instant::now();
         self.access_count += 1;
@@ -88,14 +90,20 @@ impl CacheEntryMetadata {
 }
 
 /// Generic cache key trait
-pub trait CacheKey: std::fmt::Debug + Clone + PartialEq + Eq + std::hash::Hash + Send + Sync {
+pub trait CacheKey:
+    std::fmt::Debug + Clone + PartialEq + Eq + std::hash::Hash + Send + Sync
+{
     #[allow(dead_code)] // ROADMAP v0.5.0 - Cache key generation for query caching (see ROADMAP.md §9)
     fn cache_key(&self) -> String;
-    fn tags(&self) -> Vec<String> { Vec::new() }
+    fn tags(&self) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 /// Generic cached value trait
 pub trait CacheValue: std::fmt::Debug + Clone + Send + Sync {
     fn size_bytes(&self) -> usize;
-    fn is_valid(&self) -> bool { true }
+    fn is_valid(&self) -> bool {
+        true
+    }
 }

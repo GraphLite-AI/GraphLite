@@ -10,7 +10,7 @@
 //! - MIN: Finds minimum value
 //! - MAX: Finds maximum value
 
-use super::function_trait::{Function, FunctionContext, FunctionResult, FunctionError};
+use super::function_trait::{Function, FunctionContext, FunctionError, FunctionResult};
 use crate::storage::Value;
 
 // ==============================================================================
@@ -31,32 +31,33 @@ impl Function for CountFunction {
     fn name(&self) -> &str {
         "COUNT"
     }
-    
+
     fn description(&self) -> &str {
         "Counts the number of non-null values in a column or all rows if no column specified"
     }
-    
+
     fn argument_count(&self) -> usize {
         0 // COUNT() or COUNT(column)
     }
-    
+
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         // If no arguments, count all rows
         if context.argument_count() == 0 {
             return Ok(Value::Number(context.rows.len() as f64));
         }
-        
+
         // If argument provided, count non-null values in that column
-        let column_name = context.get_argument(0)?.as_string()
-            .ok_or_else(|| FunctionError::InvalidArgumentType {
+        let column_name = context.get_argument(0)?.as_string().ok_or_else(|| {
+            FunctionError::InvalidArgumentType {
                 message: "COUNT argument must be a string column name".to_string(),
-            })?;
-        
+            }
+        })?;
+
         // Special case: COUNT(*) should count all rows
         if column_name == "*" {
             return Ok(Value::Number(context.rows.len() as f64));
         }
-        
+
         let mut count = 0;
         for row in &context.rows {
             if let Some(value) = row.values.get(column_name) {
@@ -67,7 +68,7 @@ impl Function for CountFunction {
         }
         Ok(Value::Number(count as f64))
     }
-    
+
     fn return_type(&self) -> &str {
         "Number"
     }
@@ -91,66 +92,71 @@ impl Function for AverageFunction {
     fn name(&self) -> &str {
         "AVERAGE"
     }
-    
+
     fn description(&self) -> &str {
         "Calculates the arithmetic mean of numeric values in a column"
     }
-    
+
     fn argument_count(&self) -> usize {
         1 // AVERAGE(column)
     }
-    
+
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         context.validate_argument_count(1)?;
-        
+
         let arg = context.get_argument(0)?;
-        
+
         // Handle both aggregation path (string column name) and regular function path (numeric value)
         match arg {
             // Aggregation path: receive column name as string, process all rows
             Value::String(column_name) => {
                 let mut sum = 0.0;
                 let mut count = 0;
-                
+
                 for row in &context.rows {
                     if let Some(value) = row.values.get(column_name) {
                         if !value.is_null() {
-                            let number = value.as_number()
-                                .ok_or_else(|| FunctionError::InvalidArgumentType {
-                                    message: format!("Cannot convert {} to number for AVERAGE", value.type_name()),
-                                })?;
-                            
+                            let number = value.as_number().ok_or_else(|| {
+                                FunctionError::InvalidArgumentType {
+                                    message: format!(
+                                        "Cannot convert {} to number for AVERAGE",
+                                        value.type_name()
+                                    ),
+                                }
+                            })?;
+
                             sum += number;
                             count += 1;
                         }
                     }
                 }
-                
+
                 if count == 0 {
-                    log::debug!("DEBUG: AverageFunction::execute - returning NULL (no values found)");
+                    log::debug!(
+                        "DEBUG: AverageFunction::execute - returning NULL (no values found)"
+                    );
                     Ok(Value::Null)
                 } else {
                     let avg = sum / count as f64;
                     log::debug!("DEBUG: AverageFunction::execute - returning Number({}) from sum={}, count={}", avg, sum, count);
                     Ok(Value::Number(avg))
                 }
-            },
-            
+            }
+
             // Regular function path: receive individual numeric values
             // This handles the case where AVERAGE is called as a regular function instead of aggregate
             Value::Number(num) => {
                 // For single values, just return the value (average of one number is itself)
                 Ok(Value::Number(*num))
-            },
-            
-            _ => {
-                Err(FunctionError::InvalidArgumentType {
-                    message: "AVERAGE argument must be a string column name or numeric value".to_string(),
-                })
             }
+
+            _ => Err(FunctionError::InvalidArgumentType {
+                message: "AVERAGE argument must be a string column name or numeric value"
+                    .to_string(),
+            }),
         }
     }
-    
+
     fn return_type(&self) -> &str {
         "Number"
     }
@@ -174,25 +180,26 @@ impl Function for SumFunction {
     fn name(&self) -> &str {
         "SUM"
     }
-    
+
     fn description(&self) -> &str {
         "Calculates the sum of numeric values in a column"
     }
-    
+
     fn argument_count(&self) -> usize {
         1 // SUM(column)
     }
-    
+
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         // Get the column name argument
-        let column_name = context.get_argument(0)?.as_string()
-            .ok_or_else(|| FunctionError::InvalidArgumentType {
+        let column_name = context.get_argument(0)?.as_string().ok_or_else(|| {
+            FunctionError::InvalidArgumentType {
                 message: "SUM argument must be a string column name".to_string(),
-            })?;
-        
+            }
+        })?;
+
         let mut sum = 0.0;
         let mut has_values = false;
-        
+
         for row in &context.rows {
             if let Some(value) = row.values.get(column_name) {
                 if !value.is_null() {
@@ -203,15 +210,15 @@ impl Function for SumFunction {
                 }
             }
         }
-        
+
         // Return NULL if no numeric values found (ISO GQL behavior)
         if !has_values {
             return Ok(Value::Null);
         }
-        
+
         Ok(Value::Number(sum))
     }
-    
+
     fn return_type(&self) -> &str {
         "Number"
     }
@@ -235,24 +242,25 @@ impl Function for MinFunction {
     fn name(&self) -> &str {
         "MIN"
     }
-    
+
     fn description(&self) -> &str {
         "Finds the minimum numeric value in a column"
     }
-    
+
     fn argument_count(&self) -> usize {
         1 // MIN(column)
     }
-    
+
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         // Get the column name argument
-        let column_name = context.get_argument(0)?.as_string()
-            .ok_or_else(|| FunctionError::InvalidArgumentType {
+        let column_name = context.get_argument(0)?.as_string().ok_or_else(|| {
+            FunctionError::InvalidArgumentType {
                 message: "MIN argument must be a string column name".to_string(),
-            })?;
-        
+            }
+        })?;
+
         let mut min_value: Option<f64> = None;
-        
+
         for row in &context.rows {
             if let Some(value) = row.values.get(column_name) {
                 if !value.is_null() {
@@ -269,14 +277,14 @@ impl Function for MinFunction {
                 }
             }
         }
-        
+
         // Return null if no numeric values found
         match min_value {
             Some(min) => Ok(Value::Number(min)),
             None => Ok(Value::Null),
         }
     }
-    
+
     fn return_type(&self) -> &str {
         "Number"
     }
@@ -300,24 +308,25 @@ impl Function for MaxFunction {
     fn name(&self) -> &str {
         "MAX"
     }
-    
+
     fn description(&self) -> &str {
         "Finds the maximum numeric value in a column"
     }
-    
+
     fn argument_count(&self) -> usize {
         1 // MAX(column)
     }
-    
+
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         // Get the column name argument
-        let column_name = context.get_argument(0)?.as_string()
-            .ok_or_else(|| FunctionError::InvalidArgumentType {
+        let column_name = context.get_argument(0)?.as_string().ok_or_else(|| {
+            FunctionError::InvalidArgumentType {
                 message: "MAX argument must be a string column name".to_string(),
-            })?;
-        
+            }
+        })?;
+
         let mut max_value: Option<f64> = None;
-        
+
         for row in &context.rows {
             if let Some(value) = row.values.get(column_name) {
                 if !value.is_null() {
@@ -334,14 +343,14 @@ impl Function for MaxFunction {
                 }
             }
         }
-        
+
         // Return null if no numeric values found
         match max_value {
             Some(max) => Ok(Value::Number(max)),
             None => Ok(Value::Null),
         }
     }
-    
+
     fn return_type(&self) -> &str {
         "Number"
     }
@@ -365,35 +374,36 @@ impl Function for CollectFunction {
     fn name(&self) -> &str {
         "COLLECT"
     }
-    
+
     fn description(&self) -> &str {
         "Collects values from a column into a list/array"
     }
-    
+
     fn argument_count(&self) -> usize {
         1 // COLLECT(column)
     }
-    
+
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         // Get the column name argument
-        let column_name = context.get_argument(0)?.as_string()
-            .ok_or_else(|| FunctionError::InvalidArgumentType {
+        let column_name = context.get_argument(0)?.as_string().ok_or_else(|| {
+            FunctionError::InvalidArgumentType {
                 message: "COLLECT argument must be a string column name".to_string(),
-            })?;
-        
+            }
+        })?;
+
         let mut collected_values = Vec::new();
-        
+
         for row in &context.rows {
             if let Some(value) = row.values.get(column_name) {
                 // Include all values, including nulls, to match ISO GQL behavior
                 collected_values.push(value.clone());
             }
         }
-        
+
         // Return as List type for ISO GQL compatibility
         Ok(Value::List(collected_values))
     }
-    
+
     fn return_type(&self) -> &str {
         "List"
     }

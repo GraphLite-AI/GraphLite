@@ -7,9 +7,9 @@ use serde_json::json;
 
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::{CatalogOperation, EntityType, QueryType};
-use crate::exec::ExecutionError;
-use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
 use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
+use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
+use crate::exec::ExecutionError;
 use crate::schema::parser::ast::AlterGraphTypeStatement;
 use crate::schema::types::{GraphTypeDefinition, GraphTypeVersion};
 use crate::storage::StorageManager;
@@ -31,15 +31,20 @@ impl AlterGraphTypeExecutor {
         &self,
         catalog_manager: &CatalogManager,
     ) -> Result<GraphTypeDefinition, ExecutionError> {
-        let response = catalog_manager.query_read_only(
-            "graph_type",
-            QueryType::GetGraphType,
-            json!({ "name": self.statement.name }),
-        ).map_err(|e| ExecutionError::CatalogError(format!("Failed to get graph type: {}", e)))?;
+        let response = catalog_manager
+            .query_read_only(
+                "graph_type",
+                QueryType::GetGraphType,
+                json!({ "name": self.statement.name }),
+            )
+            .map_err(|e| {
+                ExecutionError::CatalogError(format!("Failed to get graph type: {}", e))
+            })?;
 
         if let Some(data) = response.data() {
-            serde_json::from_value(data.clone())
-                .map_err(|e| ExecutionError::RuntimeError(format!("Failed to parse graph type: {}", e)))
+            serde_json::from_value(data.clone()).map_err(|e| {
+                ExecutionError::RuntimeError(format!("Failed to parse graph type: {}", e))
+            })
         } else {
             Err(ExecutionError::SchemaValidation(format!(
                 "Graph type '{}' not found",
@@ -98,17 +103,22 @@ impl DDLStatementExecutor for AlterGraphTypeExecutor {
         // For now, we directly create the new version
 
         // Create the new version in the catalog
-        let params = serde_json::to_value(&new_definition)
-            .map_err(|e| ExecutionError::RuntimeError(format!("Failed to serialize graph type: {}", e)))?;
+        let params = serde_json::to_value(&new_definition).map_err(|e| {
+            ExecutionError::RuntimeError(format!("Failed to serialize graph type: {}", e))
+        })?;
 
-        catalog_manager.execute(
-            "graph_type",
-            CatalogOperation::Create {
-                entity_type: EntityType::GraphType,
-                name: self.statement.name.clone(),
-                params,
-            },
-        ).map_err(|e| ExecutionError::CatalogError(format!("Failed to create new version: {}", e)))?;
+        catalog_manager
+            .execute(
+                "graph_type",
+                CatalogOperation::Create {
+                    entity_type: EntityType::GraphType,
+                    name: self.statement.name.clone(),
+                    params,
+                },
+            )
+            .map_err(|e| {
+                ExecutionError::CatalogError(format!("Failed to create new version: {}", e))
+            })?;
 
         Ok((
             format!(

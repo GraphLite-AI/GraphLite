@@ -11,19 +11,19 @@
 //! - Sample fraud data generation
 //! - Pluggable storage backend trait for different KV stores
 
-pub mod value;
-pub mod types;
-pub mod graph_cache;
-mod persistent;
 mod data_adapter;
-pub mod type_mapping;
-pub mod multi_graph;
-pub mod storage_manager;
+pub mod graph_cache;
 pub mod indexes;
+pub mod multi_graph;
+mod persistent;
+pub mod storage_manager;
+pub mod type_mapping;
+pub mod types;
+pub mod value;
 
-pub use value::{Value, TimeWindow};
-pub use types::{Node, Edge, StorageError};
 pub use graph_cache::GraphCache;
+pub use types::{Edge, Node, StorageError};
+pub use value::{TimeWindow, Value};
 // Only expose StorageType for configuration
 pub use persistent::StorageType;
 // Public exports for examples and tests

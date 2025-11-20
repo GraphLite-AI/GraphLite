@@ -16,7 +16,7 @@ use log::{debug, warn};
 use std::collections::HashSet;
 
 /// ALL_DIFFERENT function: Ensures all provided expressions evaluate to different values
-/// 
+///
 /// According to ISO GQL spec: ALL_DIFFERENT(expr1, expr2, ..., exprN)
 /// Returns true if all expressions evaluate to distinct values, false otherwise.
 ///
@@ -53,7 +53,10 @@ impl Function for AllDifferentFunction {
     }
 
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
-        debug!("Executing ALL_DIFFERENT function with {} arguments", context.arguments.len());
+        debug!(
+            "Executing ALL_DIFFERENT function with {} arguments",
+            context.arguments.len()
+        );
 
         // Validate minimum argument count
         if context.arguments.is_empty() {
@@ -68,15 +71,15 @@ impl Function for AllDifferentFunction {
 
         for (i, arg) in context.arguments.iter().enumerate() {
             debug!("Checking argument {}: {:?}", i, arg);
-            
+
             // Convert Value to a comparable representation
             let comparable_value = value_to_comparable(arg)?;
-            
+
             if seen_values.contains(&comparable_value) {
                 debug!("Found duplicate value: {:?}", comparable_value);
                 return Ok(Value::Boolean(false));
             }
-            
+
             seen_values.insert(comparable_value);
         }
 
@@ -94,7 +97,7 @@ impl Function for AllDifferentFunction {
 }
 
 /// SAME function: Checks if two expressions evaluate to the same value
-/// 
+///
 /// According to ISO GQL spec: SAME(expr1, expr2)
 /// Returns true if both expressions evaluate to the same value, false otherwise.
 ///
@@ -162,7 +165,7 @@ impl Function for SameFunction {
 }
 
 /// PROPERTY_EXISTS function: Checks if a property exists on a node/edge
-/// 
+///
 /// According to ISO GQL spec: PROPERTY_EXISTS(property_reference)
 /// Returns true if the specified property exists, false otherwise.
 ///
@@ -223,7 +226,8 @@ impl Function for PropertyExistsFunction {
             _ => {
                 // PROPERTY_EXISTS requires a property reference (string for now)
                 return Err(FunctionError::InvalidArgumentType {
-                    message: "PROPERTY_EXISTS argument must be a property reference (string)".to_string(),
+                    message: "PROPERTY_EXISTS argument must be a property reference (string)"
+                        .to_string(),
                 });
             }
         }
@@ -260,20 +264,20 @@ fn value_to_comparable(value: &Value) -> FunctionResult<ComparableValue> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum ComparableValue {
     Boolean(bool),
-    Number(u64),        // Using bit representation of f64
+    Number(u64), // Using bit representation of f64
     String(String),
-    DateTime(i64),      // Unix timestamp
+    DateTime(i64), // Unix timestamp
 }
 
 /// Check if a property exists based on a property path string
 /// This is a simplified implementation - a full implementation would integrate with
 /// the query execution context and graph traversal
 fn check_property_exists_from_path(
-    property_path: &str, 
-    context: &FunctionContext
+    property_path: &str,
+    context: &FunctionContext,
 ) -> FunctionResult<bool> {
     debug!("Checking property path: {}", property_path);
-    
+
     // Parse property path (e.g., "person.email" -> ["person", "email"])
     let parts: Vec<&str> = property_path.split('.').collect();
     if parts.len() != 2 {
@@ -288,16 +292,25 @@ fn check_property_exists_from_path(
     // 1. Look up the entity in the current query context
     // 2. Check if that entity has the specified property
     // 3. Return true/false based on actual graph data
-    
+
     // For now, simulate property existence based on common patterns
     let common_properties = [
-        "id", "name", "email", "age", "created_at", "updated_at",
-        "birth_year", "graduation_year", "city", "country", "founded"
+        "id",
+        "name",
+        "email",
+        "age",
+        "created_at",
+        "updated_at",
+        "birth_year",
+        "graduation_year",
+        "city",
+        "country",
+        "founded",
     ];
-    
+
     let exists = common_properties.contains(&property);
     debug!("Property '{}' exists (simulated): {}", property, exists);
-    
+
     // Check if we have any variables in context that might contain this property
     if !exists {
         for (var_name, var_value) in &context.variables {
@@ -305,7 +318,7 @@ fn check_property_exists_from_path(
             // In a real implementation, we'd check if var_value has the property
         }
     }
-    
+
     Ok(exists)
 }
 
@@ -441,12 +454,12 @@ mod tests {
         assert!(value_to_comparable(&Value::Boolean(true)).is_ok());
         assert!(value_to_comparable(&Value::Number(42.0)).is_ok());
         assert!(value_to_comparable(&Value::String("test".to_string())).is_ok());
-        
+
         // Test that same values produce same comparable values
         let val1 = value_to_comparable(&Value::Number(42.0)).unwrap();
         let val2 = value_to_comparable(&Value::Number(42.0)).unwrap();
         assert_eq!(val1, val2);
-        
+
         // Test that different values produce different comparable values
         let val3 = value_to_comparable(&Value::Number(43.0)).unwrap();
         assert_ne!(val1, val3);
@@ -455,19 +468,20 @@ mod tests {
     #[test]
     fn test_performance_with_large_dataset() {
         let func = AllDifferentFunction::new();
-        
+
         // Create 1000 unique values
-        let large_args: Vec<Value> = (0..1000)
-            .map(|i| Value::Number(i as f64))
-            .collect();
-        
+        let large_args: Vec<Value> = (0..1000).map(|i| Value::Number(i as f64)).collect();
+
         let context = FunctionContext::new(vec![], HashMap::new(), large_args);
-        
+
         let start = std::time::Instant::now();
         let result = func.execute(&context).unwrap();
         let duration = start.elapsed();
-        
+
         assert_eq!(result, Value::Boolean(true));
-        assert!(duration.as_millis() < 100, "Should complete within 100ms for 1000 values");
+        assert!(
+            duration.as_millis() < 100,
+            "Should complete within 100ms for 1000 values"
+        );
     }
 }

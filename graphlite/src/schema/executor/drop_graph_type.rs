@@ -7,9 +7,9 @@ use serde_json;
 
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::{CatalogOperation, CatalogResponse, EntityType, QueryType};
-use crate::exec::ExecutionError;
-use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
 use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
+use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
+use crate::exec::ExecutionError;
 use crate::schema::parser::ast::DropGraphTypeStatement;
 use crate::storage::StorageManager;
 use crate::txn::state::OperationType;
@@ -32,11 +32,8 @@ impl DropGraphTypeExecutor {
         catalog_manager: &CatalogManager,
     ) -> Result<Vec<String>, ExecutionError> {
         // Query the graph catalog to find graphs using this type
-        let query_result = catalog_manager.query_read_only(
-            "graph",
-            QueryType::List,
-            serde_json::json!({}),
-        );
+        let query_result =
+            catalog_manager.query_read_only("graph", QueryType::List, serde_json::json!({}));
 
         let mut using_graphs = Vec::new();
 
@@ -67,11 +64,10 @@ impl DropGraphTypeExecutor {
         );
 
         match query_result {
-            Ok(CatalogResponse::Success { data: Some(data) }) => {
-                Ok(data.get("exists")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false))
-            }
+            Ok(CatalogResponse::Success { data: Some(data) }) => Ok(data
+                .get("exists")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)),
             Err(_) => Ok(false),
             _ => Ok(false),
         }
@@ -99,13 +95,17 @@ impl DDLStatementExecutor for DropGraphTypeExecutor {
         if !catalog_manager.has_catalog("graph_type") {
             if self.statement.if_exists {
                 return Ok((
-                    format!("Graph type '{}' does not exist, skipping drop", self.statement.name),
-                    0
+                    format!(
+                        "Graph type '{}' does not exist, skipping drop",
+                        self.statement.name
+                    ),
+                    0,
                 ));
             } else {
-                return Err(ExecutionError::NotFound(
-                    format!("Graph type '{}' does not exist", self.statement.name)
-                ));
+                return Err(ExecutionError::NotFound(format!(
+                    "Graph type '{}' does not exist",
+                    self.statement.name
+                )));
             }
         }
 
@@ -113,27 +113,29 @@ impl DDLStatementExecutor for DropGraphTypeExecutor {
         if !self.check_graph_type_exists(catalog_manager)? {
             if self.statement.if_exists {
                 return Ok((
-                    format!("Graph type '{}' does not exist, skipping drop", self.statement.name),
-                    0
+                    format!(
+                        "Graph type '{}' does not exist, skipping drop",
+                        self.statement.name
+                    ),
+                    0,
                 ));
             } else {
-                return Err(ExecutionError::NotFound(
-                    format!("Graph type '{}' does not exist", self.statement.name)
-                ));
+                return Err(ExecutionError::NotFound(format!(
+                    "Graph type '{}' does not exist",
+                    self.statement.name
+                )));
             }
         }
 
         // Check if any graphs are using this graph type
         let using_graphs = self.check_graph_type_usage(catalog_manager)?;
         if !using_graphs.is_empty() && !self.statement.cascade {
-            return Err(ExecutionError::ValidationError(
-                format!(
-                    "Cannot drop graph type '{}' because it is referenced by graphs: {}. \
+            return Err(ExecutionError::ValidationError(format!(
+                "Cannot drop graph type '{}' because it is referenced by graphs: {}. \
                      Use CASCADE to drop the graph type and all dependent objects.",
-                    self.statement.name,
-                    using_graphs.join(", ")
-                )
-            ));
+                self.statement.name,
+                using_graphs.join(", ")
+            )));
         }
 
         // If CASCADE is specified and there are dependent graphs, we should handle them
@@ -148,34 +150,32 @@ impl DDLStatementExecutor for DropGraphTypeExecutor {
         }
 
         // Drop the graph type
-        let response = catalog_manager.execute(
-            "graph_type",
-            CatalogOperation::Drop {
-                entity_type: EntityType::GraphType,
-                name: self.statement.name.clone(),
-                cascade: self.statement.cascade,
-            }
-        ).map_err(|e| ExecutionError::RuntimeError(
-            format!("Failed to drop graph type: {}", e)
-        ))?;
+        let response = catalog_manager
+            .execute(
+                "graph_type",
+                CatalogOperation::Drop {
+                    entity_type: EntityType::GraphType,
+                    name: self.statement.name.clone(),
+                    cascade: self.statement.cascade,
+                },
+            )
+            .map_err(|e| {
+                ExecutionError::RuntimeError(format!("Failed to drop graph type: {}", e))
+            })?;
 
         match response {
             CatalogResponse::Success { data } => {
-                let name = data.as_ref()
+                let name = data
+                    .as_ref()
                     .and_then(|d| d.get("name"))
                     .and_then(|n| n.as_str())
                     .unwrap_or(&self.statement.name);
-                Ok((
-                    format!("Graph type '{}' dropped successfully", name),
-                    1
-                ))
+                Ok((format!("Graph type '{}' dropped successfully", name), 1))
             }
-            CatalogResponse::Error { message } => {
-                Err(ExecutionError::RuntimeError(message))
-            }
+            CatalogResponse::Error { message } => Err(ExecutionError::RuntimeError(message)),
             _ => Err(ExecutionError::RuntimeError(
-                "Unexpected response from catalog".to_string()
-            ))
+                "Unexpected response from catalog".to_string(),
+            )),
         }
     }
 }

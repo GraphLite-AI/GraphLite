@@ -5,11 +5,11 @@
 //!
 //! Simplified index manager that supports only graph indexes.
 
+use log::{debug, info, warn};
 use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
-use log::{debug, info, warn};
 
-use super::{IndexError};
+use super::IndexError;
 use crate::storage::GraphCache;
 
 /// Manager for all indexes in the system
@@ -35,9 +35,10 @@ impl IndexManager {
     ) -> Result<(), IndexError> {
         info!("Creating index '{}'", name);
 
-        let mut index_names = self.index_names.write().map_err(|e| {
-            IndexError::creation(format!("Failed to acquire lock: {}", e))
-        })?;
+        let mut index_names = self
+            .index_names
+            .write()
+            .map_err(|e| IndexError::creation(format!("Failed to acquire lock: {}", e)))?;
 
         if index_names.contains(&name) {
             return Err(IndexError::AlreadyExists(name));
@@ -54,9 +55,10 @@ impl IndexManager {
     pub async fn delete_index(&self, name: &str) -> Result<(), IndexError> {
         info!("Deleting index '{}'", name);
 
-        let mut index_names = self.index_names.write().map_err(|e| {
-            IndexError::creation(format!("Failed to acquire lock: {}", e))
-        })?;
+        let mut index_names = self
+            .index_names
+            .write()
+            .map_err(|e| IndexError::creation(format!("Failed to acquire lock: {}", e)))?;
 
         if !index_names.remove(name) {
             return Err(IndexError::NotFound(name.to_string()));
@@ -68,20 +70,26 @@ impl IndexManager {
 
     /// Check if an index exists
     pub fn index_exists(&self, name: &str) -> bool {
-        self.index_names.read()
+        self.index_names
+            .read()
             .map(|names| names.contains(name))
             .unwrap_or(false)
     }
 
     /// List all index names
     pub fn list_indexes(&self) -> Vec<String> {
-        self.index_names.read()
+        self.index_names
+            .read()
             .map(|names| names.iter().cloned().collect())
             .unwrap_or_else(|_| Vec::new())
     }
 
     /// Reindex a text index (stub for compatibility)
-    pub fn reindex_text_index(&self, _name: &str, _graph: &Arc<GraphCache>) -> Result<usize, IndexError> {
+    pub fn reindex_text_index(
+        &self,
+        _name: &str,
+        _graph: &Arc<GraphCache>,
+    ) -> Result<usize, IndexError> {
         warn!("Text index reindexing not supported in GraphLite");
         Ok(0)
     }
@@ -103,7 +111,11 @@ impl IndexManager {
     }
 
     /// Find index by label and property (stub for compatibility)
-    pub fn find_index_by_label_and_property(&self, _label: &str, _property: &str) -> Option<String> {
+    pub fn find_index_by_label_and_property(
+        &self,
+        _label: &str,
+        _property: &str,
+    ) -> Option<String> {
         None
     }
 }

@@ -6,10 +6,10 @@
 //! Physical plans represent the actual execution strategy with specific
 //! algorithms and data access methods chosen for optimal performance.
 
+use crate::ast::ast::{EdgeDirection, Expression, PathType};
+use crate::plan::logical::{AggregateFunction, JoinType, LogicalNode, LogicalPlan, PathElement};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::ast::ast::{Expression, EdgeDirection, PathType};
-use crate::plan::logical::{LogicalNode, LogicalPlan, JoinType, AggregateFunction, PathElement};
 
 /// Node creation operation in physical plan
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,7 +85,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// Index scan using label index
     NodeIndexScan {
         variable: String,
@@ -94,7 +94,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// Sequential scan of edges
     EdgeSeqScan {
         variable: String,
@@ -103,7 +103,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// Index-based edge traversal
     IndexedExpand {
         from_variable: String,
@@ -116,7 +116,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// Hash-based expand for high-degree nodes
     HashExpand {
         from_variable: String,
@@ -129,7 +129,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// Path traversal with type constraints
     PathTraversal {
         path_type: PathType,
@@ -140,7 +140,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// Filter with predicate pushdown
     Filter {
         condition: Expression,
@@ -149,7 +149,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// Projection with column elimination
     Project {
         expressions: Vec<ProjectionItem>,
@@ -157,7 +157,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// Hash join
     HashJoin {
         join_type: JoinType,
@@ -169,7 +169,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// Nested loop join
     NestedLoopJoin {
         join_type: JoinType,
@@ -179,7 +179,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// Sort merge join
     SortMergeJoin {
         join_type: JoinType,
@@ -190,11 +190,11 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// Union all (concatenation)
     UnionAll {
         inputs: Vec<PhysicalNode>,
-        all: bool,  // true for UNION ALL, false for UNION (with deduplication)
+        all: bool, // true for UNION ALL, false for UNION (with deduplication)
         estimated_rows: usize,
         estimated_cost: f64,
     },
@@ -216,7 +216,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// Hash aggregation
     HashAggregate {
         group_by: Vec<Expression>,
@@ -225,7 +225,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// Sort-based aggregation
     SortAggregate {
         group_by: Vec<Expression>,
@@ -234,7 +234,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// HAVING filter for post-aggregation filtering
     /// Must appear after aggregation nodes in the plan
     Having {
@@ -243,7 +243,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// External sort for large datasets
     ExternalSort {
         expressions: Vec<SortItem>,
@@ -251,7 +251,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// In-memory sort for small datasets
     InMemorySort {
         expressions: Vec<SortItem>,
@@ -259,14 +259,14 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// Remove duplicate rows
     Distinct {
         input: Box<PhysicalNode>,
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// Limit with early termination
     Limit {
         count: usize,
@@ -275,7 +275,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// Generic function call
     GenericFunction {
         function_name: String,
@@ -284,7 +284,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// EXISTS subquery evaluation
     ExistsSubquery {
         subplan: Box<PhysicalNode>,
@@ -292,7 +292,7 @@ pub enum PhysicalNode {
         estimated_cost: f64,
         optimized: bool, // Whether early termination is enabled
     },
-    
+
     /// NOT EXISTS subquery evaluation
     NotExistsSubquery {
         subplan: Box<PhysicalNode>,
@@ -300,7 +300,7 @@ pub enum PhysicalNode {
         estimated_cost: f64,
         optimized: bool,
     },
-    
+
     /// IN subquery evaluation
     InSubquery {
         expression: Expression,
@@ -308,7 +308,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// NOT IN subquery evaluation
     NotInSubquery {
         expression: Expression,
@@ -316,21 +316,21 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// Scalar subquery evaluation (for RETURN clauses)
     ScalarSubquery {
         subplan: Box<PhysicalNode>,
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// WITH query that needs special execution handling
     WithQuery {
         original_query: Box<crate::ast::ast::WithQuery>,
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// UNWIND expression into individual rows
     Unwind {
         expression: Expression,
@@ -348,7 +348,7 @@ pub enum PhysicalNode {
         estimated_rows: usize,
         estimated_cost: f64,
     },
-    
+
     /// Join using index for lookup
     IndexJoin {
         left: Box<PhysicalNode>,
@@ -361,7 +361,6 @@ pub enum PhysicalNode {
     },
 
     // Data Modification Operations
-
     /// INSERT operation with resolved patterns
     Insert {
         /// Node creation operations
@@ -395,8 +394,8 @@ pub enum PhysicalNode {
     /// Produces exactly one row with no data
     /// Used for LET statements and standalone RETURN queries
     SingleRow {
-        estimated_rows: usize,  // Always 1
-        estimated_cost: f64,    // Minimal cost
+        estimated_rows: usize, // Always 1
+        estimated_cost: f64,   // Minimal cost
     },
 }
 
@@ -464,27 +463,31 @@ impl PhysicalPlan {
     pub fn new(root: PhysicalNode) -> Self {
         let estimated_cost = root.get_cost();
         let estimated_rows = root.get_row_count();
-        
+
         Self {
             root,
             estimated_cost,
             estimated_rows,
         }
     }
-    
+
     /// Convert logical plan to physical plan
     pub fn from_logical(logical: &LogicalPlan) -> Self {
         let root = Self::convert_logical_node(&logical.root);
         Self::new(root)
     }
-    
+
     /// Convert a logical node to physical node
     fn convert_logical_node(logical: &LogicalNode) -> PhysicalNode {
         match logical {
-            LogicalNode::NodeScan { variable, labels, properties } => {
+            LogicalNode::NodeScan {
+                variable,
+                labels,
+                properties,
+            } => {
                 let estimated_rows = 1000; // Should use statistics
                 let estimated_cost = estimated_rows as f64 * 0.1;
-                
+
                 // Choose between sequential and index scan based on selectivity
                 if labels.is_empty() {
                     PhysicalNode::NodeSeqScan {
@@ -504,11 +507,15 @@ impl PhysicalPlan {
                     }
                 }
             }
-            
-            LogicalNode::EdgeScan { variable, labels, properties } => {
+
+            LogicalNode::EdgeScan {
+                variable,
+                labels,
+                properties,
+            } => {
                 let estimated_rows = 5000;
                 let estimated_cost = estimated_rows as f64 * 0.1;
-                
+
                 PhysicalNode::EdgeSeqScan {
                     variable: variable.clone(),
                     labels: labels.clone(),
@@ -517,21 +524,21 @@ impl PhysicalPlan {
                     estimated_cost,
                 }
             }
-            
-            LogicalNode::Expand { 
-                from_variable, 
-                edge_variable, 
-                to_variable, 
-                edge_labels, 
-                direction, 
-                properties, 
-                input 
+
+            LogicalNode::Expand {
+                from_variable,
+                edge_variable,
+                to_variable,
+                edge_labels,
+                direction,
+                properties,
+                input,
             } => {
                 let input_physical = Box::new(Self::convert_logical_node(input));
                 let input_rows = input_physical.get_row_count();
                 let estimated_rows = input_rows * 5; // Average fanout
                 let estimated_cost = estimated_rows as f64 * 0.2;
-                
+
                 // Choose expand strategy based on input size and fanout
                 if input_rows > 10000 {
                     PhysicalNode::HashExpand {
@@ -559,14 +566,14 @@ impl PhysicalPlan {
                     }
                 }
             }
-            
+
             LogicalNode::Filter { condition, input } => {
                 let input_physical = Box::new(Self::convert_logical_node(input));
                 let input_rows = input_physical.get_row_count();
                 let selectivity = 0.5; // Default selectivity
                 let estimated_rows = (input_rows as f64 * selectivity) as usize;
                 let estimated_cost = input_physical.get_cost() + (input_rows as f64 * 0.01);
-                
+
                 PhysicalNode::Filter {
                     condition: condition.clone(),
                     input: input_physical,
@@ -575,36 +582,42 @@ impl PhysicalPlan {
                     estimated_cost,
                 }
             }
-            
+
             LogicalNode::Project { expressions, input } => {
                 let input_physical = Box::new(Self::convert_logical_node(input));
                 let estimated_rows = input_physical.get_row_count();
                 let estimated_cost = input_physical.get_cost() + (estimated_rows as f64 * 0.005);
-                
+
                 PhysicalNode::Project {
-                    expressions: expressions.iter().map(|expr| ProjectionItem {
-                        expression: expr.expression.clone(),
-                        alias: expr.alias.clone(),
-                        output_type: OutputType::String, // Should infer type
-                    }).collect(),
+                    expressions: expressions
+                        .iter()
+                        .map(|expr| ProjectionItem {
+                            expression: expr.expression.clone(),
+                            alias: expr.alias.clone(),
+                            output_type: OutputType::String, // Should infer type
+                        })
+                        .collect(),
                     input: input_physical,
                     estimated_rows,
                     estimated_cost,
                 }
             }
-            
+
             LogicalNode::Sort { expressions, input } => {
                 let input_physical = Box::new(Self::convert_logical_node(input));
                 let estimated_rows = input_physical.get_row_count();
-                let estimated_cost = input_physical.get_cost() + 
-                    (estimated_rows as f64 * (estimated_rows as f64).log2() * 0.001);
-                
-                let sort_items: Vec<SortItem> = expressions.iter().map(|expr| SortItem {
-                    expression: expr.expression.clone(),
-                    ascending: expr.ascending,
-                    nulls_first: false,
-                }).collect();
-                
+                let estimated_cost = input_physical.get_cost()
+                    + (estimated_rows as f64 * (estimated_rows as f64).log2() * 0.001);
+
+                let sort_items: Vec<SortItem> = expressions
+                    .iter()
+                    .map(|expr| SortItem {
+                        expression: expr.expression.clone(),
+                        ascending: expr.ascending,
+                        nulls_first: false,
+                    })
+                    .collect();
+
                 // Choose sort algorithm based on data size
                 if estimated_rows > 100000 {
                     PhysicalNode::ExternalSort {
@@ -622,28 +635,32 @@ impl PhysicalPlan {
                     }
                 }
             }
-            
+
             LogicalNode::Distinct { input } => {
                 let input_physical = Box::new(Self::convert_logical_node(input));
                 let input_rows = input_physical.get_row_count();
                 let estimated_rows = input_rows / 2; // Assume 50% duplicates removed
                 let estimated_cost = input_physical.get_cost() + (input_rows as f64 * 0.01);
-                
+
                 PhysicalNode::Distinct {
                     input: input_physical,
                     estimated_rows,
                     estimated_cost,
                 }
             }
-            
-            LogicalNode::Limit { count, offset, input } => {
+
+            LogicalNode::Limit {
+                count,
+                offset,
+                input,
+            } => {
                 let input_physical = Box::new(Self::convert_logical_node(input));
                 let input_rows = input_physical.get_row_count();
                 let offset_val = offset.unwrap_or(0);
                 let estimated_rows = (*count).min(input_rows.saturating_sub(offset_val));
-                let estimated_cost = input_physical.get_cost() * 
-                    (estimated_rows as f64 / input_rows as f64);
-                
+                let estimated_cost =
+                    input_physical.get_cost() * (estimated_rows as f64 / input_rows as f64);
+
                 PhysicalNode::Limit {
                     count: *count,
                     offset: *offset,
@@ -652,13 +669,17 @@ impl PhysicalPlan {
                     estimated_cost,
                 }
             }
-            
-            LogicalNode::GenericFunction { function_name, arguments, input } => {
+
+            LogicalNode::GenericFunction {
+                function_name,
+                arguments,
+                input,
+            } => {
                 let input_physical = Box::new(Self::convert_logical_node(input));
                 let _input_rows = input_physical.get_row_count();
                 let estimated_rows = 1; // Functions typically return single value
                 let estimated_cost = input_physical.get_cost() + (arguments.len() as f64 * 2.0);
-                
+
                 PhysicalNode::GenericFunction {
                     function_name: function_name.clone(),
                     arguments: arguments.clone(),
@@ -667,27 +688,34 @@ impl PhysicalPlan {
                     estimated_cost,
                 }
             }
-            
-            LogicalNode::Aggregate { group_by, aggregates, input } => {
+
+            LogicalNode::Aggregate {
+                group_by,
+                aggregates,
+                input,
+            } => {
                 let input_physical = Box::new(Self::convert_logical_node(input));
                 let input_rows = input_physical.get_row_count();
-                let estimated_rows = if group_by.is_empty() { 
+                let estimated_rows = if group_by.is_empty() {
                     1 // No GROUP BY means single aggregate result
-                } else { 
+                } else {
                     input_rows / 10 // Estimate groups as 10% of input rows
                 };
                 let estimated_cost = input_physical.get_cost() + (input_rows as f64 * 0.05);
-                
+
                 // Convert logical aggregates to physical aggregates
-                let physical_aggregates: Vec<AggregateItem> = aggregates.iter().map(|agg| {
-                    AggregateItem {
-                        function: agg.function.clone(),
-                        expression: agg.expression.clone(),
-                        alias: agg.alias.clone(),
-                        output_type: OutputType::Float, // Default to Float for most aggregates
-                    }
-                }).collect();
-                
+                let physical_aggregates: Vec<AggregateItem> = aggregates
+                    .iter()
+                    .map(|agg| {
+                        AggregateItem {
+                            function: agg.function.clone(),
+                            expression: agg.expression.clone(),
+                            alias: agg.alias.clone(),
+                            output_type: OutputType::Float, // Default to Float for most aggregates
+                        }
+                    })
+                    .collect();
+
                 // Choose aggregation strategy based on data size and group count
                 if input_rows > 10000 {
                     PhysicalNode::HashAggregate {
@@ -707,14 +735,14 @@ impl PhysicalPlan {
                     }
                 }
             }
-            
+
             LogicalNode::Having { condition, input } => {
                 let input_physical = Box::new(Self::convert_logical_node(input));
                 let input_rows = input_physical.get_row_count();
                 let selectivity = 0.3; // HAVING typically filters more aggressively than WHERE
                 let estimated_rows = (input_rows as f64 * selectivity) as usize;
                 let estimated_cost = input_physical.get_cost() + (input_rows as f64 * 0.02);
-                
+
                 PhysicalNode::Having {
                     condition: condition.clone(),
                     input: input_physical,
@@ -722,23 +750,29 @@ impl PhysicalPlan {
                     estimated_cost,
                 }
             }
-            
-            LogicalNode::PathTraversal { path_type, from_variable, to_variable, path_elements, input } => {
+
+            LogicalNode::PathTraversal {
+                path_type,
+                from_variable,
+                to_variable,
+                path_elements,
+                input,
+            } => {
                 let input_physical = Box::new(Self::convert_logical_node(input));
                 let input_rows = input_physical.get_row_count();
-                
+
                 // Path traversal can be expensive depending on path type
                 let complexity_factor = match path_type {
-                    PathType::Walk => 1.0,       // Most efficient
-                    PathType::Trail => 2.0,      // Track edges
-                    PathType::SimplePath => 3.0, // Track vertices
+                    PathType::Walk => 1.0,        // Most efficient
+                    PathType::Trail => 2.0,       // Track edges
+                    PathType::SimplePath => 3.0,  // Track vertices
                     PathType::AcyclicPath => 4.0, // Strictest constraints
                 };
-                
+
                 let estimated_rows = input_rows * 10; // Paths can multiply results
-                let estimated_cost = input_physical.get_cost() + 
-                    (estimated_rows as f64 * complexity_factor * 0.1);
-                
+                let estimated_cost =
+                    input_physical.get_cost() + (estimated_rows as f64 * complexity_factor * 0.1);
+
                 PhysicalNode::PathTraversal {
                     path_type: path_type.clone(),
                     from_variable: from_variable.clone(),
@@ -749,33 +783,39 @@ impl PhysicalPlan {
                     estimated_cost,
                 }
             }
-            
+
             // Join conversion
-            LogicalNode::Join { join_type, condition, left, right } => {
+            LogicalNode::Join {
+                join_type,
+                condition,
+                left,
+                right,
+            } => {
                 let left_physical = Box::new(Self::convert_logical_node(left));
                 let right_physical = Box::new(Self::convert_logical_node(right));
                 let left_rows = left_physical.get_row_count();
                 let right_rows = right_physical.get_row_count();
-                
+
                 // Estimate join cardinality based on join type
                 let estimated_rows = match join_type {
                     JoinType::Inner => (left_rows * right_rows) / 1000, // Assume some selectivity
                     JoinType::LeftOuter => left_rows.max((left_rows * right_rows) / 1000),
-                    JoinType::RightOuter => right_rows.max((left_rows * right_rows) / 1000), 
+                    JoinType::RightOuter => right_rows.max((left_rows * right_rows) / 1000),
                     JoinType::FullOuter => left_rows + right_rows,
                     JoinType::Cross => left_rows * right_rows,
                     JoinType::LeftSemi => left_rows / 2, // Semi join returns subset of left
                     JoinType::LeftAnti => left_rows / 2, // Anti join returns complement subset
                 };
-                
-                let estimated_cost = left_physical.get_cost() + right_physical.get_cost() + 
-                    (left_rows * right_rows) as f64 * 0.001; // Join cost
-                
+
+                let estimated_cost = left_physical.get_cost()
+                    + right_physical.get_cost()
+                    + (left_rows * right_rows) as f64 * 0.001; // Join cost
+
                 // Choose physical join strategy based on sizes
                 if left_rows > 10000 && right_rows > 10000 {
                     PhysicalNode::SortMergeJoin {
                         join_type: join_type.clone(),
-                        left_keys: vec![], // Would be extracted from condition
+                        left_keys: vec![],  // Would be extracted from condition
                         right_keys: vec![], // Would be extracted from condition
                         left: left_physical,
                         right: right_physical,
@@ -786,8 +826,8 @@ impl PhysicalPlan {
                     PhysicalNode::HashJoin {
                         join_type: join_type.clone(),
                         condition: condition.clone(),
-                        build_keys: vec![], // Would be extracted from condition
-                        probe_keys: vec![], // Would be extracted from condition
+                        build_keys: vec![],    // Would be extracted from condition
+                        probe_keys: vec![],    // Would be extracted from condition
                         build: right_physical, // Build on smaller side
                         probe: left_physical,
                         estimated_rows,
@@ -804,13 +844,13 @@ impl PhysicalPlan {
                     }
                 }
             }
-            
+
             // Subquery logical to physical conversion
             LogicalNode::ExistsSubquery { subquery, .. } => {
                 let subplan = Box::new(Self::convert_logical_node(subquery));
                 let estimated_rows = subplan.get_row_count();
                 let estimated_cost = subplan.get_cost() + 10.0; // Add overhead for EXISTS check
-                
+
                 PhysicalNode::ExistsSubquery {
                     subplan,
                     estimated_rows,
@@ -818,12 +858,12 @@ impl PhysicalPlan {
                     optimized: true, // Enable early termination by default
                 }
             }
-            
+
             LogicalNode::NotExistsSubquery { subquery, .. } => {
                 let subplan = Box::new(Self::convert_logical_node(subquery));
                 let estimated_rows = subplan.get_row_count();
                 let estimated_cost = subplan.get_cost() + 10.0;
-                
+
                 PhysicalNode::NotExistsSubquery {
                     subplan,
                     estimated_rows,
@@ -831,12 +871,16 @@ impl PhysicalPlan {
                     optimized: true,
                 }
             }
-            
-            LogicalNode::InSubquery { expression, subquery, .. } => {
+
+            LogicalNode::InSubquery {
+                expression,
+                subquery,
+                ..
+            } => {
                 let subplan = Box::new(Self::convert_logical_node(subquery));
                 let estimated_rows = subplan.get_row_count();
                 let estimated_cost = subplan.get_cost() + (estimated_rows as f64 * 0.1); // Cost of IN comparison
-                
+
                 PhysicalNode::InSubquery {
                     expression: expression.clone(),
                     subplan,
@@ -844,12 +888,16 @@ impl PhysicalPlan {
                     estimated_cost,
                 }
             }
-            
-            LogicalNode::NotInSubquery { expression, subquery, .. } => {
+
+            LogicalNode::NotInSubquery {
+                expression,
+                subquery,
+                ..
+            } => {
                 let subplan = Box::new(Self::convert_logical_node(subquery));
                 let estimated_rows = subplan.get_row_count();
                 let estimated_cost = subplan.get_cost() + (estimated_rows as f64 * 0.1);
-                
+
                 PhysicalNode::NotInSubquery {
                     expression: expression.clone(),
                     subplan,
@@ -857,37 +905,43 @@ impl PhysicalPlan {
                     estimated_cost,
                 }
             }
-            
+
             LogicalNode::ScalarSubquery { subquery, .. } => {
                 let subplan = Box::new(Self::convert_logical_node(subquery));
                 let estimated_rows = 1; // Scalar subquery returns single value
                 let estimated_cost = subplan.get_cost() + 5.0; // Lower overhead for scalar
-                
+
                 PhysicalNode::ScalarSubquery {
                     subplan,
                     estimated_rows,
                     estimated_cost,
                 }
             }
-            
+
             LogicalNode::WithQuery { original_query } => {
                 // WITH queries need special handling - preserve original structure for executor
                 let estimated_rows = 100; // Default estimate for WITH queries
                 let estimated_cost = 50.0; // Base cost for WITH query execution
-                
+
                 PhysicalNode::WithQuery {
                     original_query: original_query.clone(),
                     estimated_rows,
                     estimated_cost,
                 }
             }
-            
-            LogicalNode::Unwind { expression, variable, input } => {
+
+            LogicalNode::Unwind {
+                expression,
+                variable,
+                input,
+            } => {
                 // UNWIND expands arrays/collections into multiple rows
                 let base_estimated_rows = 10; // Default estimate for UNWIND expansion factor
                 let estimated_cost = 5.0; // Base cost for UNWIND operation
 
-                let input_physical = input.as_ref().map(|inp| Box::new(Self::convert_logical_node(inp)));
+                let input_physical = input
+                    .as_ref()
+                    .map(|inp| Box::new(Self::convert_logical_node(inp)));
 
                 PhysicalNode::Unwind {
                     expression: expression.clone(),
@@ -899,7 +953,10 @@ impl PhysicalPlan {
             }
 
             // Data Modification Operations
-            LogicalNode::Insert { patterns, identifier_mappings: _ } => {
+            LogicalNode::Insert {
+                patterns,
+                identifier_mappings: _,
+            } => {
                 let mut node_creations = Vec::new();
                 let mut edge_creations = Vec::new();
 
@@ -948,7 +1005,11 @@ impl PhysicalPlan {
                 }
             }
 
-            LogicalNode::Update { target_variable, properties, input } => {
+            LogicalNode::Update {
+                target_variable,
+                properties,
+                input,
+            } => {
                 let input_physical = Box::new(Self::convert_logical_node(input));
                 let input_rows = input_physical.get_row_count();
                 let estimated_ops = input_rows; // One update per input row
@@ -963,12 +1024,16 @@ impl PhysicalPlan {
                 }
             }
 
-            LogicalNode::Delete { target_variables, detach, input } => {
+            LogicalNode::Delete {
+                target_variables,
+                detach,
+                input,
+            } => {
                 let input_physical = Box::new(Self::convert_logical_node(input));
                 let input_rows = input_physical.get_row_count();
                 let estimated_ops = input_rows; // One delete per input row
-                let estimated_cost = input_physical.get_cost() + (estimated_ops as f64 *
-                    if *detach { 3.0 } else { 2.0 }); // DETACH DELETE is more expensive
+                let estimated_cost = input_physical.get_cost()
+                    + (estimated_ops as f64 * if *detach { 3.0 } else { 2.0 }); // DETACH DELETE is more expensive
 
                 PhysicalNode::Delete {
                     target_variables: target_variables.clone(),
@@ -980,40 +1045,44 @@ impl PhysicalPlan {
             }
 
             LogicalNode::Union { inputs, all } => {
-
                 // Convert all input logical nodes to physical nodes
-                let physical_inputs: Vec<PhysicalNode> = inputs.iter()
+                let physical_inputs: Vec<PhysicalNode> = inputs
+                    .iter()
                     .map(|input| Self::convert_logical_node(input))
                     .collect();
 
                 // Calculate estimated rows and cost
-                let estimated_rows: usize = physical_inputs.iter()
+                let estimated_rows: usize = physical_inputs
+                    .iter()
                     .map(|input| input.get_row_count())
                     .sum();
 
-                let estimated_cost: f64 = physical_inputs.iter()
+                let estimated_cost: f64 = physical_inputs
+                    .iter()
                     .map(|input| input.get_cost())
-                    .sum::<f64>() + (estimated_rows as f64 * 0.1); // Small overhead for union operation
-
+                    .sum::<f64>()
+                    + (estimated_rows as f64 * 0.1); // Small overhead for union operation
 
                 // Pass the 'all' flag to distinguish UNION vs UNION ALL
                 PhysicalNode::UnionAll {
                     inputs: physical_inputs,
-                    all: *all,  // true for UNION ALL, false for UNION (needs deduplication)
+                    all: *all, // true for UNION ALL, false for UNION (needs deduplication)
                     estimated_rows,
                     estimated_cost,
                 }
             }
 
             LogicalNode::Intersect { left, right, all } => {
-
                 let left_physical = Box::new(Self::convert_logical_node(left));
                 let right_physical = Box::new(Self::convert_logical_node(right));
 
                 // Intersect returns at most the minimum of both sides
-                let estimated_rows = left_physical.get_row_count().min(right_physical.get_row_count());
-                let estimated_cost = left_physical.get_cost() + right_physical.get_cost() +
-                    (estimated_rows as f64 * 0.5); // Overhead for intersect operation
+                let estimated_rows = left_physical
+                    .get_row_count()
+                    .min(right_physical.get_row_count());
+                let estimated_cost = left_physical.get_cost()
+                    + right_physical.get_cost()
+                    + (estimated_rows as f64 * 0.5); // Overhead for intersect operation
 
                 PhysicalNode::Intersect {
                     left: left_physical,
@@ -1025,7 +1094,6 @@ impl PhysicalPlan {
             }
 
             LogicalNode::Except { left, right, all } => {
-
                 let left_physical = Box::new(Self::convert_logical_node(left));
                 let right_physical = Box::new(Self::convert_logical_node(right));
 
@@ -1033,8 +1101,9 @@ impl PhysicalPlan {
                 let left_rows = left_physical.get_row_count();
                 let right_rows = right_physical.get_row_count();
                 let estimated_rows = left_rows.saturating_sub(right_rows.min(left_rows));
-                let estimated_cost = left_physical.get_cost() + right_physical.get_cost() +
-                    (estimated_rows as f64 * 0.5); // Overhead for except operation
+                let estimated_cost = left_physical.get_cost()
+                    + right_physical.get_cost()
+                    + (estimated_rows as f64 * 0.5); // Overhead for except operation
 
                 PhysicalNode::Except {
                     left: left_physical,
@@ -1044,27 +1113,26 @@ impl PhysicalPlan {
                     estimated_cost,
                 }
             }
-            
+
             LogicalNode::SingleRow => {
                 PhysicalNode::SingleRow {
-                    estimated_rows: 1,  // Always exactly 1 row
+                    estimated_rows: 1,     // Always exactly 1 row
                     estimated_cost: 0.001, // Minimal cost
                 }
             }
-
         }
     }
-    
+
     /// Get total estimated cost
     pub fn get_estimated_cost(&self) -> f64 {
         self.estimated_cost
     }
-    
+
     /// Get estimated row count
     pub fn get_estimated_rows(&self) -> usize {
         self.estimated_rows
     }
-    
+
     /// Get all physical operators in the plan
     pub fn get_operators(&self) -> Vec<PhysicalOperator> {
         self.root.get_operators()
@@ -1077,14 +1145,14 @@ impl PhysicalPlan {
             LogicalNode::NodeScan { labels, .. } => {
                 // Return the first label if available
                 labels.first().cloned()
-            },
-            LogicalNode::Filter { input, .. } |
-            LogicalNode::Project { input, .. } |
-            LogicalNode::Limit { input, .. } |
-            LogicalNode::Sort { input, .. } => {
+            }
+            LogicalNode::Filter { input, .. }
+            | LogicalNode::Project { input, .. }
+            | LogicalNode::Limit { input, .. }
+            | LogicalNode::Sort { input, .. } => {
                 // Recursively check input
                 Self::extract_label_from_logical_node(input)
-            },
+            }
             _ => None,
         }
     }
@@ -1131,7 +1199,7 @@ impl PhysicalNode {
             PhysicalNode::SingleRow { estimated_cost, .. } => *estimated_cost,
         }
     }
-    
+
     /// Get the estimated row count of this node
     pub fn get_row_count(&self) -> usize {
         match self {
@@ -1172,58 +1240,66 @@ impl PhysicalNode {
             PhysicalNode::SingleRow { estimated_rows, .. } => *estimated_rows,
         }
     }
-    
+
     /// Get all operators in this subtree
     pub fn get_operators(&self) -> Vec<PhysicalOperator> {
         let mut operators = vec![self.get_operator_type()];
-        
+
         match self {
-            PhysicalNode::IndexedExpand { input, .. } |
-            PhysicalNode::HashExpand { input, .. } |
-            PhysicalNode::PathTraversal { input, .. } |
-            PhysicalNode::Filter { input, .. } |
-            PhysicalNode::Project { input, .. } |
-            PhysicalNode::HashAggregate { input, .. } |
-            PhysicalNode::SortAggregate { input, .. } |
-            PhysicalNode::ExternalSort { input, .. } |
-            PhysicalNode::InMemorySort { input, .. } |
-            PhysicalNode::Distinct { input, .. } |
-            PhysicalNode::Limit { input, .. } |
-            PhysicalNode::GenericFunction { input, .. } => {
+            PhysicalNode::IndexedExpand { input, .. }
+            | PhysicalNode::HashExpand { input, .. }
+            | PhysicalNode::PathTraversal { input, .. }
+            | PhysicalNode::Filter { input, .. }
+            | PhysicalNode::Project { input, .. }
+            | PhysicalNode::HashAggregate { input, .. }
+            | PhysicalNode::SortAggregate { input, .. }
+            | PhysicalNode::ExternalSort { input, .. }
+            | PhysicalNode::InMemorySort { input, .. }
+            | PhysicalNode::Distinct { input, .. }
+            | PhysicalNode::Limit { input, .. }
+            | PhysicalNode::GenericFunction { input, .. } => {
                 operators.extend(input.get_operators());
             }
-            
-            PhysicalNode::ExistsSubquery { subplan, .. } |
-            PhysicalNode::NotExistsSubquery { subplan, .. } |
-            PhysicalNode::InSubquery { subplan, .. } |
-            PhysicalNode::NotInSubquery { subplan, .. } |
-            PhysicalNode::ScalarSubquery { subplan, .. } => {
+
+            PhysicalNode::ExistsSubquery { subplan, .. }
+            | PhysicalNode::NotExistsSubquery { subplan, .. }
+            | PhysicalNode::InSubquery { subplan, .. }
+            | PhysicalNode::NotInSubquery { subplan, .. }
+            | PhysicalNode::ScalarSubquery { subplan, .. } => {
                 operators.extend(subplan.get_operators());
             }
-            
+
             PhysicalNode::WithQuery { .. } => {
                 // WITH queries don't have nested subplans in the physical structure
                 // The execution will be handled specially
             }
-            
+
             PhysicalNode::Unwind { input, .. } => {
                 if let Some(input_node) = input {
                     operators.extend(input_node.get_operators());
                 }
             }
-            
-            PhysicalNode::HashJoin { build, probe, .. } |
-            PhysicalNode::NestedLoopJoin { left: build, right: probe, .. } |
-            PhysicalNode::SortMergeJoin { left: build, right: probe, .. } => {
+
+            PhysicalNode::HashJoin { build, probe, .. }
+            | PhysicalNode::NestedLoopJoin {
+                left: build,
+                right: probe,
+                ..
+            }
+            | PhysicalNode::SortMergeJoin {
+                left: build,
+                right: probe,
+                ..
+            } => {
                 operators.extend(build.get_operators());
                 operators.extend(probe.get_operators());
             }
-            
+
             PhysicalNode::IndexJoin { left, right, .. } => {
                 operators.extend(left.get_operators());
                 operators.extend(right.get_operators());
             }
-            
+
             PhysicalNode::UnionAll { inputs, .. } => {
                 for input in inputs {
                     operators.extend(input.get_operators());
@@ -1239,52 +1315,54 @@ impl PhysicalNode {
                 operators.extend(left.get_operators());
                 operators.extend(right.get_operators());
             }
-            
+
             _ => {} // Leaf nodes
         }
-        
+
         operators
     }
-    
+
     /// Get the operator type for this node
     fn get_operator_type(&self) -> PhysicalOperator {
         match self {
-            PhysicalNode::NodeSeqScan { .. } |
-            PhysicalNode::NodeIndexScan { .. } |
-            PhysicalNode::EdgeSeqScan { .. } => PhysicalOperator::Scan,
-            
-            PhysicalNode::IndexedExpand { .. } |
-            PhysicalNode::HashExpand { .. } => PhysicalOperator::Join,
-            
-            PhysicalNode::Filter { .. } |
-            PhysicalNode::Having { .. } => PhysicalOperator::Filter,
+            PhysicalNode::NodeSeqScan { .. }
+            | PhysicalNode::NodeIndexScan { .. }
+            | PhysicalNode::EdgeSeqScan { .. } => PhysicalOperator::Scan,
+
+            PhysicalNode::IndexedExpand { .. } | PhysicalNode::HashExpand { .. } => {
+                PhysicalOperator::Join
+            }
+
+            PhysicalNode::Filter { .. } | PhysicalNode::Having { .. } => PhysicalOperator::Filter,
             PhysicalNode::Project { .. } => PhysicalOperator::Project,
-            
-            PhysicalNode::HashJoin { .. } |
-            PhysicalNode::NestedLoopJoin { .. } |
-            PhysicalNode::SortMergeJoin { .. } => PhysicalOperator::Join,
-            
+
+            PhysicalNode::HashJoin { .. }
+            | PhysicalNode::NestedLoopJoin { .. }
+            | PhysicalNode::SortMergeJoin { .. } => PhysicalOperator::Join,
+
             PhysicalNode::UnionAll { .. } => PhysicalOperator::Union,
             PhysicalNode::Intersect { .. } => PhysicalOperator::Union,
             PhysicalNode::Except { .. } => PhysicalOperator::Union,
-            
-            PhysicalNode::HashAggregate { .. } |
-            PhysicalNode::SortAggregate { .. } => PhysicalOperator::Aggregate,
-            
-            PhysicalNode::ExternalSort { .. } |
-            PhysicalNode::InMemorySort { .. } => PhysicalOperator::Sort,
-            
+
+            PhysicalNode::HashAggregate { .. } | PhysicalNode::SortAggregate { .. } => {
+                PhysicalOperator::Aggregate
+            }
+
+            PhysicalNode::ExternalSort { .. } | PhysicalNode::InMemorySort { .. } => {
+                PhysicalOperator::Sort
+            }
+
             PhysicalNode::Distinct { .. } => PhysicalOperator::Sort, // DISTINCT is like sorting with deduplication
-            
+
             PhysicalNode::Limit { .. } => PhysicalOperator::Limit,
             PhysicalNode::GenericFunction { .. } => PhysicalOperator::Aggregate, // Generic functions are treated as aggregates for now
             PhysicalNode::PathTraversal { .. } => PhysicalOperator::Join, // Path traversal is similar to joins
-            
-            PhysicalNode::ExistsSubquery { .. } |
-            PhysicalNode::NotExistsSubquery { .. } |
-            PhysicalNode::InSubquery { .. } |
-            PhysicalNode::NotInSubquery { .. } |
-            PhysicalNode::ScalarSubquery { .. } => PhysicalOperator::Subquery,
+
+            PhysicalNode::ExistsSubquery { .. }
+            | PhysicalNode::NotExistsSubquery { .. }
+            | PhysicalNode::InSubquery { .. }
+            | PhysicalNode::NotInSubquery { .. }
+            | PhysicalNode::ScalarSubquery { .. } => PhysicalOperator::Subquery,
             PhysicalNode::WithQuery { .. } => PhysicalOperator::WithQuery,
             PhysicalNode::Unwind { .. } => PhysicalOperator::Unwind,
             PhysicalNode::GraphIndexScan { .. } => PhysicalOperator::GraphIndexScan,
@@ -1296,4 +1374,3 @@ impl PhysicalNode {
         }
     }
 }
-

@@ -63,7 +63,8 @@ impl<'conn> Transaction<'conn> {
     /// The transaction will automatically roll back when dropped unless committed.
     pub(crate) fn begin(session: &'conn Session) -> Result<Self> {
         // Execute BEGIN TRANSACTION
-        session.coordinator()
+        session
+            .coordinator()
             .process_query("BEGIN TRANSACTION", session.id())
             .map_err(|e| Error::Transaction(format!("Failed to begin transaction: {}", e)))?;
 
@@ -94,10 +95,13 @@ impl<'conn> Transaction<'conn> {
     /// ```
     pub fn execute(&mut self, statement: &str) -> Result<()> {
         if self.committed {
-            return Err(Error::Transaction("Transaction already committed".to_string()));
+            return Err(Error::Transaction(
+                "Transaction already committed".to_string(),
+            ));
         }
 
-        self.session.coordinator()
+        self.session
+            .coordinator()
             .process_query(statement, self.session.id())
             .map_err(|e| Error::Transaction(format!("Execute failed: {}", e)))?;
 
@@ -124,10 +128,13 @@ impl<'conn> Transaction<'conn> {
     /// ```
     pub fn query(&mut self, query: &str) -> Result<QueryResult> {
         if self.committed {
-            return Err(Error::Transaction("Transaction already committed".to_string()));
+            return Err(Error::Transaction(
+                "Transaction already committed".to_string(),
+            ));
         }
 
-        self.session.coordinator()
+        self.session
+            .coordinator()
             .process_query(query, self.session.id())
             .map_err(|e| Error::Transaction(format!("Query failed: {}", e)))
     }
@@ -200,10 +207,13 @@ impl<'conn> Transaction<'conn> {
     /// Internal commit implementation
     fn commit_internal(&mut self) -> Result<()> {
         if self.committed {
-            return Err(Error::Transaction("Transaction already committed".to_string()));
+            return Err(Error::Transaction(
+                "Transaction already committed".to_string(),
+            ));
         }
 
-        self.session.coordinator()
+        self.session
+            .coordinator()
             .process_query("COMMIT", self.session.id())
             .map_err(|e| Error::Transaction(format!("Failed to commit: {}", e)))?;
 
@@ -217,7 +227,8 @@ impl<'conn> Transaction<'conn> {
             return Ok(()); // Already committed, nothing to rollback
         }
 
-        self.session.coordinator()
+        self.session
+            .coordinator()
             .process_query("ROLLBACK", self.session.id())
             .map_err(|e| Error::Transaction(format!("Failed to rollback: {}", e)))?;
 

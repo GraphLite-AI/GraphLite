@@ -6,17 +6,17 @@
 //! This provides a clean API that wraps the session manager and properly
 //! coordinates query execution through the standard GraphLite components.
 
+use crate::ast::parser::parse_query;
+use crate::cache::CacheManager;
+use crate::catalog::manager::CatalogManager;
+use crate::exec::{ExecutionRequest, QueryExecutor, QueryResult};
+use crate::session::SessionManager;
+use crate::storage::{StorageManager, StorageMethod, StorageType};
+use crate::txn::TransactionManager;
+use std::panic::{RefUnwindSafe, UnwindSafe};
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::RwLock;
-use std::path::Path;
-use std::panic::{UnwindSafe, RefUnwindSafe};
-use crate::session::SessionManager;
-use crate::exec::{QueryResult, QueryExecutor, ExecutionRequest};
-use crate::ast::parser::parse_query;
-use crate::storage::{StorageManager, StorageMethod, StorageType};
-use crate::catalog::manager::CatalogManager;
-use crate::txn::TransactionManager;
-use crate::cache::CacheManager;
 
 /// Query Coordinator - Orchestrates query execution with proper session management
 ///
@@ -72,7 +72,7 @@ impl QueryCoordinator {
         // Initialize storage
         let storage = Arc::new(
             StorageManager::new(path.clone(), StorageMethod::DiskOnly, StorageType::Sled)
-                .map_err(|e| format!("Failed to initialize storage: {}", e))?
+                .map_err(|e| format!("Failed to initialize storage: {}", e))?,
         );
 
         // Initialize catalog manager
@@ -81,15 +81,15 @@ impl QueryCoordinator {
         // Initialize transaction manager with database path
         let transaction_manager = Arc::new(
             TransactionManager::new(path.clone())
-                .map_err(|e| format!("Failed to initialize transaction manager: {}", e))?
+                .map_err(|e| format!("Failed to initialize transaction manager: {}", e))?,
         );
 
         // Initialize cache manager
         let cache_config = crate::cache::CacheConfig::default();
-        let cache_manager = Some(Arc::new(
-            CacheManager::new(cache_config)
-                .map_err(|e| format!("Failed to initialize cache manager: {}", e))?
-        ));
+        let cache_manager =
+            Some(Arc::new(CacheManager::new(cache_config).map_err(|e| {
+                format!("Failed to initialize cache manager: {}", e)
+            })?));
 
         // Create query executor
         let executor = Arc::new(
@@ -98,7 +98,8 @@ impl QueryCoordinator {
                 catalog_manager.clone(),
                 transaction_manager.clone(),
                 cache_manager,
-            ).map_err(|e| format!("Failed to initialize query executor: {}", e))?
+            )
+            .map_err(|e| format!("Failed to initialize query executor: {}", e))?,
         );
 
         // Create session manager
@@ -123,10 +124,7 @@ impl QueryCoordinator {
     /// # Arguments
     /// * `session_manager` - Session manager with initialized components
     /// * `executor` - Query executor
-    pub fn new(
-        session_manager: Arc<SessionManager>,
-        executor: Arc<QueryExecutor>,
-    ) -> Self {
+    pub fn new(session_manager: Arc<SessionManager>, executor: Arc<QueryExecutor>) -> Self {
         Self {
             session_manager,
             executor,
@@ -144,14 +142,9 @@ impl QueryCoordinator {
     /// # Returns
     /// * `Ok(QueryResult)` - Query result on success
     /// * `Err(String)` - Error message on failure
-    pub fn process_query(
-        &self,
-        query_text: &str,
-        session_id: &str,
-    ) -> Result<QueryResult, String> {
+    pub fn process_query(&self, query_text: &str, session_id: &str) -> Result<QueryResult, String> {
         // Parse query
-        let document = parse_query(query_text)
-            .map_err(|e| format!("Parse error: {:?}", e))?;
+        let document = parse_query(query_text).map_err(|e| format!("Parse error: {:?}", e))?;
 
         // Get session
         let session = self.session_manager.get_session(session_id);
@@ -162,7 +155,9 @@ impl QueryCoordinator {
             .with_query_text(Some(query_text.to_string()));
 
         // Execute query
-        let result = self.executor.execute_query(request)
+        let result = self
+            .executor
+            .execute_query(request)
             .map_err(|e| format!("Execution error: {:?}", e))?;
 
         // Process any session results (SET GRAPH, SET SCHEMA, etc.)
@@ -182,13 +177,18 @@ impl QueryCoordinator {
         use crate::ast::ast::GraphExpression;
 
         match session_result {
-            crate::exec::SessionResult::SetGraph { graph_expression, validated: _ } => {
+            crate::exec::SessionResult::SetGraph {
+                graph_expression,
+                validated: _,
+            } => {
                 // Get session
-                let session_arc = self.session_manager
+                let session_arc = self
+                    .session_manager
                     .get_session(session_id)
                     .ok_or_else(|| format!("Session not found: {}", session_id))?;
 
-                let mut session = session_arc.write()
+                let mut session = session_arc
+                    .write()
                     .map_err(|e| format!("Failed to acquire session write lock: {}", e))?;
 
                 // Extract the graph path from the expression
@@ -198,32 +198,36 @@ impl QueryCoordinator {
                             2 => {
                                 // Full path: /schema_name/graph_name
                                 format!("/{}", catalog_path.segments.join("/"))
-                            },
+                            }
                             1 => {
                                 // Relative path: graph_name only - use session schema
                                 let graph_name = &catalog_path.segments[0];
                                 match &session.current_schema {
                                     Some(session_schema) => {
-                                        let schema_name = session_schema.strip_prefix('/').unwrap_or(session_schema);
+                                        let schema_name = session_schema
+                                            .strip_prefix('/')
+                                            .unwrap_or(session_schema);
                                         format!("/{}/{}", schema_name, graph_name)
-                                    },
+                                    }
                                     None => {
                                         return Err(
                                             "Cannot use relative graph path without current schema set. Use SESSION SET SCHEMA or provide full path /schema_name/graph_name".to_string()
                                         );
                                     }
                                 }
-                            },
+                            }
                             _ => {
                                 return Err("Invalid graph path format".to_string());
                             }
                         }
-                    },
+                    }
                     GraphExpression::CurrentGraph => {
                         return Err("CURRENT_GRAPH cannot be used in SESSION SET GRAPH".to_string());
-                    },
+                    }
                     GraphExpression::Union { .. } => {
-                        return Err("UNION expressions cannot be used in SESSION SET GRAPH".to_string());
+                        return Err(
+                            "UNION expressions cannot be used in SESSION SET GRAPH".to_string()
+                        );
                     }
                 };
 
@@ -232,14 +236,19 @@ impl QueryCoordinator {
                 log::debug!("Session {} graph set to: {}", session_id, graph_path);
 
                 Ok(())
-            },
-            crate::exec::SessionResult::SetSchema { schema_reference, validated: _ } => {
+            }
+            crate::exec::SessionResult::SetSchema {
+                schema_reference,
+                validated: _,
+            } => {
                 // Get session
-                let session_arc = self.session_manager
+                let session_arc = self
+                    .session_manager
                     .get_session(session_id)
                     .ok_or_else(|| format!("Session not found: {}", session_id))?;
 
-                let mut session = session_arc.write()
+                let mut session = session_arc
+                    .write()
                     .map_err(|e| format!("Failed to acquire session write lock: {}", e))?;
 
                 // Update session's current schema
@@ -248,8 +257,8 @@ impl QueryCoordinator {
                 log::debug!("Session {} schema set to: {}", session_id, schema_path);
 
                 Ok(())
-            },
-            _ => Ok(())  // Other session results don't need special handling
+            }
+            _ => Ok(()), // Other session results don't need special handling
         }
     }
 
@@ -278,7 +287,8 @@ impl QueryCoordinator {
         // Create default permissions with full access
         let permissions = SessionPermissionCache::default();
 
-        self.session_manager.create_session(username.into(), vec![], permissions)
+        self.session_manager
+            .create_session(username.into(), vec![], permissions)
     }
 
     /// Create a new session with custom permissions (Advanced API)
@@ -300,7 +310,8 @@ impl QueryCoordinator {
         roles: Vec<String>,
         permissions: crate::session::SessionPermissionCache,
     ) -> Result<String, String> {
-        self.session_manager.create_session(username, roles, permissions)
+        self.session_manager
+            .create_session(username, roles, permissions)
     }
 
     /// Authenticate a user and create a session
@@ -328,32 +339,37 @@ impl QueryCoordinator {
         username: &str,
         password: &str,
     ) -> Result<String, String> {
-        use crate::catalog::operations::{QueryType, CatalogResponse};
+        use crate::catalog::operations::{CatalogResponse, QueryType};
         use crate::session::SessionPermissionCache;
 
         // Get catalog manager and authenticate
         let catalog_manager = self.session_manager.get_catalog_manager();
-        let catalog_lock = catalog_manager.read()
+        let catalog_lock = catalog_manager
+            .read()
             .map_err(|_| "Failed to acquire catalog lock".to_string())?;
 
-        let auth_result = catalog_lock.query_read_only(
-            "security",
-            QueryType::Authenticate,
-            serde_json::json!({
-                "username": username,
-                "password": password,
-            }),
-        ).map_err(|e| format!("Authentication query failed: {}", e))?;
+        let auth_result = catalog_lock
+            .query_read_only(
+                "security",
+                QueryType::Authenticate,
+                serde_json::json!({
+                    "username": username,
+                    "password": password,
+                }),
+            )
+            .map_err(|e| format!("Authentication query failed: {}", e))?;
 
         // Parse authentication result
         let (authenticated, user_roles) = match auth_result {
             CatalogResponse::Query { results } => {
-                let authenticated = results.get("authenticated")
+                let authenticated = results
+                    .get("authenticated")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
 
                 let roles = if authenticated {
-                    results.get("roles")
+                    results
+                        .get("roles")
                         .and_then(|v| v.as_object())
                         .map(|obj| obj.keys().cloned().collect())
                         .unwrap_or_else(|| vec!["user".to_string()])
@@ -366,7 +382,7 @@ impl QueryCoordinator {
             _ => (false, vec![]),
         };
 
-        drop(catalog_lock);  // Release lock before creating session
+        drop(catalog_lock); // Release lock before creating session
 
         if !authenticated {
             return Err("Authentication failed: Invalid credentials".to_string());
@@ -404,24 +420,28 @@ impl QueryCoordinator {
         use crate::catalog::operations::{CatalogOperation, EntityType};
 
         let catalog_manager = self.session_manager.get_catalog_manager();
-        let mut catalog_lock = catalog_manager.write()
+        let mut catalog_lock = catalog_manager
+            .write()
             .map_err(|_| "Failed to acquire catalog write lock".to_string())?;
 
         // Update user password
-        catalog_lock.execute(
-            "security",
-            CatalogOperation::Update {
-                entity_type: EntityType::User,
-                name: username.to_string(),
-                updates: serde_json::json!({
-                    "password": password,
-                    "enabled": true,
-                }),
-            },
-        ).map_err(|e| format!("Failed to update user password: {}", e))?;
+        catalog_lock
+            .execute(
+                "security",
+                CatalogOperation::Update {
+                    entity_type: EntityType::User,
+                    name: username.to_string(),
+                    updates: serde_json::json!({
+                        "password": password,
+                        "enabled": true,
+                    }),
+                },
+            )
+            .map_err(|e| format!("Failed to update user password: {}", e))?;
 
         // Persist changes to disk
-        catalog_lock.persist_catalog("security")
+        catalog_lock
+            .persist_catalog("security")
             .map_err(|e| format!("Failed to persist security catalog: {}", e))?;
 
         Ok(())
@@ -468,8 +488,7 @@ impl QueryCoordinator {
     /// ```
     pub fn validate_query(&self, query: &str) -> Result<(), String> {
         // Parse the query
-        let document = parse_query(query)
-            .map_err(|e| format!("Parse error: {:?}", e))?;
+        let document = parse_query(query).map_err(|e| format!("Parse error: {:?}", e))?;
 
         // Validate the parsed query (pass false for has_graph_context since we're just validating syntax)
         crate::ast::validator::validate_query(&document, false)
@@ -525,8 +544,7 @@ impl QueryCoordinator {
     /// ```
     pub fn analyze_query(&self, query: &str) -> Result<QueryInfo, String> {
         // Parse the query
-        let document = parse_query(query)
-            .map_err(|e| format!("Parse error: {:?}", e))?;
+        let document = parse_query(query).map_err(|e| format!("Parse error: {:?}", e))?;
 
         // Analyze the statement type
         let query_type = match &document.statement {
@@ -569,15 +587,13 @@ impl QueryCoordinator {
                 }
             }
             crate::ast::ast::Statement::SessionStatement(session) => {
-                use crate::ast::ast::{SessionStatement, SessionSetClause};
+                use crate::ast::ast::{SessionSetClause, SessionStatement};
                 match session {
-                    SessionStatement::SessionSet(set_stmt) => {
-                        match &set_stmt.clause {
-                            SessionSetClause::Graph { .. } => QueryType::SessionSetGraph,
-                            SessionSetClause::Schema { .. } => QueryType::SessionSetSchema,
-                            _ => QueryType::SessionSet,
-                        }
-                    }
+                    SessionStatement::SessionSet(set_stmt) => match &set_stmt.clause {
+                        SessionSetClause::Graph { .. } => QueryType::SessionSetGraph,
+                        SessionSetClause::Schema { .. } => QueryType::SessionSetSchema,
+                        _ => QueryType::SessionSet,
+                    },
                     SessionStatement::SessionReset(_) => QueryType::SessionReset,
                     SessionStatement::SessionClose(_) => QueryType::SessionClose,
                 }
@@ -588,7 +604,9 @@ impl QueryCoordinator {
                     TransactionStatement::StartTransaction(_) => QueryType::StartTransaction,
                     TransactionStatement::Commit(_) => QueryType::Commit,
                     TransactionStatement::Rollback(_) => QueryType::Rollback,
-                    TransactionStatement::SetTransactionCharacteristics(_) => QueryType::SetTransactionCharacteristics,
+                    TransactionStatement::SetTransactionCharacteristics(_) => {
+                        QueryType::SetTransactionCharacteristics
+                    }
                 }
             }
             crate::ast::ast::Statement::IndexStatement(idx) => {
@@ -649,8 +667,7 @@ impl QueryCoordinator {
     /// ```
     pub fn explain_query(&self, query: &str) -> Result<QueryPlan, String> {
         // Parse the query
-        let document = parse_query(query)
-            .map_err(|e| format!("Parse error: {:?}", e))?;
+        let document = parse_query(query).map_err(|e| format!("Parse error: {:?}", e))?;
 
         // Only MATCH/SELECT queries can be explained (not DDL/DML)
         match &document.statement {
@@ -666,7 +683,8 @@ impl QueryCoordinator {
         let mut planner = crate::plan::optimizer::QueryPlanner::new();
 
         // Plan the query with tracing
-        let trace = planner.plan_query_with_trace(&document)
+        let trace = planner
+            .plan_query_with_trace(&document)
             .map_err(|e| format!("Planning error: {:?}", e))?;
 
         // Use the cost and row estimates from the physical plan
@@ -711,9 +729,7 @@ impl QueryPlan {
     pub fn summary(&self) -> String {
         format!(
             "Planning time: {}ms | Estimated cost: {:.2} | Estimated rows: {}",
-            self.total_planning_time_ms,
-            self.estimated_cost,
-            self.estimated_rows
+            self.total_planning_time_ms, self.estimated_cost, self.estimated_rows
         )
     }
 }
@@ -792,7 +808,6 @@ pub enum QueryType {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_coordinator_creation() {

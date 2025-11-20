@@ -3,8 +3,8 @@
 //
 // Schema parser module for ISO GQL Graph Type statements
 
-pub mod graph_type;
 pub mod ast;
+pub mod graph_type;
 
 // pub use ast::{
 //     CreateGraphTypeStatement,

@@ -8,12 +8,14 @@
 
 use crate::ast::ast::{MatchClause, Query};
 use crate::plan::logical::LogicalPlan;
-use crate::plan::physical::PhysicalNode;
 use crate::plan::pattern_optimization::{
-    logical_integration::{LogicalPatternOptimizer, OptimizationContext, PatternOptimizationResult},
-    physical_generation::{OptimizationImprovement, PhysicalGenerationConfig},
     cost_estimation::StatisticsManager,
+    logical_integration::{
+        LogicalPatternOptimizer, OptimizationContext, PatternOptimizationResult,
+    },
+    physical_generation::{OptimizationImprovement, PhysicalGenerationConfig},
 };
+use crate::plan::physical::PhysicalNode;
 
 /// Complete pattern optimization pipeline
 #[derive(Debug)]
@@ -74,11 +76,16 @@ pub struct OptimizationMetrics {
 
 impl OptimizationMetrics {
     /// Record a successful optimization
-    pub fn record_success(&mut self, optimization_time_ms: u64, improvement: &OptimizationImprovement) {
+    pub fn record_success(
+        &mut self,
+        optimization_time_ms: u64,
+        improvement: &OptimizationImprovement,
+    ) {
         self.queries_processed += 1;
         self.queries_optimized += 1;
         self.total_optimization_time_ms += optimization_time_ms;
-        self.avg_optimization_time_ms = self.total_optimization_time_ms as f64 / self.queries_processed as f64;
+        self.avg_optimization_time_ms =
+            self.total_optimization_time_ms as f64 / self.queries_processed as f64;
         self.success_rate = (self.queries_optimized as f64) / (self.queries_processed as f64);
         self.total_cost_improvement += improvement.cost_reduction_percentage;
         self.total_cardinality_reduction += improvement.cardinality_reduction_percentage;
@@ -88,7 +95,8 @@ impl OptimizationMetrics {
     pub fn record_skip(&mut self, optimization_time_ms: u64) {
         self.queries_processed += 1;
         self.total_optimization_time_ms += optimization_time_ms;
-        self.avg_optimization_time_ms = self.total_optimization_time_ms as f64 / self.queries_processed as f64;
+        self.avg_optimization_time_ms =
+            self.total_optimization_time_ms as f64 / self.queries_processed as f64;
         self.success_rate = (self.queries_optimized as f64) / (self.queries_processed as f64);
     }
 
@@ -151,7 +159,7 @@ impl PatternOptimizationPipeline {
 
         // Extract MATCH clauses from the query
         let match_clauses = self.extract_match_clauses(query)?;
-        
+
         if match_clauses.is_empty() {
             let elapsed = start_time.elapsed().as_millis() as u64;
             self.metrics.record_skip(elapsed);
@@ -163,7 +171,7 @@ impl PatternOptimizationPipeline {
 
         // Check if any MATCH clause has comma-separated patterns (our target bug)
         let needs_optimization = match_clauses.iter().any(|clause| clause.patterns.len() > 1);
-        
+
         if !needs_optimization {
             let elapsed = start_time.elapsed().as_millis() as u64;
             self.metrics.record_skip(elapsed);
@@ -197,21 +205,28 @@ impl PatternOptimizationPipeline {
                     Ok(result) => {
                         if result.optimization_result.optimized {
                             optimized_plan = result.optimized_physical_plan;
-                            total_improvement = self.combine_improvements(&total_improvement, &result.improvement);
+                            total_improvement =
+                                self.combine_improvements(&total_improvement, &result.improvement);
                             optimization_applied = true;
-                            optimization_reasons.push(result.optimization_result.optimization_reason.clone());
-                            
+                            optimization_reasons
+                                .push(result.optimization_result.optimization_reason.clone());
+
                             if self.config.enable_logging {
-                                log::debug!("✅ Pattern optimization applied: {}", result.optimization_result.optimization_reason);
+                                log::debug!(
+                                    "✅ Pattern optimization applied: {}",
+                                    result.optimization_result.optimization_reason
+                                );
                                 log::debug!("   Improvement: {}", result.improvement.describe());
                             }
                         } else {
-                            optimization_reasons.push(result.optimization_result.optimization_reason.clone());
+                            optimization_reasons
+                                .push(result.optimization_result.optimization_reason.clone());
                         }
                     }
                     Err(e) => {
                         if self.config.fallback_on_error {
-                            optimization_reasons.push(format!("Optimization failed, using fallback: {}", e));
+                            optimization_reasons
+                                .push(format!("Optimization failed, using fallback: {}", e));
                         } else {
                             return Err(format!("Pattern optimization failed: {}", e));
                         }
@@ -222,10 +237,12 @@ impl PatternOptimizationPipeline {
 
         let elapsed = start_time.elapsed().as_millis() as u64;
 
-        if optimization_applied && total_improvement.is_significant_improvement(self.config.min_improvement_threshold) {
+        if optimization_applied
+            && total_improvement.is_significant_improvement(self.config.min_improvement_threshold)
+        {
             // Record successful optimization
             self.metrics.record_success(elapsed, &total_improvement);
-            
+
             Ok(OptimizationPipelineResult::optimized(
                 optimized_plan,
                 total_improvement,
@@ -234,10 +251,13 @@ impl PatternOptimizationPipeline {
         } else {
             // Record skipped optimization
             self.metrics.record_skip(elapsed);
-            
+
             Ok(OptimizationPipelineResult::no_optimization(
                 original_physical_plan.clone(),
-                format!("Optimization not beneficial: {}", optimization_reasons.join("; ")),
+                format!(
+                    "Optimization not beneficial: {}",
+                    optimization_reasons.join("; ")
+                ),
             ))
         }
     }
@@ -250,11 +270,12 @@ impl PatternOptimizationPipeline {
         context: &OptimizationContext,
     ) -> Result<SingleMatchOptimizationResult, String> {
         // Step 1: Apply logical optimization
-        let logical_result = crate::plan::pattern_optimization::logical_integration::optimize_match_clause_patterns(
-            &mut self.logical_optimizer,
-            match_clause,
-            context,
-        )?;
+        let logical_result =
+            crate::plan::pattern_optimization::logical_integration::optimize_match_clause_patterns(
+                &mut self.logical_optimizer,
+                match_clause,
+                context,
+            )?;
 
         // Step 2: Generate optimized physical plan
         let optimized_physical_plan = crate::plan::pattern_optimization::physical_generation::generate_optimized_physical_plan(
@@ -280,7 +301,7 @@ impl PatternOptimizationPipeline {
     fn extract_match_clauses(&self, query: &Query) -> Result<Vec<MatchClause>, String> {
         // Extract MATCH clauses from the query structure
         let mut match_clauses = Vec::new();
-        
+
         match query {
             Query::Basic(basic_query) => {
                 // Basic query has exactly one MATCH clause
@@ -294,7 +315,9 @@ impl PatternOptimizationPipeline {
                 match_clauses.extend(left_clauses);
                 match_clauses.extend(right_clauses);
             }
-            Query::Limited { query: inner_query, .. } => {
+            Query::Limited {
+                query: inner_query, ..
+            } => {
                 // Limited query wraps another query
                 let inner_clauses = self.extract_match_clauses(inner_query)?;
                 match_clauses.extend(inner_clauses);
@@ -308,12 +331,16 @@ impl PatternOptimizationPipeline {
                 // Mutation pipelines can contain MATCH clauses in their segments
                 // For now, we'll skip optimization for these complex queries
             }
-            Query::Let(_) | Query::For(_) | Query::Filter(_) | Query::Return(_) | Query::Unwind(_) => {
+            Query::Let(_)
+            | Query::For(_)
+            | Query::Filter(_)
+            | Query::Return(_)
+            | Query::Unwind(_) => {
                 // These query types don't contain MATCH clauses
                 // Return empty list
             }
         }
-        
+
         Ok(match_clauses)
     }
 
@@ -331,8 +358,10 @@ impl PatternOptimizationPipeline {
         improvement2: &OptimizationImprovement,
     ) -> OptimizationImprovement {
         OptimizationImprovement {
-            cost_reduction_percentage: improvement1.cost_reduction_percentage + improvement2.cost_reduction_percentage,
-            cardinality_reduction_percentage: improvement1.cardinality_reduction_percentage + improvement2.cardinality_reduction_percentage,
+            cost_reduction_percentage: improvement1.cost_reduction_percentage
+                + improvement2.cost_reduction_percentage,
+            cardinality_reduction_percentage: improvement1.cardinality_reduction_percentage
+                + improvement2.cardinality_reduction_percentage,
             original_cost: improvement1.original_cost + improvement2.original_cost,
             optimized_cost: improvement1.optimized_cost + improvement2.optimized_cost,
             original_rows: improvement1.original_rows + improvement2.original_rows,
@@ -359,7 +388,8 @@ impl PatternOptimizationPipeline {
     /// Record query execution for statistics
     #[allow(dead_code)] // ROADMAP v0.4.0 - Query profiling for adaptive optimization
     pub fn record_query_execution(&mut self, query_text: &str, result_count: u64) {
-        self.statistics_manager.record_query_execution(query_text, result_count);
+        self.statistics_manager
+            .record_query_execution(query_text, result_count);
     }
 }
 
@@ -466,7 +496,10 @@ impl GlobalPatternOptimizer {
             return Ok(physical_plan.clone());
         }
 
-        match self.pipeline.optimize_query(query, logical_plan, physical_plan) {
+        match self
+            .pipeline
+            .optimize_query(query, logical_plan, physical_plan)
+        {
             Ok(result) => Ok(result.physical_plan),
             Err(e) => {
                 // Log error but don't fail the query
@@ -488,12 +521,23 @@ impl GlobalPatternOptimizer {
         log::debug!("   Queries Processed: {}", metrics.queries_processed);
         log::debug!("   Queries Optimized: {}", metrics.queries_optimized);
         log::debug!("   Success Rate: {:.1}%", metrics.success_rate * 100.0);
-        log::debug!("   Avg Optimization Time: {:.2}ms", metrics.avg_optimization_time_ms);
-        log::debug!("   Avg Cost Improvement: {:.1}%", metrics.avg_cost_improvement());
-        log::debug!("   Avg Cardinality Reduction: {:.1}%", metrics.avg_cardinality_reduction());
-        
+        log::debug!(
+            "   Avg Optimization Time: {:.2}ms",
+            metrics.avg_optimization_time_ms
+        );
+        log::debug!(
+            "   Avg Cost Improvement: {:.1}%",
+            metrics.avg_cost_improvement()
+        );
+        log::debug!(
+            "   Avg Cardinality Reduction: {:.1}%",
+            metrics.avg_cardinality_reduction()
+        );
+
         if metrics.queries_optimized > 0 {
-            log::debug!("   🎉 Pattern optimization is working! Comma-separated pattern bug is fixed.");
+            log::debug!(
+                "   🎉 Pattern optimization is working! Comma-separated pattern bug is fixed."
+            );
         }
     }
 }
@@ -522,7 +566,9 @@ pub mod integration_helpers {
     pub fn enable_pattern_optimization() {
         if let Ok(mut optimizer) = GLOBAL_OPTIMIZER.lock() {
             optimizer.set_enabled(true);
-            log::debug!("✅ Pattern optimization enabled - comma-separated pattern bug fix is active");
+            log::debug!(
+                "✅ Pattern optimization enabled - comma-separated pattern bug fix is active"
+            );
         }
     }
 
@@ -536,7 +582,10 @@ pub mod integration_helpers {
 
     /// Check if pattern optimization is enabled
     pub fn is_pattern_optimization_enabled() -> bool {
-        GLOBAL_OPTIMIZER.lock().map(|opt| opt.is_enabled()).unwrap_or(false)
+        GLOBAL_OPTIMIZER
+            .lock()
+            .map(|opt| opt.is_enabled())
+            .unwrap_or(false)
     }
 
     /// Optimize a query through the global optimizer
@@ -562,7 +611,6 @@ pub mod integration_helpers {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn test_pipeline_creation() {
@@ -590,7 +638,7 @@ mod tests {
     #[test]
     fn test_optimization_metrics() {
         let mut metrics = OptimizationMetrics::default();
-        
+
         let improvement = OptimizationImprovement {
             cost_reduction_percentage: 85.0,
             cardinality_reduction_percentage: 83.3,
@@ -599,9 +647,9 @@ mod tests {
             original_rows: 18,
             optimized_rows: 3,
         };
-        
+
         metrics.record_success(50, &improvement);
-        
+
         assert_eq!(metrics.queries_processed, 1);
         assert_eq!(metrics.queries_optimized, 1);
         assert_eq!(metrics.success_rate, 1.0);
@@ -614,10 +662,10 @@ mod tests {
     fn test_global_optimizer() {
         let mut optimizer = GlobalPatternOptimizer::new();
         assert!(optimizer.is_enabled());
-        
+
         optimizer.set_enabled(false);
         assert!(!optimizer.is_enabled());
-        
+
         optimizer.set_enabled(true);
         assert!(optimizer.is_enabled());
     }
@@ -627,10 +675,10 @@ mod tests {
         // Test enabling and disabling
         integration_helpers::enable_pattern_optimization();
         assert!(integration_helpers::is_pattern_optimization_enabled());
-        
+
         integration_helpers::disable_pattern_optimization();
         assert!(!integration_helpers::is_pattern_optimization_enabled());
-        
+
         // Re-enable for other tests
         integration_helpers::enable_pattern_optimization();
     }

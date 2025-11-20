@@ -4,20 +4,20 @@
 // Parser for ISO GQL CREATE/DROP/ALTER GRAPH TYPE statements
 
 use nom::{
-    IResult,
     branch::alt,
     combinator::{map, opt, value},
     multi::{many0, separated_list0, separated_list1},
-    sequence::{preceded, tuple, delimited},
+    sequence::{delimited, preceded, tuple},
+    IResult,
 };
 
 use crate::ast::lexer::Token;
 use crate::schema::parser::ast::{
-    CreateGraphTypeStatement, DropGraphTypeStatement, AlterGraphTypeStatement
+    AlterGraphTypeStatement, CreateGraphTypeStatement, DropGraphTypeStatement,
 };
 use crate::schema::types::{
-    NodeTypeDefinition, EdgeTypeDefinition, PropertyDefinition,
-    DataType, GraphTypeVersion, SchemaChange, EdgeCardinality
+    DataType, EdgeCardinality, EdgeTypeDefinition, GraphTypeVersion, NodeTypeDefinition,
+    PropertyDefinition, SchemaChange,
 };
 
 /// Parse CREATE GRAPH TYPE statement
@@ -40,16 +40,19 @@ pub fn parse_create_graph_type(tokens: &[Token]) -> IResult<&[Token], CreateGrap
     let (tokens, (node_types, edge_types)) = delimited(
         tag_token(Token::LeftParen),
         parse_graph_type_body,
-        tag_token(Token::RightParen)
+        tag_token(Token::RightParen),
     )(tokens)?;
 
-    Ok((tokens, CreateGraphTypeStatement {
-        name,
-        if_not_exists: if_not_exists.is_some(),
-        version,
-        node_types,
-        edge_types,
-    }))
+    Ok((
+        tokens,
+        CreateGraphTypeStatement {
+            name,
+            if_not_exists: if_not_exists.is_some(),
+            version,
+            node_types,
+            edge_types,
+        },
+    ))
 }
 
 /// Parse DROP GRAPH TYPE statement
@@ -71,11 +74,14 @@ pub fn parse_drop_graph_type(tokens: &[Token]) -> IResult<&[Token], DropGraphTyp
         value(false, tag_token(Token::Restrict)),
     )))(tokens)?;
 
-    Ok((tokens, DropGraphTypeStatement {
-        name,
-        if_exists: if_exists.is_some(),
-        cascade: cascade.unwrap_or(false),
-    }))
+    Ok((
+        tokens,
+        DropGraphTypeStatement {
+            name,
+            if_exists: if_exists.is_some(),
+            cascade: cascade.unwrap_or(false),
+        },
+    ))
 }
 
 /// Parse ALTER GRAPH TYPE statement
@@ -94,16 +100,21 @@ pub fn parse_alter_graph_type(tokens: &[Token]) -> IResult<&[Token], AlterGraphT
     // Parse schema changes
     let (tokens, changes) = many0(parse_schema_change)(tokens)?;
 
-    Ok((tokens, AlterGraphTypeStatement {
-        name,
-        version,
-        changes,
-    }))
+    Ok((
+        tokens,
+        AlterGraphTypeStatement {
+            name,
+            version,
+            changes,
+        },
+    ))
 }
 
 /// Parse graph type body (node types and edge types)
 #[allow(dead_code)] // ROADMAP v0.4.0 - Graph type body parser for node/edge type definitions
-fn parse_graph_type_body(tokens: &[Token]) -> IResult<&[Token], (Vec<NodeTypeDefinition>, Vec<EdgeTypeDefinition>)> {
+fn parse_graph_type_body(
+    tokens: &[Token],
+) -> IResult<&[Token], (Vec<NodeTypeDefinition>, Vec<EdgeTypeDefinition>)> {
     let mut tokens = tokens;
     let mut node_types = Vec::new();
     let mut edge_types = Vec::new();
@@ -151,26 +162,26 @@ fn parse_node_type(tokens: &[Token]) -> IResult<&[Token], NodeTypeDefinition> {
     let (tokens, label) = parse_identifier(tokens)?;
 
     // Parse optional EXTENDS clause
-    let (tokens, extends) = opt(preceded(
-        tag_identifier("EXTENDS"),
-        parse_identifier
-    ))(tokens)?;
+    let (tokens, extends) = opt(preceded(tag_identifier("EXTENDS"), parse_identifier))(tokens)?;
 
     // Parse properties within parentheses
     let (tokens, properties) = delimited(
         tag_token(Token::LeftParen),
         separated_list0(tag_token(Token::Comma), parse_property_definition),
-        tag_token(Token::RightParen)
+        tag_token(Token::RightParen),
     )(tokens)?;
 
-    Ok((tokens, NodeTypeDefinition {
-        label,
-        properties,
-        constraints: Vec::new(), // TODO: Parse constraints
-        description: None,
-        is_abstract: false,
-        extends,
-    }))
+    Ok((
+        tokens,
+        NodeTypeDefinition {
+            label,
+            properties,
+            constraints: Vec::new(), // TODO: Parse constraints
+            description: None,
+            is_abstract: false,
+            extends,
+        },
+    ))
 }
 
 /// Parse EDGE TYPE definition
@@ -189,18 +200,21 @@ fn parse_edge_type(tokens: &[Token]) -> IResult<&[Token], EdgeTypeDefinition> {
     let (tokens, properties) = opt(delimited(
         tag_token(Token::LeftParen),
         separated_list0(tag_token(Token::Comma), parse_property_definition),
-        tag_token(Token::RightParen)
+        tag_token(Token::RightParen),
     ))(tokens)?;
 
-    Ok((tokens, EdgeTypeDefinition {
-        type_name,
-        from_node_types: from_types,
-        to_node_types: to_types,
-        properties: properties.unwrap_or_default(),
-        constraints: Vec::new(),
-        description: None,
-        cardinality: EdgeCardinality::default(),
-    }))
+    Ok((
+        tokens,
+        EdgeTypeDefinition {
+            type_name,
+            from_node_types: from_types,
+            to_node_types: to_types,
+            properties: properties.unwrap_or_default(),
+            constraints: Vec::new(),
+            description: None,
+            cardinality: EdgeCardinality::default(),
+        },
+    ))
 }
 
 /// Parse edge endpoints (FROM ... TO ...)
@@ -212,15 +226,12 @@ fn parse_edge_endpoints(tokens: &[Token]) -> IResult<&[Token], (Vec<String>, Vec
     let (tokens, _) = tag_token(Token::From)(tokens)?;
     let (tokens, from_types) = separated_list1(
         tag_token(Token::Pipe), // Use | for multiple types
-        parse_identifier
+        parse_identifier,
     )(tokens)?;
 
     // Parse TO clause
     let (tokens, _) = tag_token(Token::To)(tokens)?;
-    let (tokens, to_types) = separated_list1(
-        tag_token(Token::Pipe),
-        parse_identifier
-    )(tokens)?;
+    let (tokens, to_types) = separated_list1(tag_token(Token::Pipe), parse_identifier)(tokens)?;
 
     let (tokens, _) = tag_token(Token::RightParen)(tokens)?;
 
@@ -239,18 +250,21 @@ fn parse_property_definition(tokens: &[Token]) -> IResult<&[Token], PropertyDefi
     // Parse constraints (NOT NULL, UNIQUE, DEFAULT, etc.)
     let (tokens, (required, unique, default_value)) = parse_property_constraints(tokens)?;
 
-    Ok((tokens, PropertyDefinition {
-        name,
-        data_type,
-        required,
-        unique,
-        default_value,
-        description: None,
-        deprecated: false,
-        deprecation_message: None,
-        validation_pattern: None,
-        constraints: Vec::new(),  // Initialize with empty constraints for now
-    }))
+    Ok((
+        tokens,
+        PropertyDefinition {
+            name,
+            data_type,
+            required,
+            unique,
+            default_value,
+            description: None,
+            deprecated: false,
+            deprecation_message: None,
+            validation_pattern: None,
+            constraints: Vec::new(), // Initialize with empty constraints for now
+        },
+    ))
 }
 
 /// Parse data type
@@ -276,10 +290,10 @@ fn parse_data_type(tokens: &[Token]) -> IResult<&[Token], DataType> {
                 delimited(
                     tag_token(Token::LessThan),
                     parse_data_type,
-                    tag_token(Token::GreaterThan)
-                )
+                    tag_token(Token::GreaterThan),
+                ),
             ),
-            |element_type| DataType::Array(Box::new(element_type))
+            |element_type| DataType::Array(Box::new(element_type)),
         ),
         // Default to String for identifiers
         map(parse_identifier, |_| DataType::String),
@@ -288,7 +302,9 @@ fn parse_data_type(tokens: &[Token]) -> IResult<&[Token], DataType> {
 
 /// Parse property constraints
 #[allow(dead_code)] // ROADMAP v0.4.0 - Property constraint parser for schema validation
-fn parse_property_constraints(tokens: &[Token]) -> IResult<&[Token], (bool, bool, Option<serde_json::Value>)> {
+fn parse_property_constraints(
+    tokens: &[Token],
+) -> IResult<&[Token], (bool, bool, Option<serde_json::Value>)> {
     let mut tokens = tokens;
     let mut required = false;
     let mut unique = false;
@@ -297,10 +313,7 @@ fn parse_property_constraints(tokens: &[Token]) -> IResult<&[Token], (bool, bool
     // Parse constraint keywords
     loop {
         // NOT NULL
-        if let Ok((remaining, _)) = tuple((
-            tag_token(Token::Not),
-            tag_token(Token::Null),
-        ))(tokens) {
+        if let Ok((remaining, _)) = tuple((tag_token(Token::Not), tag_token(Token::Null)))(tokens) {
             required = true;
             tokens = remaining;
             continue;
@@ -346,8 +359,12 @@ fn parse_version_clause(tokens: &[Token]) -> IResult<&[Token], GraphTypeVersion>
     let (tokens, version_str) = parse_string_literal(tokens)?;
 
     // Parse the version string
-    let version = GraphTypeVersion::parse(&version_str)
-        .map_err(|_| nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Verify)))?;
+    let version = GraphTypeVersion::parse(&version_str).map_err(|_| {
+        nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Verify,
+        ))
+    })?;
 
     Ok((tokens, version))
 }
@@ -359,25 +376,37 @@ fn parse_schema_change(tokens: &[Token]) -> IResult<&[Token], SchemaChange> {
         // ADD NODE TYPE
         map(
             preceded(
-                tuple((tag_identifier("ADD"), tag_token(Token::Node), tag_token(Token::Type))),
-                parse_node_type
+                tuple((
+                    tag_identifier("ADD"),
+                    tag_token(Token::Node),
+                    tag_token(Token::Type),
+                )),
+                parse_node_type,
             ),
-            SchemaChange::AddNodeType
+            SchemaChange::AddNodeType,
         ),
         // DROP NODE TYPE
         map(
             preceded(
-                tuple((tag_token(Token::Drop), tag_token(Token::Node), tag_token(Token::Type))),
-                parse_identifier
+                tuple((
+                    tag_token(Token::Drop),
+                    tag_token(Token::Node),
+                    tag_token(Token::Type),
+                )),
+                parse_identifier,
             ),
-            SchemaChange::DropNodeType
+            SchemaChange::DropNodeType,
         ),
         // ADD PROPERTY TO NodeType
         map(
             tuple((
                 preceded(
-                    tuple((tag_identifier("ADD"), tag_token(Token::Property), tag_token(Token::To))),
-                    parse_identifier
+                    tuple((
+                        tag_identifier("ADD"),
+                        tag_token(Token::Property),
+                        tag_token(Token::To),
+                    )),
+                    parse_identifier,
                 ),
                 parse_property_definition,
             )),
@@ -385,7 +414,7 @@ fn parse_schema_change(tokens: &[Token]) -> IResult<&[Token], SchemaChange> {
                 type_name,
                 is_node: true,
                 property,
-            }
+            },
         ),
     ))(tokens)
 }
@@ -412,7 +441,10 @@ fn parse_if_exists(tokens: &[Token]) -> IResult<&[Token], ()> {
 fn parse_identifier(tokens: &[Token]) -> IResult<&[Token], String> {
     match tokens.first() {
         Some(Token::Identifier(name)) => Ok((&tokens[1..], name.clone())),
-        _ => Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag))),
+        _ => Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        ))),
     }
 }
 
@@ -421,7 +453,10 @@ fn parse_identifier(tokens: &[Token]) -> IResult<&[Token], String> {
 fn parse_string_literal(tokens: &[Token]) -> IResult<&[Token], String> {
     match tokens.first() {
         Some(Token::String(s)) => Ok((&tokens[1..], s.clone())),
-        _ => Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag))),
+        _ => Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        ))),
     }
 }
 
@@ -432,7 +467,9 @@ fn parse_literal_value(tokens: &[Token]) -> IResult<&[Token], serde_json::Value>
         // String literal
         map(parse_string_literal, serde_json::Value::String),
         // Number literal
-        map(parse_number_literal, |n| serde_json::Value::Number(serde_json::Number::from(n))),
+        map(parse_number_literal, |n| {
+            serde_json::Value::Number(serde_json::Number::from(n))
+        }),
         // Boolean literal
         map(parse_boolean_literal, serde_json::Value::Bool),
         // NULL literal
@@ -445,7 +482,10 @@ fn parse_literal_value(tokens: &[Token]) -> IResult<&[Token], serde_json::Value>
 fn parse_boolean_literal(tokens: &[Token]) -> IResult<&[Token], bool> {
     match tokens.first() {
         Some(Token::Boolean(b)) => Ok((&tokens[1..], *b)),
-        _ => Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag))),
+        _ => Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        ))),
     }
 }
 
@@ -454,33 +494,36 @@ fn parse_boolean_literal(tokens: &[Token]) -> IResult<&[Token], bool> {
 fn parse_number_literal(tokens: &[Token]) -> IResult<&[Token], i64> {
     match tokens.first() {
         Some(Token::Integer(n)) => Ok((&tokens[1..], *n)),
-        _ => Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag))),
+        _ => Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        ))),
     }
 }
 
 /// Helper to match a specific token
 #[allow(dead_code)] // ROADMAP v0.4.0 - Token matcher for parser combinators
 fn tag_token(expected: Token) -> impl Fn(&[Token]) -> IResult<&[Token], &Token> {
-    move |tokens: &[Token]| {
-        match tokens.first() {
-            Some(token) if std::mem::discriminant(token) == std::mem::discriminant(&expected) => {
-                Ok((&tokens[1..], token))
-            }
-            _ => Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag))),
+    move |tokens: &[Token]| match tokens.first() {
+        Some(token) if std::mem::discriminant(token) == std::mem::discriminant(&expected) => {
+            Ok((&tokens[1..], token))
         }
+        _ => Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        ))),
     }
 }
 
 /// Helper to match an identifier with a specific value
 #[allow(dead_code)] // ROADMAP v0.4.0 - Identifier matcher for keyword detection in DDL
 fn tag_identifier(expected: &str) -> impl Fn(&[Token]) -> IResult<&[Token], ()> + '_ {
-    move |tokens: &[Token]| {
-        match tokens.first() {
-            Some(Token::Identifier(name)) if name == expected => {
-                Ok((&tokens[1..], ()))
-            }
-            _ => Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag))),
-        }
+    move |tokens: &[Token]| match tokens.first() {
+        Some(Token::Identifier(name)) if name == expected => Ok((&tokens[1..], ())),
+        _ => Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        ))),
     }
 }
 

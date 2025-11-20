@@ -5,8 +5,8 @@
 //!
 //! Provides iterator-based row processing to reduce memory footprint.
 
-use crate::exec::result::Row;
 use crate::exec::error::ExecutionError;
+use crate::exec::result::Row;
 
 /// Iterator trait for lazy row evaluation
 ///
@@ -148,9 +148,7 @@ pub struct ErrorRowIterator {
 impl ErrorRowIterator {
     #[allow(dead_code)] // ROADMAP v0.5.0 - Error propagation in iterator chains
     pub fn new(error: ExecutionError) -> Self {
-        Self {
-            error: Some(error),
-        }
+        Self { error: Some(error) }
     }
 }
 

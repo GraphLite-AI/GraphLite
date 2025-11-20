@@ -7,9 +7,11 @@
 //! physical execution details. They are optimized for correctness and
 //! logical equivalence transformations.
 
+use crate::ast::ast::{
+    EdgeDirection, Expression, PathPattern, PathQuantifier, PathType, PatternElement,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::ast::ast::{Expression, EdgeDirection, PathPattern, PatternElement, PathType, PathQuantifier};
 
 /// Logical query plan tree
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,14 +97,14 @@ pub enum LogicalNode {
         labels: Vec<String>,
         properties: Option<HashMap<String, Expression>>,
     },
-    
+
     /// Scan all edges with given label(s)
     EdgeScan {
         variable: String,
         labels: Vec<String>,
         properties: Option<HashMap<String, Expression>>,
     },
-    
+
     /// Expand from a node along edges
     Expand {
         from_variable: String,
@@ -113,7 +115,7 @@ pub enum LogicalNode {
         properties: Option<HashMap<String, Expression>>,
         input: Box<LogicalNode>,
     },
-    
+
     /// Path traversal with type constraints
     PathTraversal {
         path_type: PathType,
@@ -122,19 +124,19 @@ pub enum LogicalNode {
         path_elements: Vec<PathElement>,
         input: Box<LogicalNode>,
     },
-    
+
     /// Filter rows based on condition
     Filter {
         condition: Expression,
         input: Box<LogicalNode>,
     },
-    
+
     /// Project specific columns
     Project {
         expressions: Vec<ProjectExpression>,
         input: Box<LogicalNode>,
     },
-    
+
     /// Join two logical plans
     Join {
         join_type: JoinType,
@@ -142,102 +144,97 @@ pub enum LogicalNode {
         left: Box<LogicalNode>,
         right: Box<LogicalNode>,
     },
-    
+
     /// Union of multiple plans
-    Union {
-        inputs: Vec<LogicalNode>,
-        all: bool,
-    },
-    
+    Union { inputs: Vec<LogicalNode>, all: bool },
+
     /// Apply aggregation
     Aggregate {
         group_by: Vec<Expression>,
         aggregates: Vec<AggregateExpression>,
         input: Box<LogicalNode>,
     },
-    
+
     /// HAVING filter for post-aggregation filtering
     Having {
         condition: Expression,
         input: Box<LogicalNode>,
     },
-    
+
     /// Sort results
     Sort {
         expressions: Vec<SortExpression>,
         input: Box<LogicalNode>,
     },
-    
+
     /// Remove duplicate rows
-    Distinct {
-        input: Box<LogicalNode>,
-    },
-    
+    Distinct { input: Box<LogicalNode> },
+
     /// Limit number of results
     Limit {
         count: usize,
         offset: Option<usize>,
         input: Box<LogicalNode>,
     },
-    
+
     /// Generic function call
     GenericFunction {
         function_name: String,
         arguments: Vec<Expression>,
         input: Box<LogicalNode>,
     },
-    
+
     /// Intersect operation
     Intersect {
         left: Box<LogicalNode>,
         right: Box<LogicalNode>,
         all: bool,
     },
-    
+
     /// Except operation
     Except {
         left: Box<LogicalNode>,
         right: Box<LogicalNode>,
         all: bool,
     },
-    
+
     /// EXISTS subquery
     ExistsSubquery {
         subquery: Box<LogicalNode>,
         outer_variables: Vec<String>, // Variables from outer query used in subquery
     },
-    
+
     /// NOT EXISTS subquery
     NotExistsSubquery {
         subquery: Box<LogicalNode>,
         outer_variables: Vec<String>,
     },
-    
+
     /// IN subquery
     InSubquery {
         expression: Expression, // Left side of IN
         subquery: Box<LogicalNode>,
         outer_variables: Vec<String>,
     },
-    
+
     /// NOT IN subquery
     NotInSubquery {
         expression: Expression,
         subquery: Box<LogicalNode>,
         outer_variables: Vec<String>,
     },
-    
+
     /// Scalar subquery (returns single value)
     ScalarSubquery {
         subquery: Box<LogicalNode>,
         outer_variables: Vec<String>,
     },
-    
+
     /// WITH query that needs special execution handling
     WithQuery {
         original_query: Box<crate::ast::ast::WithQuery>,
     },
-    
+
     /// UNWIND expression into individual rows
     Unwind {
         expression: Expression,
@@ -246,7 +243,6 @@ pub enum LogicalNode {
     },
 
     // Data Modification Operations
-
     /// INSERT operation for creating nodes and edges
     Insert {
         /// Patterns to insert (nodes and edges)
@@ -282,8 +278,8 @@ pub enum JoinType {
     RightOuter,
     FullOuter,
     Cross,
-    LeftSemi,    // Used for EXISTS subquery unnesting
-    LeftAnti,    // Used for NOT EXISTS subquery unnesting
+    LeftSemi, // Used for EXISTS subquery unnesting
+    LeftAnti, // Used for NOT EXISTS subquery unnesting
 }
 
 /// Project expression with optional alias
@@ -327,58 +323,62 @@ impl LogicalPlan {
             variables: HashMap::new(),
         }
     }
-    
+
     /// Add variable information to the plan
     pub fn add_variable(&mut self, name: String, info: VariableInfo) {
         self.variables.insert(name, info);
     }
-    
+
     /// Get variable information
     pub fn get_variable(&self, name: &str) -> Option<&VariableInfo> {
         self.variables.get(name)
     }
-    
+
     /// Get all variables used in the plan
     pub fn get_variables(&self) -> &HashMap<String, VariableInfo> {
         &self.variables
     }
-    
+
     /// Convert a path pattern to logical plan nodes
     pub fn from_path_pattern(pattern: &PathPattern) -> Result<LogicalNode, String> {
         if pattern.elements.is_empty() {
             return Err("Empty path pattern".to_string());
         }
-        
+
         // If path type is specified and not WALK, use PathTraversal
         if let Some(path_type) = &pattern.path_type {
             if *path_type != PathType::Walk {
                 return Self::create_path_traversal(pattern, path_type.clone());
             }
         }
-        
+
         let mut current_node: Option<LogicalNode> = None;
         let mut i = 0;
-        
+
         while i < pattern.elements.len() {
             match &pattern.elements[i] {
                 PatternElement::Node(node) => {
-                    let variable = node.identifier.clone()
+                    let variable = node
+                        .identifier
+                        .clone()
                         .unwrap_or_else(|| format!("_node_{}", i));
-                    
+
                     let node_scan = LogicalNode::NodeScan {
                         variable: variable.clone(),
                         labels: node.labels.clone(),
                         properties: node.properties.as_ref().map(|props| {
-                            props.properties.iter()
+                            props
+                                .properties
+                                .iter()
                                 .map(|p| (p.key.clone(), p.value.clone()))
                                 .collect()
                         }),
                     };
-                    
+
                     if current_node.is_none() {
                         current_node = Some(node_scan);
                     }
-                    
+
                     // Look ahead for edge pattern
                     if i + 1 < pattern.elements.len() {
                         if let PatternElement::Edge(edge) = &pattern.elements[i + 1] {
@@ -386,9 +386,11 @@ impl LogicalPlan {
                             if i + 2 < pattern.elements.len() {
                                 if let PatternElement::Node(next_node) = &pattern.elements[i + 2] {
                                     let edge_variable = edge.identifier.clone();
-                                    let to_variable = next_node.identifier.clone()
+                                    let to_variable = next_node
+                                        .identifier
+                                        .clone()
                                         .unwrap_or_else(|| format!("_node_{}", i + 2));
-                                    
+
                                     let expand = LogicalNode::Expand {
                                         from_variable: variable,
                                         edge_variable,
@@ -396,7 +398,9 @@ impl LogicalPlan {
                                         edge_labels: edge.labels.clone(),
                                         direction: edge.direction.clone(),
                                         properties: edge.properties.as_ref().map(|props| {
-                                            props.properties.iter()
+                                            props
+                                                .properties
+                                                .iter()
                                                 .map(|p| (p.key.clone(), p.value.clone()))
                                                 .collect()
                                         }),
@@ -413,7 +417,7 @@ impl LogicalPlan {
                                                     object: to_variable.clone(),
                                                     property: property.key.clone(),
                                                     location: crate::ast::ast::Location::default(),
-                                                }
+                                                },
                                             );
 
                                             let filter_condition = Expression::Binary(
@@ -422,7 +426,7 @@ impl LogicalPlan {
                                                     operator: crate::ast::ast::Operator::Equal,
                                                     right: Box::new(property.value.clone()),
                                                     location: crate::ast::ast::Location::default(),
-                                                }
+                                                },
                                             );
 
                                             let filter = LogicalNode::Filter {
@@ -445,35 +449,44 @@ impl LogicalPlan {
             }
             i += 1;
         }
-        
+
         current_node.ok_or_else(|| "Failed to create logical plan from pattern".to_string())
     }
-    
+
     /// Create a PathTraversal node for path types that need special handling
-    fn create_path_traversal(pattern: &PathPattern, path_type: PathType) -> Result<LogicalNode, String> {
+    fn create_path_traversal(
+        pattern: &PathPattern,
+        path_type: PathType,
+    ) -> Result<LogicalNode, String> {
         // Extract start and end nodes
         let (start_node, end_node) = Self::extract_start_end_nodes(pattern)?;
-        
+
         // Extract path elements (edges and intermediate nodes)
         let path_elements = Self::extract_path_elements(pattern)?;
-        
+
         // Create initial node scan for start node
-        let start_variable = start_node.identifier.clone()
+        let start_variable = start_node
+            .identifier
+            .clone()
             .unwrap_or_else(|| "_start_node".to_string());
-        
+
         let node_scan = LogicalNode::NodeScan {
             variable: start_variable.clone(),
             labels: start_node.labels.clone(),
             properties: start_node.properties.as_ref().map(|props| {
-                props.properties.iter()
+                props
+                    .properties
+                    .iter()
                     .map(|p| (p.key.clone(), p.value.clone()))
                     .collect()
             }),
         };
-        
-        let end_variable = end_node.identifier.clone()
+
+        let end_variable = end_node
+            .identifier
+            .clone()
             .unwrap_or_else(|| "_end_node".to_string());
-        
+
         // Create PathTraversal node
         Ok(LogicalNode::PathTraversal {
             path_type,
@@ -483,32 +496,35 @@ impl LogicalPlan {
             input: Box::new(node_scan),
         })
     }
-    
+
     /// Extract start and end nodes from pattern
-    fn extract_start_end_nodes(pattern: &PathPattern) -> Result<(&crate::ast::ast::Node, &crate::ast::ast::Node), String> {
-        let first = pattern.elements.first()
-            .ok_or("Pattern has no elements")?;
-        let last = pattern.elements.last()
-            .ok_or("Pattern has no elements")?;
-            
+    fn extract_start_end_nodes(
+        pattern: &PathPattern,
+    ) -> Result<(&crate::ast::ast::Node, &crate::ast::ast::Node), String> {
+        let first = pattern.elements.first().ok_or("Pattern has no elements")?;
+        let last = pattern.elements.last().ok_or("Pattern has no elements")?;
+
         match (first, last) {
             (PatternElement::Node(start), PatternElement::Node(end)) => Ok((start, end)),
             _ => Err("Pattern must start and end with nodes".to_string()),
         }
     }
-    
+
     /// Extract path elements (edges and intermediate nodes) from pattern
     fn extract_path_elements(pattern: &PathPattern) -> Result<Vec<PathElement>, String> {
         let mut elements = Vec::new();
         let mut i = 1; // Skip first node
-        
-        while i < pattern.elements.len() - 1 { // Skip last node
+
+        while i < pattern.elements.len() - 1 {
+            // Skip last node
             if let PatternElement::Edge(edge) = &pattern.elements[i] {
                 if i + 1 < pattern.elements.len() - 1 {
                     if let PatternElement::Node(node) = &pattern.elements[i + 1] {
                         elements.push(PathElement {
                             edge_variable: edge.identifier.clone(),
-                            node_variable: node.identifier.clone()
+                            node_variable: node
+                                .identifier
+                                .clone()
                                 .unwrap_or_else(|| format!("_node_{}", i + 1)),
                             edge_labels: edge.labels.clone(),
                             direction: edge.direction.clone(),
@@ -521,10 +537,10 @@ impl LogicalPlan {
             }
             i += 1;
         }
-        
+
         Ok(elements)
     }
-    
+
     /// Apply filter to the plan
     pub fn apply_filter(mut self, condition: Expression) -> Self {
         self.root = LogicalNode::Filter {
@@ -533,7 +549,7 @@ impl LogicalPlan {
         };
         self
     }
-    
+
     /// Apply HAVING filter for post-aggregation filtering
     pub fn apply_having(mut self, condition: Expression) -> Self {
         self.root = LogicalNode::Having {
@@ -542,7 +558,7 @@ impl LogicalPlan {
         };
         self
     }
-    
+
     /// Apply projection to the plan
     pub fn apply_projection(mut self, expressions: Vec<ProjectExpression>) -> Self {
         self.root = LogicalNode::Project {
@@ -551,9 +567,13 @@ impl LogicalPlan {
         };
         self
     }
-    
+
     /// Apply aggregation to the plan
-    pub fn apply_aggregation(mut self, group_by: Vec<Expression>, project_expressions: Vec<ProjectExpression>) -> Self {
+    pub fn apply_aggregation(
+        mut self,
+        group_by: Vec<Expression>,
+        project_expressions: Vec<ProjectExpression>,
+    ) -> Self {
         // Convert project expressions to aggregate expressions, preserving order
         let mut aggregates = Vec::new();
         for expr in &project_expressions {
@@ -611,7 +631,7 @@ impl LogicalPlan {
         };
         self
     }
-    
+
     /// Apply limit to the plan
     pub fn apply_limit(mut self, count: usize, offset: Option<usize>) -> Self {
         self.root = LogicalNode::Limit {
@@ -621,7 +641,7 @@ impl LogicalPlan {
         };
         self
     }
-    
+
     /// Apply union operation
     pub fn apply_union(self, right: LogicalPlan, all: bool) -> Self {
         // Merge variables from both sides of the UNION
@@ -638,7 +658,7 @@ impl LogicalPlan {
             variables: merged_variables, // Union inherits variables from both sides
         }
     }
-    
+
     /// Apply intersect operation
     pub fn apply_intersect(self, right: LogicalPlan, all: bool) -> Self {
         // Merge variables from both sides of the INTERSECT
@@ -656,7 +676,7 @@ impl LogicalPlan {
             variables: merged_variables, // Intersect inherits variables from both sides
         }
     }
-    
+
     /// Apply except operation
     pub fn apply_except(self, right: LogicalPlan, all: bool) -> Self {
         // Merge variables from both sides of the EXCEPT
@@ -674,12 +694,16 @@ impl LogicalPlan {
             variables: merged_variables, // Except inherits variables from both sides
         }
     }
-    
+
     /// Apply EXISTS subquery filter
-    pub fn apply_exists_subquery(self, subquery: LogicalPlan, outer_variables: Vec<String>) -> Self {
+    pub fn apply_exists_subquery(
+        self,
+        subquery: LogicalPlan,
+        outer_variables: Vec<String>,
+    ) -> Self {
         let mut variables = self.variables;
         variables.extend(subquery.variables); // Merge variables from subquery
-        
+
         LogicalPlan {
             root: LogicalNode::ExistsSubquery {
                 subquery: Box::new(subquery.root),
@@ -688,12 +712,16 @@ impl LogicalPlan {
             variables,
         }
     }
-    
+
     /// Apply NOT EXISTS subquery filter
-    pub fn apply_not_exists_subquery(self, subquery: LogicalPlan, outer_variables: Vec<String>) -> Self {
+    pub fn apply_not_exists_subquery(
+        self,
+        subquery: LogicalPlan,
+        outer_variables: Vec<String>,
+    ) -> Self {
         let mut variables = self.variables;
         variables.extend(subquery.variables);
-        
+
         LogicalPlan {
             root: LogicalNode::NotExistsSubquery {
                 subquery: Box::new(subquery.root),
@@ -702,12 +730,17 @@ impl LogicalPlan {
             variables,
         }
     }
-    
+
     /// Apply IN subquery filter
-    pub fn apply_in_subquery(self, expression: Expression, subquery: LogicalPlan, outer_variables: Vec<String>) -> Self {
+    pub fn apply_in_subquery(
+        self,
+        expression: Expression,
+        subquery: LogicalPlan,
+        outer_variables: Vec<String>,
+    ) -> Self {
         let mut variables = self.variables;
         variables.extend(subquery.variables);
-        
+
         LogicalPlan {
             root: LogicalNode::InSubquery {
                 expression,
@@ -717,12 +750,17 @@ impl LogicalPlan {
             variables,
         }
     }
-    
+
     /// Apply NOT IN subquery filter  
-    pub fn apply_not_in_subquery(self, expression: Expression, subquery: LogicalPlan, outer_variables: Vec<String>) -> Self {
+    pub fn apply_not_in_subquery(
+        self,
+        expression: Expression,
+        subquery: LogicalPlan,
+        outer_variables: Vec<String>,
+    ) -> Self {
         let mut variables = self.variables;
         variables.extend(subquery.variables);
-        
+
         LogicalPlan {
             root: LogicalNode::NotInSubquery {
                 expression,
@@ -732,12 +770,16 @@ impl LogicalPlan {
             variables,
         }
     }
-    
+
     /// Apply scalar subquery in projection
-    pub fn apply_scalar_subquery(self, subquery: LogicalPlan, outer_variables: Vec<String>) -> Self {
+    pub fn apply_scalar_subquery(
+        self,
+        subquery: LogicalPlan,
+        outer_variables: Vec<String>,
+    ) -> Self {
         let mut variables = self.variables;
         variables.extend(subquery.variables);
-        
+
         LogicalPlan {
             root: LogicalNode::ScalarSubquery {
                 subquery: Box::new(subquery.root),
@@ -754,12 +796,12 @@ impl LogicalNode {
         match self {
             LogicalNode::NodeScan { variable, .. } => vec![variable.clone()],
             LogicalNode::EdgeScan { variable, .. } => vec![variable.clone()],
-            LogicalNode::Expand { 
-                from_variable, 
-                edge_variable, 
-                to_variable, 
-                input, 
-                .. 
+            LogicalNode::Expand {
+                from_variable,
+                edge_variable,
+                to_variable,
+                input,
+                ..
             } => {
                 let mut vars = input.get_variables();
                 vars.push(from_variable.clone());
@@ -776,9 +818,10 @@ impl LogicalNode {
                 vars.extend(right.get_variables());
                 vars
             }
-            LogicalNode::Union { inputs, .. } => {
-                inputs.iter().flat_map(|input| input.get_variables()).collect()
-            }
+            LogicalNode::Union { inputs, .. } => inputs
+                .iter()
+                .flat_map(|input| input.get_variables())
+                .collect(),
             LogicalNode::Intersect { left, right, .. } => {
                 let mut vars = left.get_variables();
                 vars.extend(right.get_variables());
@@ -795,7 +838,13 @@ impl LogicalNode {
             LogicalNode::Sort { input, .. } => input.get_variables(),
             LogicalNode::Limit { input, .. } => input.get_variables(),
             LogicalNode::GenericFunction { input, .. } => input.get_variables(),
-            LogicalNode::PathTraversal { from_variable, to_variable, path_elements, input, .. } => {
+            LogicalNode::PathTraversal {
+                from_variable,
+                to_variable,
+                path_elements,
+                input,
+                ..
+            } => {
                 let mut vars = input.get_variables();
                 vars.push(from_variable.clone());
                 vars.push(to_variable.clone());
@@ -806,34 +855,54 @@ impl LogicalNode {
                     }
                 }
                 vars
-            },
-            
+            }
+
             // Subquery cases
-            LogicalNode::ExistsSubquery { subquery, outer_variables, .. } => {
+            LogicalNode::ExistsSubquery {
+                subquery,
+                outer_variables,
+                ..
+            } => {
                 let mut vars = subquery.get_variables();
                 vars.extend(outer_variables.clone());
                 vars
-            },
-            LogicalNode::NotExistsSubquery { subquery, outer_variables, .. } => {
+            }
+            LogicalNode::NotExistsSubquery {
+                subquery,
+                outer_variables,
+                ..
+            } => {
                 let mut vars = subquery.get_variables();
                 vars.extend(outer_variables.clone());
                 vars
-            },
-            LogicalNode::InSubquery { subquery, outer_variables, .. } => {
+            }
+            LogicalNode::InSubquery {
+                subquery,
+                outer_variables,
+                ..
+            } => {
                 let mut vars = subquery.get_variables();
                 vars.extend(outer_variables.clone());
                 vars
-            },
-            LogicalNode::NotInSubquery { subquery, outer_variables, .. } => {
+            }
+            LogicalNode::NotInSubquery {
+                subquery,
+                outer_variables,
+                ..
+            } => {
                 let mut vars = subquery.get_variables();
                 vars.extend(outer_variables.clone());
                 vars
-            },
-            LogicalNode::ScalarSubquery { subquery, outer_variables, .. } => {
+            }
+            LogicalNode::ScalarSubquery {
+                subquery,
+                outer_variables,
+                ..
+            } => {
                 let mut vars = subquery.get_variables();
                 vars.extend(outer_variables.clone());
                 vars
-            },
+            }
             LogicalNode::WithQuery { original_query, .. } => {
                 // Extract variables from WITH query segments and final return
                 let mut vars = Vec::new();
@@ -847,12 +916,12 @@ impl LogicalNode {
                                     if let Some(var_name) = &node.identifier {
                                         vars.push(var_name.clone());
                                     }
-                                },
+                                }
                                 crate::ast::ast::PatternElement::Edge(edge) => {
                                     if let Some(var_name) = &edge.identifier {
                                         vars.push(var_name.clone());
                                     }
-                                },
+                                }
                             }
                         }
                     }
@@ -872,23 +941,25 @@ impl LogicalNode {
                     }
                 }
                 vars
-            },
-            LogicalNode::Unwind { variable, input, .. } => {
+            }
+            LogicalNode::Unwind {
+                variable, input, ..
+            } => {
                 let mut vars = vec![variable.clone()];
                 if let Some(input_node) = input {
                     vars.extend(input_node.get_variables());
                 }
                 vars
-            },
+            }
 
             // Data modification operations
             LogicalNode::Insert { .. } => vec![], // INSERT doesn't produce variables for queries
             LogicalNode::Update { .. } => vec![], // UPDATE doesn't produce variables for queries
             LogicalNode::Delete { .. } => vec![], // DELETE doesn't produce variables for queries
-            LogicalNode::SingleRow => vec![], // SingleRow doesn't produce variables
+            LogicalNode::SingleRow => vec![],     // SingleRow doesn't produce variables
         }
     }
-    
+
     /// Estimate the cardinality (number of rows) this node will produce
     pub fn estimate_cardinality(&self) -> usize {
         match self {
@@ -900,63 +971,79 @@ impl LogicalNode {
             LogicalNode::Join { left, right, .. } => {
                 (left.estimate_cardinality() * right.estimate_cardinality()) / 100
             }
-            LogicalNode::Union { inputs, .. } => {
-                inputs.iter().map(|input| input.estimate_cardinality()).sum()
-            }
-            LogicalNode::Intersect { left, right, .. } => {
-                left.estimate_cardinality().min(right.estimate_cardinality())
-            }
+            LogicalNode::Union { inputs, .. } => inputs
+                .iter()
+                .map(|input| input.estimate_cardinality())
+                .sum(),
+            LogicalNode::Intersect { left, right, .. } => left
+                .estimate_cardinality()
+                .min(right.estimate_cardinality()),
             LogicalNode::Except { left, right, .. } => {
-                left.estimate_cardinality() - right.estimate_cardinality().min(left.estimate_cardinality())
+                left.estimate_cardinality()
+                    - right
+                        .estimate_cardinality()
+                        .min(left.estimate_cardinality())
             }
             LogicalNode::Aggregate { input, .. } => input.estimate_cardinality() / 10,
             LogicalNode::Having { input, .. } => input.estimate_cardinality() / 3, // HAVING typically filters more than WHERE
             LogicalNode::Distinct { input, .. } => input.estimate_cardinality() / 2, // Assume 50% duplicates
             LogicalNode::Sort { input, .. } => input.estimate_cardinality(),
-            LogicalNode::Limit { count, input, .. } => {
-                (*count).min(input.estimate_cardinality())
-            }
+            LogicalNode::Limit { count, input, .. } => (*count).min(input.estimate_cardinality()),
             LogicalNode::GenericFunction { .. } => 1, // Functions typically return single value
-            LogicalNode::PathTraversal { input, path_type, .. } => {
+            LogicalNode::PathTraversal {
+                input, path_type, ..
+            } => {
                 let base_cardinality = input.estimate_cardinality();
                 // Path traversal can significantly multiply results depending on type
                 match path_type {
-                    PathType::Walk => base_cardinality * 20,      // Most paths possible
-                    PathType::Trail => base_cardinality * 15,     // Fewer due to edge constraints
+                    PathType::Walk => base_cardinality * 20, // Most paths possible
+                    PathType::Trail => base_cardinality * 15, // Fewer due to edge constraints
                     PathType::SimplePath => base_cardinality * 10, // Fewer due to vertex constraints
-                    PathType::AcyclicPath => base_cardinality * 5,  // Fewest due to strict constraints
+                    PathType::AcyclicPath => base_cardinality * 5, // Fewest due to strict constraints
                 }
-            },
-            
+            }
+
             // Subquery cardinality estimates
             LogicalNode::ExistsSubquery { subquery, .. } => {
                 // EXISTS is boolean, but affects outer query cardinality based on selectivity
                 let subquery_card = subquery.estimate_cardinality();
-                if subquery_card > 0 { 1 } else { 0 } // Exists is binary - 1 if subquery has results, 0 otherwise
-            },
+                if subquery_card > 0 {
+                    1
+                } else {
+                    0
+                } // Exists is binary - 1 if subquery has results, 0 otherwise
+            }
             LogicalNode::NotExistsSubquery { subquery, .. } => {
                 // NOT EXISTS is opposite of EXISTS
                 let subquery_card = subquery.estimate_cardinality();
-                if subquery_card > 0 { 0 } else { 1 }
-            },
+                if subquery_card > 0 {
+                    0
+                } else {
+                    1
+                }
+            }
             LogicalNode::InSubquery { subquery, .. } => {
                 // IN subquery cardinality depends on how many outer rows match subquery results
                 subquery.estimate_cardinality().min(1000) // Cap at reasonable limit
-            },
+            }
             LogicalNode::NotInSubquery { subquery, .. } => {
                 // NOT IN is complement of IN
                 let sub_card = subquery.estimate_cardinality();
-                if sub_card == 0 { 1000 } else { 100 } // Estimate based on typical NOT IN selectivity
-            },
+                if sub_card == 0 {
+                    1000
+                } else {
+                    100
+                } // Estimate based on typical NOT IN selectivity
+            }
             LogicalNode::ScalarSubquery { subquery, .. } => {
                 // Scalar subquery always returns 1 row (or null)
                 subquery.estimate_cardinality().min(1)
-            },
+            }
             LogicalNode::WithQuery { .. } => {
                 // WITH queries can vary widely, but often result in aggregation
                 // Use a reasonable default estimate
                 100
-            },
+            }
             LogicalNode::Unwind { input, .. } => {
                 // UNWIND typically expands arrays, so multiply input cardinality by expansion factor
                 let base_expansion = 10; // Default expansion factor
@@ -965,14 +1052,13 @@ impl LogicalNode {
                 } else {
                     base_expansion // Standalone UNWIND with literal array
                 }
-            },
+            }
 
             // Data modification operations
             LogicalNode::Insert { patterns, .. } => patterns.len(), // Number of patterns being inserted
             LogicalNode::Update { .. } => 1, // UPDATE operations typically affect a specific number of entities
             LogicalNode::Delete { .. } => 1, // DELETE operations typically affect a specific number of entities
-            LogicalNode::SingleRow => 1, // SingleRow always produces exactly 1 row
+            LogicalNode::SingleRow => 1,     // SingleRow always produces exactly 1 row
         }
     }
 }
-

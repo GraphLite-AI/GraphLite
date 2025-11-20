@@ -3,9 +3,9 @@
 //
 // Schema executor module for ISO GQL Graph Type statements
 
+pub mod alter_graph_type;
 pub mod create_graph_type;
 pub mod drop_graph_type;
-pub mod alter_graph_type;
 
 // pub use create_graph_type::CreateGraphTypeExecutor;
 // pub use drop_graph_type::DropGraphTypeExecutor;

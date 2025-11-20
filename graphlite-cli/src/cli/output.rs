@@ -3,9 +3,9 @@
 //
 //! Result formatting for CLI output
 
-use graphlite::{QueryResult, Value};
 use colored::*;
-use comfy_table::{Table, presets::UTF8_FULL, Cell, Color};
+use comfy_table::{presets::UTF8_FULL, Cell, Color, Table};
+use graphlite::{QueryResult, Value};
 
 /// Result formatter for different output formats
 pub struct ResultFormatter;
@@ -37,7 +37,10 @@ impl ResultFormatter {
 
         // Header
         output.push_str(&format!("{}\n", "Query Results".bold().green()));
-        output.push_str(&format!("Execution time: {} ms\n", result.execution_time_ms));
+        output.push_str(&format!(
+            "Execution time: {} ms\n",
+            result.execution_time_ms
+        ));
         output.push_str(&format!("Rows returned: {}\n\n", result.rows.len()));
 
         // Create table
@@ -45,14 +48,18 @@ impl ResultFormatter {
         table.load_preset(UTF8_FULL);
 
         // Table header
-        let header_cells: Vec<Cell> = result.variables.iter()
+        let header_cells: Vec<Cell> = result
+            .variables
+            .iter()
             .map(|col| Cell::new(col).fg(Color::Green))
             .collect();
         table.set_header(header_cells);
 
         // Table rows
         for row in &result.rows {
-            let row_values: Vec<String> = result.variables.iter()
+            let row_values: Vec<String> = result
+                .variables
+                .iter()
                 .map(|col| {
                     row.get_value(col)
                         .map(|v| Self::value_to_string(v))
@@ -120,7 +127,9 @@ impl ResultFormatter {
 
         // CSV rows
         for row in &result.rows {
-            let row_values: Vec<String> = result.variables.iter()
+            let row_values: Vec<String> = result
+                .variables
+                .iter()
                 .map(|col| {
                     row.get_value(col)
                         .map(|v| Self::value_to_csv_string(v))
@@ -142,7 +151,6 @@ impl ResultFormatter {
         output
     }
 
-
     /// Convert a Value to a display string
     fn value_to_string(value: &Value) -> String {
         match value {
@@ -155,14 +163,20 @@ impl ResultFormatter {
             Value::DateTimeWithNamedTz(tz, dt) => format!("{} {}", dt, tz),
             Value::TimeWindow(tw) => format!("TIME_WINDOW({} to {})", tw.start, tw.end),
             Value::Path(path) => format!("{:?}", path),
-            Value::Array(arr) | Value::List(arr) => format!("[{}]", arr.iter()
-                .map(|v| Self::value_to_string(v))
-                .collect::<Vec<_>>()
-                .join(", ")),
-            Value::Vector(vec) => format!("VECTOR[{}]", vec.iter()
-                .map(|v| v.to_string())
-                .collect::<Vec<_>>()
-                .join(", ")),
+            Value::Array(arr) | Value::List(arr) => format!(
+                "[{}]",
+                arr.iter()
+                    .map(|v| Self::value_to_string(v))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Value::Vector(vec) => format!(
+                "VECTOR[{}]",
+                vec.iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
             Value::Node(node) => {
                 let labels = if node.labels.is_empty() {
                     String::new()
@@ -170,10 +184,10 @@ impl ResultFormatter {
                     format!(":{}", node.labels.join(":"))
                 };
                 format!("({}{})", node.id, labels)
-            },
+            }
             Value::Edge(edge) => {
                 format!("[{}:{}]", edge.id, edge.label)
-            },
+            }
             Value::Temporal(temporal) => format!("TEMPORAL({:?})", temporal),
         }
     }
@@ -198,10 +212,10 @@ impl ResultFormatter {
             Value::Path(path) => serde_json::json!(format!("{:?}", path)),
             Value::Array(arr) | Value::List(arr) => {
                 serde_json::Value::Array(arr.iter().map(|v| Self::value_to_json(v)).collect())
-            },
+            }
             Value::Vector(vec) => {
                 serde_json::Value::Array(vec.iter().map(|v| serde_json::json!(v)).collect())
-            },
+            }
             Value::Node(node) => {
                 serde_json::json!({
                     "type": "node",
@@ -209,7 +223,7 @@ impl ResultFormatter {
                     "labels": node.labels,
                     "properties": node.properties,
                 })
-            },
+            }
             Value::Edge(edge) => {
                 serde_json::json!({
                     "type": "edge",
@@ -219,10 +233,10 @@ impl ResultFormatter {
                     "to": edge.to_node,
                     "properties": edge.properties,
                 })
-            },
+            }
             Value::Temporal(temporal) => {
                 serde_json::json!(format!("{:?}", temporal))
-            },
+            }
         }
     }
 

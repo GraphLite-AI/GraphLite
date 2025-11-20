@@ -3,36 +3,36 @@
 //
 //! Cache configuration and policies
 
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use serde::{Serialize, Deserialize};
 
 /// Global cache configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CacheConfig {
     /// Enable/disable caching entirely
     pub enabled: bool,
-    
+
     /// Maximum memory usage across all caches (bytes)
     pub max_memory_bytes: usize,
-    
+
     /// L1 cache configuration (hot data)
     pub l1_config: LevelConfig,
-    
-    /// L2 cache configuration (warm data) 
+
+    /// L2 cache configuration (warm data)
     pub l2_config: LevelConfig,
-    
+
     /// L3 cache configuration (cold data)
     pub l3_config: LevelConfig,
-    
+
     /// Global eviction policy
     pub eviction_policy: EvictionPolicy,
-    
+
     /// Cache statistics collection interval
     pub stats_interval: Duration,
-    
+
     /// Enable cache compression
     pub compression_enabled: bool,
-    
+
     /// Invalidation strategy
     pub invalidation_strategy: InvalidationStrategy,
 }
@@ -42,13 +42,13 @@ pub struct CacheConfig {
 pub struct LevelConfig {
     /// Maximum number of entries
     pub max_entries: usize,
-    
+
     /// Maximum memory for this level (bytes)
     pub max_memory_bytes: usize,
-    
+
     /// Default TTL for entries
     pub default_ttl: Option<Duration>,
-    
+
     /// Cache policy for this level
     pub policy: CachePolicy,
 }
@@ -71,7 +71,7 @@ pub enum CachePolicy {
 pub enum EvictionPolicy {
     /// Least Recently Used
     LRU,
-    /// Least Frequently Used 
+    /// Least Frequently Used
     LFU,
     /// First In First Out
     FIFO,
@@ -147,7 +147,7 @@ impl CacheConfig {
         config.l2_config.default_ttl = Some(Duration::from_secs(3600)); // 1 hour
         config
     }
-    
+
     /// Create configuration optimized for write-heavy workloads
     pub fn write_optimized() -> Self {
         let mut config = Self::default();
@@ -157,7 +157,7 @@ impl CacheConfig {
         config.invalidation_strategy = InvalidationStrategy::TagBased;
         config
     }
-    
+
     /// Create configuration for memory-constrained environments
     pub fn memory_constrained() -> Self {
         let mut config = Self::default();
@@ -171,30 +171,31 @@ impl CacheConfig {
         config.compression_enabled = true;
         config
     }
-    
+
     /// Validate the configuration
     pub fn validate(&self) -> Result<(), String> {
         if !self.enabled {
             return Ok(());
         }
-        
-        let total_memory = self.l1_config.max_memory_bytes + 
-                          self.l2_config.max_memory_bytes + 
-                          self.l3_config.max_memory_bytes;
-                          
+
+        let total_memory = self.l1_config.max_memory_bytes
+            + self.l2_config.max_memory_bytes
+            + self.l3_config.max_memory_bytes;
+
         if total_memory > self.max_memory_bytes {
             return Err(format!(
                 "Sum of level memory limits ({} bytes) exceeds max memory ({} bytes)",
                 total_memory, self.max_memory_bytes
             ));
         }
-        
-        if self.l1_config.max_entries == 0 || 
-           self.l2_config.max_entries == 0 || 
-           self.l3_config.max_entries == 0 {
+
+        if self.l1_config.max_entries == 0
+            || self.l2_config.max_entries == 0
+            || self.l3_config.max_entries == 0
+        {
             return Err("Cache levels must have max_entries > 0".to_string());
         }
-        
+
         Ok(())
     }
 }

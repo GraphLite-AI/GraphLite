@@ -44,13 +44,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             admin_password,
             force,
             yes,
-        } => {
-            cli::handle_install(path, admin_user, admin_password, force, yes)
-        }
+        } => cli::handle_install(path, admin_user, admin_password, force, yes),
 
-        Commands::Gql { path, sample } => {
-            cli::handle_gql(path, cli.user, cli.password, sample)
-        }
+        Commands::Gql { path, sample } => cli::handle_gql(path, cli.user, cli.password, sample),
 
         Commands::Query {
             query,
@@ -58,9 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             format,
             explain,
             ast,
-        } => {
-            cli::handle_query(path, query, cli.user, cli.password, format, explain, ast)
-        }
+        } => cli::handle_query(path, query, cli.user, cli.password, format, explain, ast),
 
         Commands::Session { action: _, path: _ } => {
             println!("{}", "Session management not yet implemented".yellow());

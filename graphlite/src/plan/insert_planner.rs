@@ -6,12 +6,14 @@
 //! This module handles the logical planning phase for INSERT operations,
 //! resolving identifier mappings and creating well-formed logical plans.
 
-use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::DefaultHasher;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 
-use crate::ast::ast::{InsertStatement, PatternElement, Expression};
-use crate::plan::logical::{LogicalNode, LogicalPlan, InsertPattern, NodeIdentifier, VariableInfo, EntityType};
+use crate::ast::ast::{Expression, InsertStatement, PatternElement};
+use crate::plan::logical::{
+    EntityType, InsertPattern, LogicalNode, LogicalPlan, NodeIdentifier, VariableInfo,
+};
 
 /// Planner for INSERT statements
 pub struct InsertPlanner {
@@ -30,8 +32,14 @@ impl InsertPlanner {
     }
 
     /// Plan an INSERT statement into a logical plan
-    pub fn plan_insert(&mut self, statement: &InsertStatement) -> Result<LogicalPlan, PlanningError> {
-        log::debug!("Planning INSERT statement with {} patterns", statement.graph_patterns.len());
+    pub fn plan_insert(
+        &mut self,
+        statement: &InsertStatement,
+    ) -> Result<LogicalPlan, PlanningError> {
+        log::debug!(
+            "Planning INSERT statement with {} patterns",
+            statement.graph_patterns.len()
+        );
 
         let mut patterns = Vec::new();
         let mut variables = HashMap::new();
@@ -43,7 +51,8 @@ impl InsertPlanner {
             for (element_idx, element) in graph_pattern.elements.iter().enumerate() {
                 match element {
                     PatternElement::Node(node_pattern) => {
-                        let logical_pattern = self.process_node_pattern(node_pattern, &mut variables)?;
+                        let logical_pattern =
+                            self.process_node_pattern(node_pattern, &mut variables)?;
                         if let Some(pattern) = logical_pattern {
                             patterns.push(pattern);
                         }
@@ -53,7 +62,7 @@ impl InsertPlanner {
                             edge_pattern,
                             &graph_pattern.elements,
                             element_idx,
-                            &mut variables
+                            &mut variables,
                         )?;
                         patterns.extend(logical_patterns);
                     }
@@ -61,8 +70,11 @@ impl InsertPlanner {
             }
         }
 
-        log::debug!("Created {} logical patterns with {} identifier mappings",
-                   patterns.len(), self.identifier_mappings.len());
+        log::debug!(
+            "Created {} logical patterns with {} identifier mappings",
+            patterns.len(),
+            self.identifier_mappings.len()
+        );
 
         let root = LogicalNode::Insert {
             patterns,
@@ -76,12 +88,15 @@ impl InsertPlanner {
     fn process_node_pattern(
         &mut self,
         node_pattern: &crate::ast::ast::Node,
-        variables: &mut HashMap<String, VariableInfo>
+        variables: &mut HashMap<String, VariableInfo>,
     ) -> Result<Option<InsertPattern>, PlanningError> {
         // Check if this is a reference to an already-defined node
         if let Some(ref identifier) = node_pattern.identifier {
             if self.defined_identifiers.contains(identifier) {
-                log::debug!("Node '{}' is a reference to existing definition, skipping node creation", identifier);
+                log::debug!(
+                    "Node '{}' is a reference to existing definition, skipping node creation",
+                    identifier
+                );
                 return Ok(None); // This is a reference, not a new node
             }
         }
@@ -104,7 +119,7 @@ impl InsertPlanner {
                     storage_id: storage_id.clone(),
                     labels: node_pattern.labels.clone(),
                     is_reference: false,
-                }
+                },
             );
             self.defined_identifiers.insert(identifier.clone());
 
@@ -116,7 +131,7 @@ impl InsertPlanner {
                     entity_type: EntityType::Node,
                     labels: node_pattern.labels.clone(),
                     required_properties: properties.keys().cloned().collect(),
-                }
+                },
             );
         }
 
@@ -136,7 +151,7 @@ impl InsertPlanner {
         edge_pattern: &crate::ast::ast::Edge,
         all_elements: &[PatternElement],
         current_idx: usize,
-        variables: &mut HashMap<String, VariableInfo>
+        variables: &mut HashMap<String, VariableInfo>,
     ) -> Result<Vec<InsertPattern>, PlanningError> {
         // Find source and target nodes
         let source_node_id = self.resolve_adjacent_node(all_elements, current_idx, -1)?;
@@ -149,7 +164,9 @@ impl InsertPlanner {
             HashMap::new()
         };
 
-        let edge_label = edge_pattern.labels.first()
+        let edge_label = edge_pattern
+            .labels
+            .first()
             .cloned()
             .unwrap_or_else(|| "CONNECTED".to_string());
 
@@ -158,7 +175,7 @@ impl InsertPlanner {
             &source_node_id,
             &target_node_id,
             &edge_label,
-            &properties
+            &properties,
         );
 
         // Add edge variable if present
@@ -170,12 +187,16 @@ impl InsertPlanner {
                     entity_type: EntityType::Edge,
                     labels: edge_pattern.labels.clone(),
                     required_properties: properties.keys().cloned().collect(),
-                }
+                },
             );
         }
 
-        log::debug!("Creating edge pattern: {} -[{}]-> {}",
-                   source_node_id, edge_label, target_node_id);
+        log::debug!(
+            "Creating edge pattern: {} -[{}]-> {}",
+            source_node_id,
+            edge_label,
+            target_node_id
+        );
 
         Ok(vec![InsertPattern::CreateEdge {
             storage_id: edge_storage_id,
@@ -192,19 +213,19 @@ impl InsertPlanner {
         &self,
         all_elements: &[PatternElement],
         edge_idx: usize,
-        direction: i32 // -1 for source, +1 for target
+        direction: i32, // -1 for source, +1 for target
     ) -> Result<String, PlanningError> {
         let node_idx = if direction < 0 {
             if edge_idx == 0 {
                 return Err(PlanningError::InvalidPattern(
-                    "Edge pattern must be preceded by a source node".to_string()
+                    "Edge pattern must be preceded by a source node".to_string(),
                 ));
             }
             edge_idx - 1
         } else {
             if edge_idx >= all_elements.len() - 1 {
                 return Err(PlanningError::InvalidPattern(
-                    "Edge pattern must be followed by a target node".to_string()
+                    "Edge pattern must be followed by a target node".to_string(),
                 ));
             }
             edge_idx + 1
@@ -229,21 +250,27 @@ impl InsertPlanner {
 
                     if node_pattern.labels.is_empty() && properties.is_empty() {
                         return Err(PlanningError::InvalidPattern(
-                            "Cannot use empty anonymous node in edge pattern".to_string()
+                            "Cannot use empty anonymous node in edge pattern".to_string(),
                         ));
                     }
 
-                    Ok(Self::generate_node_content_id(&node_pattern.labels, &properties))
+                    Ok(Self::generate_node_content_id(
+                        &node_pattern.labels,
+                        &properties,
+                    ))
                 }
             }
             _ => Err(PlanningError::InvalidPattern(
-                "Expected node pattern adjacent to edge".to_string()
-            ))
+                "Expected node pattern adjacent to edge".to_string(),
+            )),
         }
     }
 
     /// Extract properties from a property map
-    fn extract_properties(&self, prop_map: &crate::ast::ast::PropertyMap) -> Result<HashMap<String, Expression>, PlanningError> {
+    fn extract_properties(
+        &self,
+        prop_map: &crate::ast::ast::PropertyMap,
+    ) -> Result<HashMap<String, Expression>, PlanningError> {
         let mut properties = HashMap::new();
 
         for property in &prop_map.properties {
@@ -254,7 +281,10 @@ impl InsertPlanner {
     }
 
     /// Generate a content-based hash ID for a node
-    fn generate_node_content_id(labels: &[String], properties: &HashMap<String, Expression>) -> String {
+    fn generate_node_content_id(
+        labels: &[String],
+        properties: &HashMap<String, Expression>,
+    ) -> String {
         let mut hasher = DefaultHasher::new();
 
         // Hash labels (sorted for consistency)
@@ -282,7 +312,7 @@ impl InsertPlanner {
         from_node_id: &str,
         to_node_id: &str,
         label: &str,
-        properties: &HashMap<String, Expression>
+        properties: &HashMap<String, Expression>,
     ) -> String {
         let mut hasher = DefaultHasher::new();
 

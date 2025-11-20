@@ -7,88 +7,97 @@
 //! All storage drivers must implement these traits to provide a consistent interface.
 
 use super::types::{StorageResult, StorageType};
-use std::path::Path;
 use std::collections::HashMap;
+use std::path::Path;
 
 /// Trait for a tree/column family in the storage driver
-/// 
+///
 /// Represents a named collection of key-value pairs within a storage driver.
 /// Similar to a table in SQL databases or a column family in NoSQL databases.
 pub trait StorageTree: Send + Sync {
     /// Insert a key-value pair
     fn insert(&self, key: &[u8], value: &[u8]) -> StorageResult<()>;
-    
+
     /// Get a value by key
     fn get(&self, key: &[u8]) -> StorageResult<Option<Vec<u8>>>;
-    
+
     /// Remove a key-value pair
     fn remove(&self, key: &[u8]) -> StorageResult<()>;
-    
+
     /// Check if a key exists
     fn contains_key(&self, key: &[u8]) -> StorageResult<bool>;
-    
+
     /// Clear all data in the tree
     fn clear(&self) -> StorageResult<()>;
-    
+
     /// Check if the tree is empty
     fn is_empty(&self) -> StorageResult<bool>;
-    
+
     /// Iterate over all key-value pairs
-    fn iter(&self) -> StorageResult<Box<dyn Iterator<Item = StorageResult<(Vec<u8>, Vec<u8>)>> + '_>>;
-    
+    fn iter(
+        &self,
+    ) -> StorageResult<Box<dyn Iterator<Item = StorageResult<(Vec<u8>, Vec<u8>)>> + '_>>;
+
     /// Scan with a key prefix
-    fn scan_prefix(&self, prefix: &[u8]) -> StorageResult<Box<dyn Iterator<Item = StorageResult<(Vec<u8>, Vec<u8>)>> + '_>>;
-    
+    fn scan_prefix(
+        &self,
+        prefix: &[u8],
+    ) -> StorageResult<Box<dyn Iterator<Item = StorageResult<(Vec<u8>, Vec<u8>)>> + '_>>;
+
     /// Get multiple values by keys (batch get)
     fn batch_get(&self, keys: &[&[u8]]) -> StorageResult<Vec<Option<Vec<u8>>>>;
-    
+
     /// Insert multiple key-value pairs (batch insert)
     fn batch_insert(&self, entries: &[(&[u8], &[u8])]) -> StorageResult<()>;
-    
+
     /// Remove multiple keys (batch remove)
     fn batch_remove(&self, keys: &[&[u8]]) -> StorageResult<()>;
-    
+
     /// Flush any pending writes to disk
     fn flush(&self) -> StorageResult<()>;
 }
 
 /// Main storage driver trait
-/// 
+///
 /// Defines the interface that all storage drivers must implement.
 /// Provides methods for opening databases, managing trees, and basic operations.
 pub trait StorageDriver: Send + Sync {
     /// Type of tree/column family used by this driver
     type Tree: StorageTree;
-    
+
     /// Open or create a storage driver at the given path
     fn open<P: AsRef<Path>>(path: P) -> StorageResult<Self>
     where
         Self: Sized;
-    
+
     /// Open or create a named tree/column family
     fn open_tree(&self, name: &str) -> StorageResult<Self::Tree>;
-    
+
     /// List all available trees/column families
     fn list_trees(&self) -> StorageResult<Vec<String>>;
-    
+
     /// Flush all pending writes to disk
     fn flush(&self) -> StorageResult<()>;
-    
+
     /// Get storage type
     fn storage_type(&self) -> StorageType;
-    
+
     /// Open or create a tree with specific options for indexes
-    fn open_index_tree(&self, name: &str, index_options: IndexTreeOptions) -> StorageResult<Self::Tree>;
-    
+    fn open_index_tree(
+        &self,
+        name: &str,
+        index_options: IndexTreeOptions,
+    ) -> StorageResult<Self::Tree>;
+
     /// List all available indexes
     fn list_indexes(&self) -> StorageResult<Vec<String>>;
-    
+
     /// Drop an index tree
     fn drop_index(&self, name: &str) -> StorageResult<()>;
-    
+
     /// Get statistics for a tree
     fn tree_stats(&self, name: &str) -> StorageResult<Option<TreeStatistics>>;
-    
+
     /// Explicitly close the storage driver and release any file locks
     /// This is called before dropping to ensure clean shutdown
     fn shutdown(&mut self) -> StorageResult<()> {
@@ -103,47 +112,52 @@ impl StorageTree for Box<dyn StorageTree> {
     fn insert(&self, key: &[u8], value: &[u8]) -> StorageResult<()> {
         (**self).insert(key, value)
     }
-    
+
     fn get(&self, key: &[u8]) -> StorageResult<Option<Vec<u8>>> {
         (**self).get(key)
     }
-    
+
     fn remove(&self, key: &[u8]) -> StorageResult<()> {
         (**self).remove(key)
     }
-    
+
     fn contains_key(&self, key: &[u8]) -> StorageResult<bool> {
         (**self).contains_key(key)
     }
-    
+
     fn clear(&self) -> StorageResult<()> {
         (**self).clear()
     }
-    
+
     fn is_empty(&self) -> StorageResult<bool> {
         (**self).is_empty()
     }
-    
-    fn iter(&self) -> StorageResult<Box<dyn Iterator<Item = StorageResult<(Vec<u8>, Vec<u8>)>> + '_>> {
+
+    fn iter(
+        &self,
+    ) -> StorageResult<Box<dyn Iterator<Item = StorageResult<(Vec<u8>, Vec<u8>)>> + '_>> {
         (**self).iter()
     }
-    
+
     fn flush(&self) -> StorageResult<()> {
         (**self).flush()
     }
-    
-    fn scan_prefix(&self, prefix: &[u8]) -> StorageResult<Box<dyn Iterator<Item = StorageResult<(Vec<u8>, Vec<u8>)>> + '_>> {
+
+    fn scan_prefix(
+        &self,
+        prefix: &[u8],
+    ) -> StorageResult<Box<dyn Iterator<Item = StorageResult<(Vec<u8>, Vec<u8>)>> + '_>> {
         (**self).scan_prefix(prefix)
     }
-    
+
     fn batch_get(&self, keys: &[&[u8]]) -> StorageResult<Vec<Option<Vec<u8>>>> {
         (**self).batch_get(keys)
     }
-    
+
     fn batch_insert(&self, entries: &[(&[u8], &[u8])]) -> StorageResult<()> {
         (**self).batch_insert(entries)
     }
-    
+
     fn batch_remove(&self, keys: &[&[u8]]) -> StorageResult<()> {
         (**self).batch_remove(keys)
     }
@@ -181,7 +195,7 @@ impl Default for IndexTreeOptions {
 
 impl IndexTreeOptions {
     /// Create options optimized for text indexes
-    
+
     /// Create options optimized for graph indexes
     pub fn for_graph_index() -> Self {
         Self {

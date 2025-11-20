@@ -3,11 +3,11 @@
 //
 // CreateUserExecutor - Implements CREATE USER statement execution
 use crate::ast::ast::CreateUserStatement;
-use crate::exec::ExecutionError;
-use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
-use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::{CatalogOperation, EntityType};
+use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
+use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
+use crate::exec::ExecutionError;
 use crate::storage::StorageManager;
 use crate::txn::state::OperationType;
 use serde_json::json;
@@ -56,7 +56,8 @@ impl DDLStatementExecutor for CreateUserExecutor {
 
         // Add any additional roles specified in the CREATE USER statement
         for role in &self.statement.roles {
-            if role != "user" { // Avoid duplicates
+            if role != "user" {
+                // Avoid duplicates
                 user_roles.push(role.clone());
             }
         }
@@ -79,8 +80,7 @@ impl DDLStatementExecutor for CreateUserExecutor {
                 if let Err(e) = persist_result {
                     return Err(ExecutionError::RuntimeError(format!(
                         "Failed to persist user creation '{}' to storage: {}",
-                        username,
-                        e
+                        username, e
                     )));
                 }
 
@@ -100,8 +100,7 @@ impl DDLStatementExecutor for CreateUserExecutor {
                 } else {
                     Err(ExecutionError::RuntimeError(format!(
                         "Failed to create user '{}': {}",
-                        username,
-                        catalog_error
+                        username, catalog_error
                     )))
                 }
             }

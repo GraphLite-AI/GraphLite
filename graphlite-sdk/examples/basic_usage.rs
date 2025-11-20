@@ -10,7 +10,7 @@
 //!
 //! Run with: cargo run --example basic_usage
 
-use graphlite_sdk::{GraphLite, Error};
+use graphlite_sdk::{Error, GraphLite};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -66,7 +66,8 @@ fn main() -> Result<(), Error> {
 
     // 6. Use query builder
     println!("6. Using query builder...");
-    let result = session.query_builder()
+    let result = session
+        .query_builder()
         .match_pattern("(p:Person)")
         .where_clause("p.age > 25")
         .return_clause("p.name as name, p.age as age")

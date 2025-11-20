@@ -41,12 +41,21 @@ impl TypeCaster {
             (GqlType::String { .. }, GqlType::Duration { .. }) => true,
 
             // String casts (most things can cast to string) - put this last to avoid unreachable patterns
-            (_, GqlType::String { .. }) => !matches!(from, GqlType::Graph { .. } | GqlType::BindingTable),
+            (_, GqlType::String { .. }) => {
+                !matches!(from, GqlType::Graph { .. } | GqlType::BindingTable)
+            }
 
             // List casts (only if element types can be cast)
-            (GqlType::List { element_type: from_elem, .. }, GqlType::List { element_type: to_elem, .. }) => {
-                Self::can_cast(from_elem, to_elem)
-            }
+            (
+                GqlType::List {
+                    element_type: from_elem,
+                    ..
+                },
+                GqlType::List {
+                    element_type: to_elem,
+                    ..
+                },
+            ) => Self::can_cast(from_elem, to_elem),
 
             _ => false,
         }
@@ -59,7 +68,12 @@ impl TypeCaster {
             _ if std::mem::discriminant(from) == std::mem::discriminant(to) => true,
 
             // Date conversions
-            (GqlType::Date, GqlType::Timestamp { .. } | GqlType::ZonedDateTime { .. } | GqlType::LocalDateTime { .. }) => true,
+            (
+                GqlType::Date,
+                GqlType::Timestamp { .. }
+                | GqlType::ZonedDateTime { .. }
+                | GqlType::LocalDateTime { .. },
+            ) => true,
 
             // Time conversions
             (GqlType::Time { .. }, GqlType::ZonedTime { .. } | GqlType::LocalTime { .. }) => true,
@@ -67,7 +81,10 @@ impl TypeCaster {
             (GqlType::LocalTime { .. }, GqlType::Time { .. }) => true,
 
             // Timestamp/DateTime conversions
-            (GqlType::Timestamp { .. }, GqlType::ZonedDateTime { .. } | GqlType::LocalDateTime { .. } | GqlType::Date) => true,
+            (
+                GqlType::Timestamp { .. },
+                GqlType::ZonedDateTime { .. } | GqlType::LocalDateTime { .. } | GqlType::Date,
+            ) => true,
             (GqlType::ZonedDateTime { .. }, GqlType::LocalDateTime { .. } | GqlType::Date) => true,
             (GqlType::LocalDateTime { .. }, GqlType::Date) => true,
 
@@ -95,7 +112,9 @@ impl TypeCaster {
             (GqlType::Boolean, GqlType::String { .. }) => Ok(CastOperation::BooleanToString),
             (GqlType::Boolean, to_t) if to_t.is_numeric() => Ok(CastOperation::BooleanToNumeric),
             (GqlType::String { .. }, GqlType::Boolean) => Ok(CastOperation::StringToBoolean),
-            (from_t, GqlType::Boolean) if from_t.is_numeric() => Ok(CastOperation::NumericToBoolean),
+            (from_t, GqlType::Boolean) if from_t.is_numeric() => {
+                Ok(CastOperation::NumericToBoolean)
+            }
 
             // Numeric casts
             (from_t, to_t) if from_t.is_numeric() && to_t.is_numeric() => {
@@ -134,7 +153,10 @@ impl TypeCaster {
             (GqlType::Integer, GqlType::SmallInt) => true,
             (GqlType::BigInt, GqlType::SmallInt | GqlType::Integer) => true,
             (GqlType::Int128, GqlType::SmallInt | GqlType::Integer | GqlType::BigInt) => true,
-            (GqlType::Int256, GqlType::SmallInt | GqlType::Integer | GqlType::BigInt | GqlType::Int128) => true,
+            (
+                GqlType::Int256,
+                GqlType::SmallInt | GqlType::Integer | GqlType::BigInt | GqlType::Int128,
+            ) => true,
             (GqlType::Double, GqlType::Float { .. }) => true,
 
             _ => false,
@@ -148,23 +170,23 @@ impl TypeCaster {
 pub enum CastOperation {
     /// No operation needed (same type)
     Identity,
-    
+
     // Boolean casts
     BooleanToString,
     BooleanToNumeric,
     StringToBoolean,
     NumericToBoolean,
-    
+
     // Numeric casts
     NumericCast,
     NumericToString,
     StringToNumeric,
-    
+
     // Temporal casts
     TemporalCast,
     StringToTemporal,
     TemporalToString,
-    
+
     // Custom cast
     Custom,
 }
@@ -176,18 +198,27 @@ mod tests {
     #[test]
     fn test_can_cast() {
         // Boolean casts
-        assert!(TypeCaster::can_cast(&GqlType::Boolean, &GqlType::String { max_length: None }));
-        assert!(TypeCaster::can_cast(&GqlType::String { max_length: None }, &GqlType::Boolean));
-        
+        assert!(TypeCaster::can_cast(
+            &GqlType::Boolean,
+            &GqlType::String { max_length: None }
+        ));
+        assert!(TypeCaster::can_cast(
+            &GqlType::String { max_length: None },
+            &GqlType::Boolean
+        ));
+
         // Numeric casts
         let int = GqlType::Integer;
         let double = GqlType::Double;
         assert!(TypeCaster::can_cast(&int, &double));
         assert!(TypeCaster::can_cast(&double, &int));
-        
+
         // Temporal casts
         let date = GqlType::Date;
-        let timestamp = GqlType::Timestamp { precision: None, with_timezone: false };
+        let timestamp = GqlType::Timestamp {
+            precision: None,
+            with_timezone: false,
+        };
         assert!(TypeCaster::can_cast(&date, &timestamp));
     }
 
@@ -196,10 +227,10 @@ mod tests {
         let small = GqlType::SmallInt;
         let int = GqlType::Integer;
         let big = GqlType::BigInt;
-        
+
         // Exact match
         assert!(TypeCaster::is_typed(&int, &int));
-        
+
         // Hierarchy - larger types satisfy smaller type checks
         assert!(!TypeCaster::is_typed(&small, &int));
         assert!(TypeCaster::is_typed(&int, &small));
@@ -210,13 +241,13 @@ mod tests {
     fn test_cast_operation() {
         let bool_type = GqlType::Boolean;
         let string_type = GqlType::String { max_length: None };
-        
+
         let cast_op = TypeCaster::cast(&bool_type, &string_type).unwrap();
         assert!(matches!(cast_op, CastOperation::BooleanToString));
-        
+
         let int_type = GqlType::Integer;
         let double_type = GqlType::Double;
-        
+
         let cast_op = TypeCaster::cast(&int_type, &double_type).unwrap();
         assert!(matches!(cast_op, CastOperation::NumericCast));
     }

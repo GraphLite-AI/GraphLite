@@ -60,14 +60,17 @@ impl GraphTypeVersion {
             return Err(format!("Invalid version format: {}", version_str));
         }
 
-        let major = parts[0].parse::<u32>()
+        let major = parts[0]
+            .parse::<u32>()
             .map_err(|_| format!("Invalid major version: {}", parts[0]))?;
-        let minor = parts[1].parse::<u32>()
+        let minor = parts[1]
+            .parse::<u32>()
             .map_err(|_| format!("Invalid minor version: {}", parts[1]))?;
 
         // Handle patch with optional pre-release/build metadata
         let patch_parts: Vec<&str> = parts[2].split('-').collect();
-        let patch = patch_parts[0].parse::<u32>()
+        let patch = patch_parts[0]
+            .parse::<u32>()
             .map_err(|_| format!("Invalid patch version: {}", patch_parts[0]))?;
 
         let mut version = Self::new(major, minor, patch);
@@ -147,7 +150,7 @@ pub struct PropertyDefinition {
     pub deprecated: bool,
     pub deprecation_message: Option<String>,
     pub validation_pattern: Option<String>, // Regular expression for validation
-    pub constraints: Vec<Constraint>,        // Property-level constraints
+    pub constraints: Vec<Constraint>,       // Property-level constraints
 }
 
 /// Supported data types in graph schemas
@@ -170,16 +173,16 @@ pub enum DataType {
 
     // Special types
     UUID,
-    Text,      // For full-text indexable content
-    Json,      // JSON object
-    Bytes,     // Binary data
+    Text,  // For full-text indexable content
+    Json,  // JSON object
+    Bytes, // Binary data
 
     // Collection types
     Array(Box<DataType>),
     Map(Box<DataType>, Box<DataType>),
     Set(Box<DataType>),
-    List(Box<DataType>),      // List of elements
-    Vector(usize),            // Vector with dimension size
+    List(Box<DataType>), // List of elements
+    Vector(usize),       // Vector with dimension size
 
     // User-defined types
     Enum(Vec<String>),
@@ -218,7 +221,7 @@ impl DataType {
             DataType::Array(_) => "JSONB".to_string(), // Arrays stored as JSON
             DataType::Map(_, _) => "JSONB".to_string(),
             DataType::Set(_) => "JSONB".to_string(),
-            DataType::List(_) => "JSONB".to_string(),  // Lists stored as JSON
+            DataType::List(_) => "JSONB".to_string(), // Lists stored as JSON
             DataType::Vector(dim) => format!("VECTOR({})", dim), // Vector with dimension
             DataType::Enum(_) => "VARCHAR".to_string(),
             DataType::Reference(_) => "UUID".to_string(),
@@ -232,13 +235,18 @@ pub enum Constraint {
     NotNull,
     Unique,
     PrimaryKey,
-    ForeignKey { references: String, on_delete: ForeignKeyAction },
-    Check { expression: String },
+    ForeignKey {
+        references: String,
+        on_delete: ForeignKeyAction,
+    },
+    Check {
+        expression: String,
+    },
     MinLength(usize),
     MaxLength(usize),
     MinValue(f64),
     MaxValue(f64),
-    Pattern(String), // Regular expression
+    Pattern(String),            // Regular expression
     In(Vec<serde_json::Value>), // Value must be in this list
 }
 
@@ -370,7 +378,10 @@ mod tests {
         let version_with_pre = GraphTypeVersion::parse("2.0.0-beta+build123").unwrap();
         assert_eq!(version_with_pre.major, 2);
         assert_eq!(version_with_pre.pre_release, Some("beta".to_string()));
-        assert_eq!(version_with_pre.build_metadata, Some("build123".to_string()));
+        assert_eq!(
+            version_with_pre.build_metadata,
+            Some("build123".to_string())
+        );
     }
 
     #[test]

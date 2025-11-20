@@ -38,19 +38,19 @@ pub mod coordinator;
 
 // Internal modules - only visible within graphlite crate
 pub(crate) mod ast;
-pub(crate) mod plan;
-pub(crate) mod exec;
-pub(crate) mod storage;
-pub(crate) mod types;
-pub(crate) mod schema;
-pub(crate) mod catalog;
-pub(crate) mod txn;
-pub(crate) mod session;
-pub(crate) mod functions;
 pub(crate) mod cache;
+pub(crate) mod catalog;
+pub(crate) mod exec;
+pub(crate) mod functions;
+pub(crate) mod plan;
+pub(crate) mod schema;
+pub(crate) mod session;
+pub(crate) mod storage;
+pub(crate) mod txn;
+pub(crate) mod types;
 
 // Re-export the public API - QueryCoordinator is the only entry point
-pub use coordinator::{QueryCoordinator, QueryResult, Row, QueryInfo, QueryType, QueryPlan};
+pub use coordinator::{QueryCoordinator, QueryInfo, QueryPlan, QueryResult, QueryType, Row};
 
 // Re-export Value type (needed for inspecting query results in Row.values)
 pub use storage::Value;

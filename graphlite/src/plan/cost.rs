@@ -6,9 +6,9 @@
 //! This module provides cost models and statistics collection for optimizing
 //! query execution plans based on data distribution and operator performance.
 
+use crate::plan::physical::PhysicalNode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::plan::physical::PhysicalNode;
 
 /// Cost estimate for a query plan or operator
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,9 +76,9 @@ pub enum IndexType {
     Property,
     Composite,
     // Full-text search indexes
-    TextInverted,   // Inverted index for full-text search
-    TextBM25,       // BM25-scored inverted index
-    TextNGram,      // N-gram index for fuzzy matching
+    TextInverted, // Inverted index for full-text search
+    TextBM25,     // BM25-scored inverted index
+    TextNGram,    // N-gram index for fuzzy matching
 }
 
 /// Entity type for indices
@@ -99,7 +99,7 @@ impl CostEstimate {
             total_time: 0.0,
         }
     }
-    
+
     /// Add another cost estimate to this one
     pub fn add(&mut self, other: &CostEstimate) {
         self.cpu_cost += other.cpu_cost;
@@ -108,7 +108,7 @@ impl CostEstimate {
         self.network_cost += other.network_cost;
         self.total_time += other.total_time;
     }
-    
+
     /// Calculate total cost as weighted sum
     pub fn total_cost(&self) -> f64 {
         // Weights for different cost components
@@ -116,11 +116,11 @@ impl CostEstimate {
         let io_weight = 10.0; // I/O is expensive
         let memory_weight = 0.1;
         let network_weight = 5.0;
-        
-        self.cpu_cost * cpu_weight +
-        self.io_cost * io_weight +
-        self.memory_cost * memory_weight +
-        self.network_cost * network_weight
+
+        self.cpu_cost * cpu_weight
+            + self.io_cost * io_weight
+            + self.memory_cost * memory_weight
+            + self.network_cost * network_weight
     }
 }
 
@@ -134,114 +134,157 @@ impl CostModel {
     /// Create a new cost model with default values
     pub fn new() -> Self {
         Self {
-            cpu_cost_per_row: 0.001,    // 1ms per 1000 rows
-            io_cost_per_page: 0.01,     // 10ms per page
+            cpu_cost_per_row: 0.001,        // 1ms per 1000 rows
+            io_cost_per_page: 0.01,         // 10ms per page
             memory_cost_per_byte: 0.000001, // Very cheap
         }
     }
-    
+
     /// Estimate cost for a physical node
     pub fn estimate_node_cost(&self, node: &PhysicalNode, stats: &Statistics) -> CostEstimate {
         match node {
-            PhysicalNode::NodeSeqScan { labels, estimated_rows, .. } => {
-                self.estimate_scan_cost(*estimated_rows, labels, stats, true)
-            }
-            
-            PhysicalNode::NodeIndexScan { labels, estimated_rows, .. } => {
-                self.estimate_scan_cost(*estimated_rows, labels, stats, false)
-            }
-            
-            PhysicalNode::EdgeSeqScan { labels, estimated_rows, .. } => {
-                self.estimate_scan_cost(*estimated_rows, labels, stats, true)
-            }
-            
-            PhysicalNode::IndexedExpand { input, estimated_rows, .. } => {
+            PhysicalNode::NodeSeqScan {
+                labels,
+                estimated_rows,
+                ..
+            } => self.estimate_scan_cost(*estimated_rows, labels, stats, true),
+
+            PhysicalNode::NodeIndexScan {
+                labels,
+                estimated_rows,
+                ..
+            } => self.estimate_scan_cost(*estimated_rows, labels, stats, false),
+
+            PhysicalNode::EdgeSeqScan {
+                labels,
+                estimated_rows,
+                ..
+            } => self.estimate_scan_cost(*estimated_rows, labels, stats, true),
+
+            PhysicalNode::IndexedExpand {
+                input,
+                estimated_rows,
+                ..
+            } => {
                 let mut cost = self.estimate_node_cost(input, stats);
                 let expand_cost = self.estimate_expand_cost(*estimated_rows, false);
                 cost.add(&expand_cost);
                 cost
             }
-            
-            PhysicalNode::HashExpand { input, estimated_rows, .. } => {
+
+            PhysicalNode::HashExpand {
+                input,
+                estimated_rows,
+                ..
+            } => {
                 let mut cost = self.estimate_node_cost(input, stats);
                 let expand_cost = self.estimate_expand_cost(*estimated_rows, true);
                 cost.add(&expand_cost);
                 cost
             }
-            
-            PhysicalNode::Filter { input, selectivity, .. } => {
+
+            PhysicalNode::Filter {
+                input, selectivity, ..
+            } => {
                 let mut cost = self.estimate_node_cost(input, stats);
                 let filter_cost = self.estimate_filter_cost(input.get_row_count(), *selectivity);
                 cost.add(&filter_cost);
                 cost
             }
-            
-            PhysicalNode::Project { input, estimated_rows, .. } => {
+
+            PhysicalNode::Project {
+                input,
+                estimated_rows,
+                ..
+            } => {
                 let mut cost = self.estimate_node_cost(input, stats);
                 let project_cost = self.estimate_project_cost(*estimated_rows);
                 cost.add(&project_cost);
                 cost
             }
-            
-            PhysicalNode::HashJoin { build, probe, estimated_rows, .. } => {
+
+            PhysicalNode::HashJoin {
+                build,
+                probe,
+                estimated_rows,
+                ..
+            } => {
                 let mut cost = self.estimate_node_cost(build, stats);
                 cost.add(&self.estimate_node_cost(probe, stats));
                 let join_cost = self.estimate_join_cost(
                     build.get_row_count(),
                     probe.get_row_count(),
                     *estimated_rows,
-                    JoinAlgorithm::Hash
+                    JoinAlgorithm::Hash,
                 );
                 cost.add(&join_cost);
                 cost
             }
-            
-            PhysicalNode::NestedLoopJoin { left, right, estimated_rows, .. } => {
+
+            PhysicalNode::NestedLoopJoin {
+                left,
+                right,
+                estimated_rows,
+                ..
+            } => {
                 let mut cost = self.estimate_node_cost(left, stats);
                 cost.add(&self.estimate_node_cost(right, stats));
                 let join_cost = self.estimate_join_cost(
                     left.get_row_count(),
                     right.get_row_count(),
                     *estimated_rows,
-                    JoinAlgorithm::NestedLoop
+                    JoinAlgorithm::NestedLoop,
                 );
                 cost.add(&join_cost);
                 cost
             }
-            
-            PhysicalNode::SortMergeJoin { left, right, estimated_rows, .. } => {
+
+            PhysicalNode::SortMergeJoin {
+                left,
+                right,
+                estimated_rows,
+                ..
+            } => {
                 let mut cost = self.estimate_node_cost(left, stats);
                 cost.add(&self.estimate_node_cost(right, stats));
                 let join_cost = self.estimate_join_cost(
                     left.get_row_count(),
                     right.get_row_count(),
                     *estimated_rows,
-                    JoinAlgorithm::SortMerge
+                    JoinAlgorithm::SortMerge,
                 );
                 cost.add(&join_cost);
                 cost
             }
-            
-            PhysicalNode::ExternalSort { input, estimated_rows, .. } => {
+
+            PhysicalNode::ExternalSort {
+                input,
+                estimated_rows,
+                ..
+            } => {
                 let mut cost = self.estimate_node_cost(input, stats);
                 let sort_cost = self.estimate_sort_cost(*estimated_rows, true);
                 cost.add(&sort_cost);
                 cost
             }
-            
-            PhysicalNode::InMemorySort { input, estimated_rows, .. } => {
+
+            PhysicalNode::InMemorySort {
+                input,
+                estimated_rows,
+                ..
+            } => {
                 let mut cost = self.estimate_node_cost(input, stats);
                 let sort_cost = self.estimate_sort_cost(*estimated_rows, false);
                 cost.add(&sort_cost);
                 cost
             }
-            
+
             PhysicalNode::Limit { input, count, .. } => {
                 // Limit can terminate early, so cost is proportional to limit
                 let input_cost = self.estimate_node_cost(input, stats);
                 let input_rows = input.get_row_count();
                 let ratio = (*count as f64) / (input_rows as f64).max(1.0);
-                
+
                 CostEstimate {
                     cpu_cost: input_cost.cpu_cost * ratio,
                     io_cost: input_cost.io_cost * ratio,
@@ -255,7 +298,7 @@ impl CostModel {
             PhysicalNode::GraphIndexScan { estimated_rows, .. } => {
                 let base_cost = *estimated_rows as f64 * self.cpu_cost_per_row * 0.05; // Highly optimized
                 let io_cost = (*estimated_rows / 10000) as f64 * self.io_cost_per_page * 0.1; // Minimal I/O
-                
+
                 CostEstimate {
                     cpu_cost: base_cost,
                     io_cost,
@@ -264,42 +307,53 @@ impl CostModel {
                     total_time: base_cost + io_cost,
                 }
             }
-            
+
             // Index join - better than hash join for selective queries
-            PhysicalNode::IndexJoin { left, right, estimated_rows, .. } => {
+            PhysicalNode::IndexJoin {
+                left,
+                right,
+                estimated_rows,
+                ..
+            } => {
                 let mut cost = self.estimate_node_cost(left, stats);
                 cost.add(&self.estimate_node_cost(right, stats));
-                
+
                 let join_cost = self.estimate_join_cost(
                     left.get_row_count(),
                     right.get_row_count(),
                     *estimated_rows,
-                    JoinAlgorithm::IndexNL  // Index nested loop
+                    JoinAlgorithm::IndexNL, // Index nested loop
                 );
                 cost.add(&join_cost);
                 cost
             }
-            
+
             PhysicalNode::SingleRow { .. } => {
                 // SingleRow is the cheapest possible operation
                 CostEstimate {
-                    cpu_cost: 0.0001,  // Minimal CPU - just creates one empty row
-                    io_cost: 0.0,      // No I/O needed
+                    cpu_cost: 0.0001,    // Minimal CPU - just creates one empty row
+                    io_cost: 0.0,        // No I/O needed
                     memory_cost: 0.0001, // Tiny memory for one row
-                    network_cost: 0.0,  // No network
-                    total_time: 0.0001, // Near-instant execution
+                    network_cost: 0.0,   // No network
+                    total_time: 0.0001,  // Near-instant execution
                 }
             }
-            
+
             _ => CostEstimate::new(), // Default for unimplemented nodes
         }
     }
-    
+
     /// Estimate scan cost
-    fn estimate_scan_cost(&self, rows: usize, _labels: &[String], _stats: &Statistics, is_sequential: bool) -> CostEstimate {
+    fn estimate_scan_cost(
+        &self,
+        rows: usize,
+        _labels: &[String],
+        _stats: &Statistics,
+        is_sequential: bool,
+    ) -> CostEstimate {
         let base_cpu_cost = rows as f64 * self.cpu_cost_per_row;
         let cpu_multiplier = if is_sequential { 1.0 } else { 0.3 }; // Index scan is faster
-        
+
         // Estimate I/O based on whether we have indices
         let io_cost = if is_sequential {
             // Sequential scan reads all data
@@ -308,7 +362,7 @@ impl CostModel {
             // Index scan is more selective
             (rows / 10000) as f64 * self.io_cost_per_page
         };
-        
+
         CostEstimate {
             cpu_cost: base_cpu_cost * cpu_multiplier,
             io_cost,
@@ -317,12 +371,12 @@ impl CostModel {
             total_time: base_cpu_cost * cpu_multiplier + io_cost,
         }
     }
-    
+
     /// Estimate expand (traversal) cost
     fn estimate_expand_cost(&self, rows: usize, use_hash: bool) -> CostEstimate {
         let base_cost = rows as f64 * self.cpu_cost_per_row * 2.0; // Traversal is more expensive
         let memory_multiplier = if use_hash { 2.0 } else { 1.0 }; // Hash tables use more memory
-        
+
         CostEstimate {
             cpu_cost: base_cost,
             io_cost: (rows / 5000) as f64 * self.io_cost_per_page, // Less I/O than scan
@@ -331,24 +385,24 @@ impl CostModel {
             total_time: base_cost,
         }
     }
-    
+
     /// Estimate filter cost
     fn estimate_filter_cost(&self, input_rows: usize, _selectivity: f64) -> CostEstimate {
         let cpu_cost = input_rows as f64 * self.cpu_cost_per_row * 0.5; // Filtering is cheap
-        
+
         CostEstimate {
             cpu_cost,
-            io_cost: 0.0, // No additional I/O
+            io_cost: 0.0,     // No additional I/O
             memory_cost: 0.0, // No additional memory
             network_cost: 0.0,
             total_time: cpu_cost,
         }
     }
-    
+
     /// Estimate projection cost
     fn estimate_project_cost(&self, rows: usize) -> CostEstimate {
         let cpu_cost = rows as f64 * self.cpu_cost_per_row * 0.2; // Very cheap
-        
+
         CostEstimate {
             cpu_cost,
             io_cost: 0.0,
@@ -357,41 +411,48 @@ impl CostModel {
             total_time: cpu_cost,
         }
     }
-    
+
     /// Estimate join cost
-    fn estimate_join_cost(&self, left_rows: usize, right_rows: usize, _output_rows: usize, algorithm: JoinAlgorithm) -> CostEstimate {
+    fn estimate_join_cost(
+        &self,
+        left_rows: usize,
+        right_rows: usize,
+        _output_rows: usize,
+        algorithm: JoinAlgorithm,
+    ) -> CostEstimate {
         let (cpu_multiplier, memory_multiplier) = match algorithm {
             JoinAlgorithm::Hash => (1.5, 2.0), // Hash join: build hash table, probe
             JoinAlgorithm::NestedLoop => (left_rows as f64, 0.1), // Nested loop: O(n*m)
-            JoinAlgorithm::SortMerge => (
-                (left_rows as f64).log2() + (right_rows as f64).log2(), 
-                1.0
-            ), // Sort merge: sort both sides
+            JoinAlgorithm::SortMerge => {
+                ((left_rows as f64).log2() + (right_rows as f64).log2(), 1.0)
+            } // Sort merge: sort both sides
             JoinAlgorithm::IndexNL => (0.8, 0.5), // Index nested loop: much better than regular NL
         };
-        
+
         let base_cost = (left_rows + right_rows) as f64 * self.cpu_cost_per_row;
-        
+
         CostEstimate {
             cpu_cost: base_cost * cpu_multiplier,
             io_cost: ((left_rows + right_rows) / 1000) as f64 * self.io_cost_per_page,
-            memory_cost: (left_rows.max(right_rows) * 100) as f64 * self.memory_cost_per_byte * memory_multiplier,
+            memory_cost: (left_rows.max(right_rows) * 100) as f64
+                * self.memory_cost_per_byte
+                * memory_multiplier,
             network_cost: 0.0,
             total_time: base_cost * cpu_multiplier,
         }
     }
-    
+
     /// Estimate sort cost
     fn estimate_sort_cost(&self, rows: usize, external: bool) -> CostEstimate {
         let n_log_n = rows as f64 * (rows as f64).log2();
         let cpu_cost = n_log_n * self.cpu_cost_per_row * 0.01; // Sort constant
-        
+
         let (io_multiplier, memory_multiplier) = if external {
             (3.0, 0.5) // External sort: multiple I/O passes, less memory
         } else {
             (0.0, 2.0) // In-memory sort: no extra I/O, more memory
         };
-        
+
         CostEstimate {
             cpu_cost,
             io_cost: (rows / 1000) as f64 * self.io_cost_per_page * io_multiplier,
@@ -408,7 +469,7 @@ enum JoinAlgorithm {
     Hash,
     NestedLoop,
     SortMerge,
-    IndexNL,  // Index Nested Loop
+    IndexNL, // Index Nested Loop
 }
 
 impl Default for CostModel {
@@ -431,7 +492,7 @@ impl Statistics {
             available_indices: Vec::new(),
         }
     }
-    
+
     /// Update statistics with graph information
     #[allow(dead_code)] // ROADMAP v0.5.0 - Dynamic statistics collection from graph storage
     pub fn update_from_graph(&mut self, graph: &crate::storage::GraphCache) {
@@ -439,14 +500,14 @@ impl Statistics {
         let stats = graph.stats();
         self.total_nodes = stats.node_count;
         self.total_edges = stats.edge_count;
-        
+
         // Calculate average degree
         self.average_degree = if self.total_nodes > 0 {
             (2 * self.total_edges) as f64 / self.total_nodes as f64
         } else {
             0.0
         };
-        
+
         // Add default label indices (these would be available in the storage)
         self.available_indices.push(IndexInfo {
             name: "node_labels".to_string(),
@@ -455,7 +516,7 @@ impl Statistics {
             properties: vec![],
             cardinality: self.total_nodes,
         });
-        
+
         self.available_indices.push(IndexInfo {
             name: "edge_labels".to_string(),
             index_type: IndexType::Label,
@@ -463,20 +524,24 @@ impl Statistics {
             properties: vec![],
             cardinality: self.total_edges,
         });
-        
+
         // Set default property selectivity estimates
         self.property_selectivity.insert("id".to_string(), 1.0); // Unique
         self.property_selectivity.insert("label".to_string(), 0.1); // 10% selectivity
-        self.property_selectivity.insert("risk_score".to_string(), 0.5); // 50% selectivity
+        self.property_selectivity
+            .insert("risk_score".to_string(), 0.5); // 50% selectivity
         self.property_selectivity.insert("amount".to_string(), 0.3); // 30% selectivity
     }
-    
+
     /// Get selectivity for a property
     #[allow(dead_code)] // ROADMAP v0.5.0 - Property selectivity for cardinality estimation
     pub fn get_property_selectivity(&self, property: &str) -> f64 {
-        self.property_selectivity.get(property).copied().unwrap_or(0.5)
+        self.property_selectivity
+            .get(property)
+            .copied()
+            .unwrap_or(0.5)
     }
-    
+
     /// Check if an index is available for given properties
     #[allow(dead_code)] // ROADMAP v0.5.0 - Index availability checking for plan optimization
     pub fn has_index(&self, entity_type: &EntityType, properties: &[String]) -> bool {
@@ -492,4 +557,3 @@ impl Default for Statistics {
         Self::new()
     }
 }
-

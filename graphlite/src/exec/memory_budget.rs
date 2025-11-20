@@ -310,7 +310,10 @@ mod tests {
         // Try to exceed limit
         let result = budget.allocate(200);
         assert!(result.is_err());
-        assert!(matches!(result, Err(ExecutionError::MemoryLimitExceeded { .. })));
+        assert!(matches!(
+            result,
+            Err(ExecutionError::MemoryLimitExceeded { .. })
+        ));
 
         // Allocation should not have happened
         assert_eq!(budget.allocated(), 900);

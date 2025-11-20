@@ -2,23 +2,20 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //! Transaction operation logging for rollback support
-//! 
+//!
 //! This module provides a more efficient approach to transaction rollback
 //! by logging individual operations rather than keeping full graph snapshots.
 
 use std::collections::HashMap;
 
-use crate::storage::{Node, Edge, Value};
 use super::state::TransactionId;
+use crate::storage::{Edge, Node, Value};
 
 /// Represents an operation that can be undone
 #[derive(Debug, Clone)]
 pub enum UndoOperation {
     /// A node was inserted - to undo, remove it
-    InsertNode {
-        graph_path: String,
-        node_id: String,
-    },
+    InsertNode { graph_path: String, node_id: String },
     /// A node was updated - to undo, restore old properties
     UpdateNode {
         graph_path: String,
@@ -33,10 +30,7 @@ pub enum UndoOperation {
         deleted_node: Node,
     },
     /// An edge was inserted - to undo, remove it
-    InsertEdge {
-        graph_path: String,
-        edge_id: String,
-    },
+    InsertEdge { graph_path: String, edge_id: String },
     /// An edge was updated - to undo, restore old properties
     UpdateEdge {
         graph_path: String,
@@ -52,9 +46,7 @@ pub enum UndoOperation {
     },
     /// A batch of operations that must be undone together atomically
     /// Used for multi-property SET operations and other compound statements
-    Batch {
-        operations: Vec<UndoOperation>,
-    },
+    Batch { operations: Vec<UndoOperation> },
 }
 
 /// Transaction operation log for a single transaction
@@ -81,89 +73,165 @@ impl TransactionLog {
             estimated_size_bytes: std::mem::size_of::<Self>(),
         }
     }
-    
+
     /// Add an undo operation to the log
     pub fn log_operation(&mut self, operation: UndoOperation) {
         // Estimate memory usage
         let op_size = match &operation {
-            UndoOperation::InsertNode { graph_path, node_id } => {
-                std::mem::size_of::<UndoOperation>() + graph_path.len() + node_id.len()
-            },
-            UndoOperation::UpdateNode { graph_path, node_id, old_properties, old_labels } => {
-                let props_size = old_properties.iter()
+            UndoOperation::InsertNode {
+                graph_path,
+                node_id,
+            } => std::mem::size_of::<UndoOperation>() + graph_path.len() + node_id.len(),
+            UndoOperation::UpdateNode {
+                graph_path,
+                node_id,
+                old_properties,
+                old_labels,
+            } => {
+                let props_size = old_properties
+                    .iter()
                     .map(|(k, v)| k.len() + estimate_value_size(v))
                     .sum::<usize>();
                 let labels_size = old_labels.iter().map(|l| l.len()).sum::<usize>();
-                std::mem::size_of::<UndoOperation>() + graph_path.len() + node_id.len() + props_size + labels_size
-            },
-            UndoOperation::DeleteNode { graph_path, node_id, deleted_node } => {
-                std::mem::size_of::<UndoOperation>() + graph_path.len() + node_id.len() + estimate_node_size(deleted_node)
-            },
-            UndoOperation::InsertEdge { graph_path, edge_id } => {
-                std::mem::size_of::<UndoOperation>() + graph_path.len() + edge_id.len()
-            },
-            UndoOperation::UpdateEdge { graph_path, edge_id, old_properties, old_label } => {
-                let props_size = old_properties.iter()
+                std::mem::size_of::<UndoOperation>()
+                    + graph_path.len()
+                    + node_id.len()
+                    + props_size
+                    + labels_size
+            }
+            UndoOperation::DeleteNode {
+                graph_path,
+                node_id,
+                deleted_node,
+            } => {
+                std::mem::size_of::<UndoOperation>()
+                    + graph_path.len()
+                    + node_id.len()
+                    + estimate_node_size(deleted_node)
+            }
+            UndoOperation::InsertEdge {
+                graph_path,
+                edge_id,
+            } => std::mem::size_of::<UndoOperation>() + graph_path.len() + edge_id.len(),
+            UndoOperation::UpdateEdge {
+                graph_path,
+                edge_id,
+                old_properties,
+                old_label,
+            } => {
+                let props_size = old_properties
+                    .iter()
                     .map(|(k, v)| k.len() + estimate_value_size(v))
                     .sum::<usize>();
                 let label_size = old_label.len();
-                std::mem::size_of::<UndoOperation>() + graph_path.len() + edge_id.len() + props_size + label_size
-            },
-            UndoOperation::DeleteEdge { graph_path, edge_id, deleted_edge } => {
-                std::mem::size_of::<UndoOperation>() + graph_path.len() + edge_id.len() + estimate_edge_size(deleted_edge)
-            },
+                std::mem::size_of::<UndoOperation>()
+                    + graph_path.len()
+                    + edge_id.len()
+                    + props_size
+                    + label_size
+            }
+            UndoOperation::DeleteEdge {
+                graph_path,
+                edge_id,
+                deleted_edge,
+            } => {
+                std::mem::size_of::<UndoOperation>()
+                    + graph_path.len()
+                    + edge_id.len()
+                    + estimate_edge_size(deleted_edge)
+            }
             UndoOperation::Batch { operations } => {
                 // For batch operations, sum up the size of all individual operations
                 let mut total_size = std::mem::size_of::<UndoOperation>();
                 for op in operations {
                     total_size += match op {
-                        UndoOperation::InsertNode { graph_path, node_id } => {
+                        UndoOperation::InsertNode {
+                            graph_path,
+                            node_id,
+                        } => {
                             std::mem::size_of::<UndoOperation>() + graph_path.len() + node_id.len()
-                        },
-                        UndoOperation::UpdateNode { graph_path, node_id, old_properties, old_labels } => {
-                            let props_size = old_properties.iter()
+                        }
+                        UndoOperation::UpdateNode {
+                            graph_path,
+                            node_id,
+                            old_properties,
+                            old_labels,
+                        } => {
+                            let props_size = old_properties
+                                .iter()
                                 .map(|(k, v)| k.len() + estimate_value_size(v))
                                 .sum::<usize>();
                             let labels_size = old_labels.iter().map(|l| l.len()).sum::<usize>();
-                            std::mem::size_of::<UndoOperation>() + graph_path.len() + node_id.len() + props_size + labels_size
-                        },
-                        UndoOperation::DeleteNode { graph_path, node_id, deleted_node } => {
-                            std::mem::size_of::<UndoOperation>() + graph_path.len() + node_id.len() + estimate_node_size(deleted_node)
-                        },
-                        UndoOperation::InsertEdge { graph_path, edge_id } => {
+                            std::mem::size_of::<UndoOperation>()
+                                + graph_path.len()
+                                + node_id.len()
+                                + props_size
+                                + labels_size
+                        }
+                        UndoOperation::DeleteNode {
+                            graph_path,
+                            node_id,
+                            deleted_node,
+                        } => {
+                            std::mem::size_of::<UndoOperation>()
+                                + graph_path.len()
+                                + node_id.len()
+                                + estimate_node_size(deleted_node)
+                        }
+                        UndoOperation::InsertEdge {
+                            graph_path,
+                            edge_id,
+                        } => {
                             std::mem::size_of::<UndoOperation>() + graph_path.len() + edge_id.len()
-                        },
-                        UndoOperation::UpdateEdge { graph_path, edge_id, old_properties, old_label } => {
-                            let props_size = old_properties.iter()
+                        }
+                        UndoOperation::UpdateEdge {
+                            graph_path,
+                            edge_id,
+                            old_properties,
+                            old_label,
+                        } => {
+                            let props_size = old_properties
+                                .iter()
                                 .map(|(k, v)| k.len() + estimate_value_size(v))
                                 .sum::<usize>();
                             let label_size = old_label.len();
-                            std::mem::size_of::<UndoOperation>() + graph_path.len() + edge_id.len() + props_size + label_size
-                        },
-                        UndoOperation::DeleteEdge { graph_path, edge_id, deleted_edge } => {
-                            std::mem::size_of::<UndoOperation>() + graph_path.len() + edge_id.len() + estimate_edge_size(deleted_edge)
-                        },
+                            std::mem::size_of::<UndoOperation>()
+                                + graph_path.len()
+                                + edge_id.len()
+                                + props_size
+                                + label_size
+                        }
+                        UndoOperation::DeleteEdge {
+                            graph_path,
+                            edge_id,
+                            deleted_edge,
+                        } => {
+                            std::mem::size_of::<UndoOperation>()
+                                + graph_path.len()
+                                + edge_id.len()
+                                + estimate_edge_size(deleted_edge)
+                        }
                         UndoOperation::Batch { .. } => {
                             // Nested batches - just use base size to avoid infinite recursion
                             std::mem::size_of::<UndoOperation>()
-                        },
+                        }
                     };
                 }
                 total_size
-            },
+            }
         };
-        
+
         self.undo_operations.push(operation);
         self.operation_count += 1;
         self.estimated_size_bytes += op_size;
     }
-    
+
     /// Get the operations in rollback order (most recent first)
     #[allow(dead_code)] // ROADMAP v0.3.0 - Rollback operation iteration for ROLLBACK execution
     pub fn get_rollback_operations(&self) -> impl Iterator<Item = &UndoOperation> {
         self.undo_operations.iter().rev()
     }
-    
+
     /// Clear the log (used after commit or rollback)
     #[allow(dead_code)] // ROADMAP v0.3.0 - Clear transaction log after COMMIT/ROLLBACK completion
     pub fn clear(&mut self) {
@@ -171,13 +239,13 @@ impl TransactionLog {
         self.operation_count = 0;
         self.estimated_size_bytes = std::mem::size_of::<Self>();
     }
-    
+
     /// Check if the log is empty
     #[allow(dead_code)] // ROADMAP v0.3.0 - Check if transaction has any undo operations for ROLLBACK decision
     pub fn is_empty(&self) -> bool {
         self.undo_operations.is_empty()
     }
-    
+
     /// Get statistics about the log
     #[allow(dead_code)] // ROADMAP v0.6.0 - Transaction log statistics for monitoring and observability
     pub fn stats(&self) -> TransactionLogStats {
@@ -215,10 +283,12 @@ fn estimate_value_size(value: &Value) -> usize {
 fn estimate_node_size(node: &Node) -> usize {
     let id_size = node.id.len();
     let labels_size = node.labels.iter().map(|l| l.len()).sum::<usize>();
-    let props_size = node.properties.iter()
+    let props_size = node
+        .properties
+        .iter()
         .map(|(k, v)| k.len() + estimate_value_size(v))
         .sum::<usize>();
-    
+
     std::mem::size_of::<Node>() + id_size + labels_size + props_size
 }
 
@@ -228,48 +298,50 @@ fn estimate_edge_size(edge: &Edge) -> usize {
     let from_size = edge.from_node.len();
     let to_size = edge.to_node.len();
     let label_size = edge.label.len();
-    let props_size = edge.properties.iter()
+    let props_size = edge
+        .properties
+        .iter()
         .map(|(k, v)| k.len() + estimate_value_size(v))
         .sum::<usize>();
-    
+
     std::mem::size_of::<Edge>() + id_size + from_size + to_size + label_size + props_size
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_transaction_log_creation() {
         let txn_id = TransactionId::new();
         let log = TransactionLog::new(txn_id);
-        
+
         assert_eq!(log.transaction_id, txn_id);
         assert!(log.is_empty());
         assert_eq!(log.operation_count, 0);
     }
-    
+
     #[test]
     fn test_log_operations() {
         let txn_id = TransactionId::new();
         let mut log = TransactionLog::new(txn_id);
-        
+
         // Log an insert operation
         log.log_operation(UndoOperation::InsertNode {
             graph_path: "/test_graph".to_string(),
             node_id: "node1".to_string(),
         });
-        
+
         assert!(!log.is_empty());
         assert_eq!(log.operation_count, 1);
         assert!(log.estimated_size_bytes > std::mem::size_of::<TransactionLog>());
     }
-    
+
     #[test]
     fn test_rollback_order() {
         let txn_id = TransactionId::new();
         let mut log = TransactionLog::new(txn_id);
-        
+
         // Log operations in order: insert, update, delete
         log.log_operation(UndoOperation::InsertNode {
             graph_path: "/test_graph".to_string(),
@@ -290,30 +362,41 @@ mod tests {
                 properties: HashMap::new(),
             },
         });
-        
+
         // Rollback should be in reverse order: delete, update, insert
         let rollback_ops: Vec<_> = log.get_rollback_operations().collect();
         assert_eq!(rollback_ops.len(), 3);
-        
+
         match rollback_ops[0] {
-            UndoOperation::DeleteNode { graph_path, node_id, .. } => {
+            UndoOperation::DeleteNode {
+                graph_path,
+                node_id,
+                ..
+            } => {
                 assert_eq!(graph_path, "/test_graph");
                 assert_eq!(node_id, "node1");
-            },
+            }
             _ => panic!("Expected DeleteNode operation first"),
         }
         match rollback_ops[1] {
-            UndoOperation::UpdateNode { graph_path, node_id, .. } => {
+            UndoOperation::UpdateNode {
+                graph_path,
+                node_id,
+                ..
+            } => {
                 assert_eq!(graph_path, "/test_graph");
                 assert_eq!(node_id, "node1");
-            },
+            }
             _ => panic!("Expected UpdateNode operation second"),
         }
         match rollback_ops[2] {
-            UndoOperation::InsertNode { graph_path, node_id } => {
+            UndoOperation::InsertNode {
+                graph_path,
+                node_id,
+            } => {
                 assert_eq!(graph_path, "/test_graph");
                 assert_eq!(node_id, "node1");
-            },
+            }
             _ => panic!("Expected InsertNode operation third"),
         }
     }

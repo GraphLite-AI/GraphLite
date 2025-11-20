@@ -6,9 +6,11 @@
 //! This module provides cost estimation functionality for different pattern execution strategies.
 //! It helps the query planner choose between path traversal, joins, and Cartesian products.
 
-use std::collections::HashMap;
 use crate::ast::ast::PathPattern;
-use crate::plan::pattern_optimization::pattern_analysis::{PatternPlanStrategy, LinearPath, JoinStep};
+use crate::plan::pattern_optimization::pattern_analysis::{
+    JoinStep, LinearPath, PatternPlanStrategy,
+};
+use std::collections::HashMap;
 
 /// Statistics about graph data used for cost estimation
 ///
@@ -58,7 +60,12 @@ pub struct ExecutionCost {
 }
 
 impl ExecutionCost {
-    pub fn new(operations: f64, memory_bytes: u64, intermediate_results: u64, confidence: f64) -> Self {
+    pub fn new(
+        operations: f64,
+        memory_bytes: u64,
+        intermediate_results: u64,
+        confidence: f64,
+    ) -> Self {
         Self {
             operations,
             memory_bytes,
@@ -70,7 +77,9 @@ impl ExecutionCost {
     /// Calculate total cost score for comparison (lower is better)
     pub fn total_cost(&self) -> f64 {
         // Weight operations heavily, include memory and intermediate results
-        self.operations + (self.memory_bytes as f64 * 0.001) + (self.intermediate_results as f64 * 0.01)
+        self.operations
+            + (self.memory_bytes as f64 * 0.001)
+            + (self.intermediate_results as f64 * 0.01)
     }
 
     /// Compare costs considering confidence levels
@@ -108,9 +117,11 @@ impl PlanCostEstimator {
             PatternPlanStrategy::PathTraversal(linear_path) => {
                 self.estimate_path_traversal_cost(linear_path)
             }
-            PatternPlanStrategy::HashJoin { patterns, join_order, .. } => {
-                self.estimate_hash_join_cost(patterns, join_order)
-            }
+            PatternPlanStrategy::HashJoin {
+                patterns,
+                join_order,
+                ..
+            } => self.estimate_hash_join_cost(patterns, join_order),
             PatternPlanStrategy::NestedLoopJoin { patterns, .. } => {
                 self.estimate_nested_loop_join_cost(patterns)
             }
@@ -142,10 +153,10 @@ impl PlanCostEstimator {
             let relationship_type = step.relationship.labels.first().unwrap_or(&default_type);
             let avg_relationships = self.get_avg_relationships(relationship_type).unwrap_or(2.0);
             let relationship_cost = start_nodes * avg_relationships;
-            
+
             total_operations += relationship_cost;
             current_cardinality = relationship_cost;
-            
+
             // Memory for intermediate results (assume 1KB per result)
             total_memory += (current_cardinality as u64) * 1024;
         }
@@ -159,7 +170,11 @@ impl PlanCostEstimator {
     }
 
     /// Estimate cost for hash join strategy
-    fn estimate_hash_join_cost(&self, patterns: &[PathPattern], join_order: &[JoinStep]) -> ExecutionCost {
+    fn estimate_hash_join_cost(
+        &self,
+        patterns: &[PathPattern],
+        join_order: &[JoinStep],
+    ) -> ExecutionCost {
         let mut total_operations = 0.0;
         let mut total_memory = 0u64;
         let mut intermediate_size = 0u64;
@@ -177,7 +192,7 @@ impl PlanCostEstimator {
             // Hash join cost is approximately O(n + m) where n, m are input sizes
             let join_cost = intermediate_size as f64 * 1.5;
             total_operations += join_cost;
-            
+
             // Hash table memory overhead
             total_memory += intermediate_size * 512; // 512 bytes per hash entry
         }
@@ -262,18 +277,20 @@ impl PlanCostEstimator {
     fn estimate_pattern_selectivity(&self, _pattern: &PathPattern) -> f64 {
         // For now, use simple heuristics
         let base_selectivity = 0.1; // Assume 10% selectivity
-        
+
         // Reduce selectivity based on number of constraints
         // For now, assume no additional constraints since we don't have direct access to filters
         let constraint_factor = 1.0;
-        
+
         base_selectivity * constraint_factor
     }
 
-
     /// Get average relationships per node for a relationship type
     fn get_avg_relationships(&self, rel_type: &str) -> Option<f64> {
-        self.statistics.avg_relationships_per_node.get(rel_type).copied()
+        self.statistics
+            .avg_relationships_per_node
+            .get(rel_type)
+            .copied()
     }
 
     /// Update statistics with new data
@@ -365,7 +382,7 @@ mod tests {
     fn test_execution_cost_comparison() {
         let cost1 = ExecutionCost::new(1000.0, 1024, 100, 0.8);
         let cost2 = ExecutionCost::new(2000.0, 2048, 200, 0.9);
-        
+
         assert!(cost1.is_better_than(&cost2));
         assert!(!cost2.is_better_than(&cost1));
     }
@@ -375,26 +392,28 @@ mod tests {
         let mut stats = GraphStatistics::default();
         stats.node_counts.insert("Person".to_string(), 1000);
         stats.relationship_counts.insert("KNOWS".to_string(), 500);
-        stats.avg_relationships_per_node.insert("KNOWS".to_string(), 2.0);
+        stats
+            .avg_relationships_per_node
+            .insert("KNOWS".to_string(), 2.0);
 
         let mut estimator = PlanCostEstimator::new(stats);
-        
+
         // Test with a Cartesian product strategy (simpler to create)
-        use crate::ast::ast::{PathPattern, Location};
-        
+        use crate::ast::ast::{Location, PathPattern};
+
         let pattern = PathPattern {
             assignment: None,
             path_type: None,
             elements: vec![],
             location: Location::default(),
         };
-        
-        let strategy = PatternPlanStrategy::CartesianProduct { 
+
+        let strategy = PatternPlanStrategy::CartesianProduct {
             patterns: vec![pattern],
             estimated_cost: 0.0, // Use default cost value
         };
         let cost = estimator.estimate_cost(&strategy);
-        
+
         assert!(cost.operations > 0.0);
         assert!(cost.confidence > 0.0);
     }
@@ -403,14 +422,14 @@ mod tests {
     fn test_statistics_manager() {
         let mut manager = StatisticsManager::new();
         let stats = manager.get_statistics();
-        
+
         // Should start with empty statistics
         assert!(stats.node_counts.is_empty());
         assert!(stats.relationship_counts.is_empty());
-        
+
         // Record some operations
         manager.record_query_execution("MATCH (n) RETURN n", 100);
-        
+
         // Should work without errors
         let estimator = manager.create_cost_estimator();
         assert_eq!(estimator.statistics.node_counts.len(), 0);

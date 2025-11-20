@@ -3,8 +3,8 @@
 //
 //! Lock wait time tracking for query execution
 
-use std::time::{Duration};
 use std::sync::{Mutex, RwLock};
+use std::time::Duration;
 
 /// Lock tracker
 #[derive(Debug, Clone)]

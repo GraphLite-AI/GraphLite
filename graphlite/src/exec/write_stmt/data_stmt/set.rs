@@ -3,12 +3,12 @@
 //
 use std::collections::HashMap;
 
-use crate::ast::ast::{SetStatement, SetItem};
-use crate::exec::ExecutionError;
-use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
+use crate::ast::ast::{SetItem, SetStatement};
 use crate::exec::write_stmt::data_stmt::DataStatementExecutor;
+use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
+use crate::exec::ExecutionError;
 use crate::storage::GraphCache;
-use crate::txn::{UndoOperation, state::OperationType};
+use crate::txn::{state::OperationType, UndoOperation};
 
 /// Executor for SET statements
 pub struct SetExecutor {
@@ -26,15 +26,16 @@ impl StatementExecutor for SetExecutor {
     fn operation_type(&self) -> OperationType {
         OperationType::Set
     }
-    
+
     fn operation_description(&self, context: &ExecutionContext) -> String {
-        let graph_name = context.get_graph_name().unwrap_or_else(|_| "unknown".to_string());
+        let graph_name = context
+            .get_graph_name()
+            .unwrap_or_else(|_| "unknown".to_string());
         format!("SET properties in graph '{}'", graph_name)
     }
 }
 
 impl DataStatementExecutor for SetExecutor {
-    
     fn execute_modification(
         &self,
         graph: &mut GraphCache,
@@ -51,12 +52,14 @@ impl DataStatementExecutor for SetExecutor {
             match item {
                 SetItem::PropertyAssignment { property, value } => {
                     // Evaluate the value - fail immediately if invalid (no partial updates!)
-                    let new_value = context.evaluate_simple_expression(value)
-                        .map_err(|e| ExecutionError::ExpressionError(
-                            format!("Failed to evaluate SET property '{}': {}. Transaction aborted.", property.property, e)
-                        ))?;
+                    let new_value = context.evaluate_simple_expression(value).map_err(|e| {
+                        ExecutionError::ExpressionError(format!(
+                            "Failed to evaluate SET property '{}': {}. Transaction aborted.",
+                            property.property, e
+                        ))
+                    })?;
                     evaluated_properties.push((property.clone(), new_value));
-                },
+                }
                 _ => {} // Handle other item types separately
             }
         }
@@ -67,7 +70,8 @@ impl DataStatementExecutor for SetExecutor {
 
             // Find and update nodes with this variable identifier
             // This is a simplified approach - in reality, would use execution context
-            let node_ids_to_update: Vec<String> = graph.get_all_nodes()
+            let node_ids_to_update: Vec<String> = graph
+                .get_all_nodes()
                 .iter()
                 .filter(|node| node.id == *var_name || node.labels.contains(var_name))
                 .map(|node| node.id.clone())
@@ -84,7 +88,12 @@ impl DataStatementExecutor for SetExecutor {
                 // Update the node
                 if let Some(node_mut) = graph.get_node_mut(&node_id) {
                     node_mut.set_property(property.property.clone(), new_value.clone());
-                    log::debug!("Set property {} on node {} to {:?}", property.property, node_id, new_value);
+                    log::debug!(
+                        "Set property {} on node {} to {:?}",
+                        property.property,
+                        node_id,
+                        new_value
+                    );
                     updated_count += 1;
 
                     // Add undo operation
@@ -103,12 +112,20 @@ impl DataStatementExecutor for SetExecutor {
             match item {
                 SetItem::PropertyAssignment { .. } => {
                     // Already handled above
-                },
+                }
                 SetItem::VariableAssignment { variable, value } => {
-                    log::warn!("Variable assignment in SET not yet fully supported: {} = {:?}", variable, value);
-                },
+                    log::warn!(
+                        "Variable assignment in SET not yet fully supported: {} = {:?}",
+                        variable,
+                        value
+                    );
+                }
                 SetItem::LabelAssignment { variable, labels } => {
-                    log::warn!("Label assignment in SET not yet fully supported: {} {:?}", variable, labels);
+                    log::warn!(
+                        "Label assignment in SET not yet fully supported: {} {:?}",
+                        variable,
+                        labels
+                    );
                 }
             }
         }

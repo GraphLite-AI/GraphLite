@@ -7,20 +7,20 @@
 //! the existing TypeSpec defined in the AST. It includes type inference, validation,
 //! coercion, and casting engines.
 
+pub mod casting;
+pub mod coercion;
 pub mod inference;
 pub mod validation;
-pub mod coercion;
-pub mod casting;
 
 use std::fmt;
 
-pub use self::inference::{TypeInferenceEngine as TypeInference};
-pub use self::validation::TypeValidator;
-pub use self::coercion::{TypeCoercion, CoercionStrategy};
 pub use self::casting::TypeCaster;
+pub use self::coercion::{CoercionStrategy, TypeCoercion};
+pub use self::inference::TypeInferenceEngine as TypeInference;
+pub use self::validation::TypeValidator;
 
 // Re-export TypeSpec as the main type for the type system
-pub use crate::ast::ast::{TypeSpec as GqlType, GraphTypeSpec};
+pub use crate::ast::ast::{GraphTypeSpec, TypeSpec as GqlType};
 
 /// Type error for type system operations
 #[derive(Debug, Clone)]
@@ -30,7 +30,10 @@ pub enum TypeError {
     #[allow(dead_code)] // ISO GQL - Type casting operations
     InvalidCast(String, String),
     #[allow(dead_code)] // ISO GQL - Type validation and checking
-    TypeMismatch { expected: String, actual: String },
+    TypeMismatch {
+        expected: String,
+        actual: String,
+    },
     InvalidTypeSpecification(String),
     #[allow(dead_code)] // ISO GQL - NOT NULL constraint violations
     NullabilityViolation(String),

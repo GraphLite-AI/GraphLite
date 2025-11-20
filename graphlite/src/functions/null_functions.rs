@@ -7,7 +7,7 @@
 //! - NULLIF: Returns NULL if two expressions are equal, otherwise returns the first expression
 //! - COALESCE: Returns the first non-NULL expression from a list of expressions
 
-use super::function_trait::{Function, FunctionContext, FunctionResult, FunctionError};
+use super::function_trait::{Function, FunctionContext, FunctionError, FunctionResult};
 use crate::storage::Value;
 
 // ==============================================================================
@@ -28,27 +28,27 @@ impl Function for NullIfFunction {
     fn name(&self) -> &str {
         "NULLIF"
     }
-    
+
     fn description(&self) -> &str {
         "Returns NULL if expr1 equals expr2, otherwise returns expr1"
     }
-    
+
     fn argument_count(&self) -> usize {
         2 // NULLIF(expr1, expr2)
     }
-    
+
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         // Validate argument count
         context.validate_argument_count(2)?;
-        
+
         let expr1 = context.get_argument(0)?;
         let expr2 = context.get_argument(1)?;
-        
+
         // If either expression is NULL, return expr1 (following SQL semantics)
         if expr1.is_null() || expr2.is_null() {
             return Ok(expr1.clone());
         }
-        
+
         // Compare the values
         if expr1 == expr2 {
             Ok(Value::Null)
@@ -56,7 +56,7 @@ impl Function for NullIfFunction {
             Ok(expr1.clone())
         }
     }
-    
+
     fn return_type(&self) -> &str {
         "Any" // Returns the type of the first expression or NULL
     }
@@ -80,15 +80,15 @@ impl Function for CoalesceFunction {
     fn name(&self) -> &str {
         "COALESCE"
     }
-    
+
     fn description(&self) -> &str {
         "Returns the first non-NULL expression from a list of expressions"
     }
-    
+
     fn argument_count(&self) -> usize {
         0 // COALESCE accepts variable number of arguments, but we need at least 1
     }
-    
+
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         // COALESCE must have at least one argument
         if context.argument_count() == 0 {
@@ -97,7 +97,7 @@ impl Function for CoalesceFunction {
                 actual: 0,
             });
         }
-        
+
         // Return the first non-NULL value
         for i in 0..context.argument_count() {
             let arg = context.get_argument(i)?;
@@ -105,11 +105,11 @@ impl Function for CoalesceFunction {
                 return Ok(arg.clone());
             }
         }
-        
+
         // If all arguments are NULL, return NULL
         Ok(Value::Null)
     }
-    
+
     fn return_type(&self) -> &str {
         "Any" // Returns the type of the first non-NULL expression or NULL
     }
@@ -130,9 +130,9 @@ mod tests {
         let context = FunctionContext::new(
             vec![],
             HashMap::new(),
-            vec![Value::Number(5.0), Value::Number(5.0)]
+            vec![Value::Number(5.0), Value::Number(5.0)],
         );
-        
+
         let result = func.execute(&context).unwrap();
         assert!(result.is_null());
     }
@@ -143,9 +143,9 @@ mod tests {
         let context = FunctionContext::new(
             vec![],
             HashMap::new(),
-            vec![Value::Number(5.0), Value::Number(3.0)]
+            vec![Value::Number(5.0), Value::Number(3.0)],
         );
-        
+
         let result = func.execute(&context).unwrap();
         assert_eq!(result, Value::Number(5.0));
     }
@@ -156,9 +156,9 @@ mod tests {
         let context = FunctionContext::new(
             vec![],
             HashMap::new(),
-            vec![Value::Null, Value::Number(3.0)]
+            vec![Value::Null, Value::Number(3.0)],
         );
-        
+
         let result = func.execute(&context).unwrap();
         assert!(result.is_null());
     }
@@ -169,9 +169,9 @@ mod tests {
         let context = FunctionContext::new(
             vec![],
             HashMap::new(),
-            vec![Value::Number(5.0), Value::Null]
+            vec![Value::Number(5.0), Value::Null],
         );
-        
+
         let result = func.execute(&context).unwrap();
         assert_eq!(result, Value::Number(5.0));
     }
@@ -182,9 +182,12 @@ mod tests {
         let context = FunctionContext::new(
             vec![],
             HashMap::new(),
-            vec![Value::String("hello".to_string()), Value::String("hello".to_string())]
+            vec![
+                Value::String("hello".to_string()),
+                Value::String("hello".to_string()),
+            ],
         );
-        
+
         let result = func.execute(&context).unwrap();
         assert!(result.is_null());
     }
@@ -195,9 +198,9 @@ mod tests {
         let context = FunctionContext::new(
             vec![],
             HashMap::new(),
-            vec![Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]
+            vec![Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)],
         );
-        
+
         let result = func.execute(&context).unwrap();
         assert_eq!(result, Value::Number(1.0));
     }
@@ -208,9 +211,14 @@ mod tests {
         let context = FunctionContext::new(
             vec![],
             HashMap::new(),
-            vec![Value::Null, Value::Null, Value::String("found".to_string()), Value::Number(4.0)]
+            vec![
+                Value::Null,
+                Value::Null,
+                Value::String("found".to_string()),
+                Value::Number(4.0),
+            ],
         );
-        
+
         let result = func.execute(&context).unwrap();
         assert_eq!(result, Value::String("found".to_string()));
     }
@@ -221,9 +229,9 @@ mod tests {
         let context = FunctionContext::new(
             vec![],
             HashMap::new(),
-            vec![Value::Null, Value::Null, Value::Null]
+            vec![Value::Null, Value::Null, Value::Null],
         );
-        
+
         let result = func.execute(&context).unwrap();
         assert!(result.is_null());
     }
@@ -234,9 +242,9 @@ mod tests {
         let context = FunctionContext::new(
             vec![],
             HashMap::new(),
-            vec![Value::String("single".to_string())]
+            vec![Value::String("single".to_string())],
         );
-        
+
         let result = func.execute(&context).unwrap();
         assert_eq!(result, Value::String("single".to_string()));
     }
@@ -244,12 +252,8 @@ mod tests {
     #[test]
     fn test_coalesce_no_arguments() {
         let func = CoalesceFunction::new();
-        let context = FunctionContext::new(
-            vec![],
-            HashMap::new(),
-            vec![]
-        );
-        
+        let context = FunctionContext::new(vec![], HashMap::new(), vec![]);
+
         let result = func.execute(&context);
         assert!(result.is_err());
     }

@@ -8,8 +8,8 @@ use serde_json::json;
 
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::QueryType;
-use crate::schema::types::GraphTypeDefinition;
 use crate::exec::ExecutionError;
+use crate::schema::types::GraphTypeDefinition;
 
 /// Validates that index operations reference valid schema elements
 /// Uses synchronous operations using synchronous operations
@@ -20,9 +20,7 @@ pub struct IndexSchemaValidator<'a> {
 impl<'a> IndexSchemaValidator<'a> {
     /// Create a new index schema validator with a reference
     pub fn new(catalog_manager: &'a CatalogManager) -> Self {
-        Self {
-            catalog_manager,
-        }
+        Self { catalog_manager }
     }
 }
 
@@ -39,7 +37,10 @@ impl<'a> IndexSchemaValidator<'a> {
             Ok(Some(gt)) => gt,
             Ok(None) => {
                 // No schema defined, allow index creation
-                log::info!("No schema defined for graph '{}', allowing index creation", graph_name);
+                log::info!(
+                    "No schema defined for graph '{}', allowing index creation",
+                    graph_name
+                );
                 return Ok(());
             }
             Err(e) => return Err(e),
@@ -78,7 +79,10 @@ impl<'a> IndexSchemaValidator<'a> {
                     }
                     crate::schema::types::DataType::List(_) => {
                         // List types might not be directly indexable
-                        log::warn!("Creating index on list property '{}' - may have limited effectiveness", property);
+                        log::warn!(
+                            "Creating index on list property '{}' - may have limited effectiveness",
+                            property
+                        );
                     }
                     _ => {
                         // Other types are generally indexable
@@ -86,8 +90,15 @@ impl<'a> IndexSchemaValidator<'a> {
                 }
 
                 // Check if there's a unique constraint that could benefit from an index
-                if prop_def.constraints.iter().any(|c| matches!(c, crate::schema::types::Constraint::Unique)) {
-                    log::info!("Creating index on unique property '{}' - will enforce uniqueness", property);
+                if prop_def
+                    .constraints
+                    .iter()
+                    .any(|c| matches!(c, crate::schema::types::Constraint::Unique))
+                {
+                    log::info!(
+                        "Creating index on unique property '{}' - will enforce uniqueness",
+                        property
+                    );
                 }
             }
         }
@@ -106,7 +117,10 @@ impl<'a> IndexSchemaValidator<'a> {
             Ok(Some(gt)) => gt,
             Ok(None) => {
                 // No schema defined, allow rebuild
-                log::info!("No schema defined for graph '{}', allowing index rebuild", graph_name);
+                log::info!(
+                    "No schema defined for graph '{}', allowing index rebuild",
+                    graph_name
+                );
                 return Ok(());
             }
             Err(e) => return Err(e),
@@ -114,7 +128,11 @@ impl<'a> IndexSchemaValidator<'a> {
 
         // The actual index metadata validation would happen here
         // For now, we just validate the graph has a schema
-        log::info!("Validated index '{}' for rebuild in graph '{}'", index_name, graph_name);
+        log::info!(
+            "Validated index '{}' for rebuild in graph '{}'",
+            index_name,
+            graph_name
+        );
 
         Ok(())
     }
@@ -139,7 +157,11 @@ impl<'a> IndexSchemaValidator<'a> {
         // Suggest indexes for properties with unique constraints
         for node_type in &graph_type.node_types {
             for property in &node_type.properties {
-                if property.constraints.iter().any(|c| matches!(c, crate::schema::types::Constraint::Unique)) {
+                if property
+                    .constraints
+                    .iter()
+                    .any(|c| matches!(c, crate::schema::types::Constraint::Unique))
+                {
                     suggestions.push(IndexSuggestion {
                         label: node_type.label.clone(),
                         properties: vec![property.name.clone()],
@@ -164,9 +186,16 @@ impl<'a> IndexSchemaValidator<'a> {
     }
 
     /// Get the graph type definition for a graph (synchronous)
-    fn get_graph_type(&self, graph_name: &str) -> Result<Option<GraphTypeDefinition>, ExecutionError> {
+    fn get_graph_type(
+        &self,
+        graph_name: &str,
+    ) -> Result<Option<GraphTypeDefinition>, ExecutionError> {
         // First, try to get the graph metadata to find its type
-        match self.catalog_manager.query_read_only("graph", QueryType::GetGraph, json!({ "name": graph_name })) {
+        match self.catalog_manager.query_read_only(
+            "graph",
+            QueryType::GetGraph,
+            json!({ "name": graph_name }),
+        ) {
             Ok(response) => {
                 // Extract graph type name from response
                 if let Some(data) = response.data() {
@@ -175,12 +204,14 @@ impl<'a> IndexSchemaValidator<'a> {
                         match self.catalog_manager.query_read_only(
                             "graph_type",
                             QueryType::GetGraphType,
-                            json!({ "name": graph_type_name })
+                            json!({ "name": graph_type_name }),
                         ) {
                             Ok(type_response) => {
                                 // Parse the graph type definition from the response
                                 if let Some(type_data) = type_response.data() {
-                                    match serde_json::from_value::<GraphTypeDefinition>(type_data.clone()) {
+                                    match serde_json::from_value::<GraphTypeDefinition>(
+                                        type_data.clone(),
+                                    ) {
                                         Ok(graph_type) => Ok(Some(graph_type)),
                                         Err(_) => Ok(None),
                                     }
@@ -225,7 +256,6 @@ pub enum IndexPriority {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_index_validator_creation() {
