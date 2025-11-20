@@ -1,14 +1,8 @@
 name: Python Bindings
 
 on:
-  push:
-    branches: [ main, develop ]
-    paths:
-      - 'bindings/python/**'
-      - 'graphlite-ffi/**'
-      - '.github/workflows/python-bindings.yml'
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
     paths:
       - 'bindings/python/**'
       - 'graphlite-ffi/**'
