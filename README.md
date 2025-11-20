@@ -1,9 +1,9 @@
 # GraphLite
 
-**Graph Database as Simple as SQLite for Embedded Processes**
+**A graph database as simple as SQLite for embedded processes**
 
-GraphLite is an embedded, light-weight, fast and portable graph database that brings the power of the new **ISO GQL (Graph Query Language)** standard, to the simplicity of SQLite.<p> 
-Users can get setup using just a single binary and data without the need for server or daemon-based setups. Perfect for applications that need graph database capabilities without the complexity of client-server architectures.
+GraphLite is a fast, light-weight and portable embedded graph database that brings the power of the new **ISO GQL (Graph Query Language)** standard to the simplicity of SQLite.<p> 
+GraphLite uses a single binary and is an ideal solution for applications requiring graph database capabilities without the complexity of client-server architectures.
 
 ## Features
 
@@ -94,7 +94,8 @@ cd GraphLite
 
 After building, the binary will be available at `target/release/graphlite`.
 
-### Advanced Build Options
+<details>
+<summary><b>Custom Build Options</b></summary>
 
 ```bash
 # Development build (faster compilation, slower runtime)
@@ -109,41 +110,24 @@ After building, the binary will be available at `target/release/graphlite`.
 # View all options
 ./scripts/build_all.sh --help
 ```
+</details>
 
-### Alternative: Manual Build with Cargo
+<details>
+<summary><b>Advanced: Manual Build with Cargo</b></summary>
 
 If you prefer to build manually without the script:
 
-**Recommended for**:
-- **Development**: `./scripts/build_all.sh` (debug mode, faster compilation)
-- **Production/Distribution**: `./scripts/build_all.sh --release` (optimized binaries)
-- **Clean builds**: `./scripts/build_all.sh --clean --release` (when dependencies change)
-- **CI/CD validation**: `./scripts/build_all.sh --release --test` (build + test in one command)
+1. Build in `release` mode for production-use:
+    ```bash
+    cargo build --release
+    ```
 
-### Cleanup Script
+2. Build in `debug` mode for development:
 
-GraphLite includes a comprehensive cleanup script to uninstall and remove all project artifacts:
-
-```bash
-# Show help (also shown when no options provided)
-./scripts/cleanup.sh --help
-
-# Clean build artifacts only
-./scripts/cleanup.sh --build
-
-# Clean Python/Java bindings
-./scripts/cleanup.sh --bindings
-
-# Complete cleanup (bindings, build artifacts, data, config)
-./scripts/cleanup.sh --all
-```
-
-**What gets cleaned**:
-- `--build`: Rust build artifacts, compiled binaries, Cargo.lock
-- `--bindings`: Python packages, Java artifacts, compiled libraries
-- `--all`: Everything above plus database files, configuration, logs
-
-**Safety**: The script requires an explicit option to prevent accidental cleanup.
+    ```bash
+    cargo build
+    ```
+</details>
 
 ### Step 2: Initialize Database
 
@@ -153,10 +137,10 @@ GraphLite includes a comprehensive cleanup script to uninstall and remove all pr
 ```
 
 This command:
-- Creates database files at `./my_db`
-- Sets up the admin user with the specified password
-- Creates default admin and user roles
-- Initializes the default schema
+- Creates a new database at path: `./my_db`.
+- Sets up the `admin` user with the specified password.
+- Creates default admin and user roles.
+- Initializes the default schema.
 
 ### Step 3: Start Using GQL
 
@@ -165,7 +149,10 @@ This command:
 ./target/release/graphlite gql --path ./my_db -u admin -p secret
 ```
 
-That's it! You're now ready to create graphs and run queries.
+That's it! You're now ready to create graphs and run queries:
+```bash
+$ gql>
+```
 
 **📚 Next Steps:**
 - **[Quick Start.md](docs/Quick%20Start.md)** - 5-minute tutorial with first queries
@@ -369,7 +356,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 - [Getting Started With GQL.md](docs/Getting%20Started%20With%20GQL.md) - Complete query language reference
 - [graphlite-sdk/README.md](graphlite-sdk/README.md) - Full SDK documentation
 
+<details>
+<summary><b>Uninstall options</b></summary>
 
+### Cleanup Script
+
+GraphLite includes a comprehensive cleanup script to uninstall and remove all project artifacts:
+
+```bash
+# Show help (also shown when no options provided)
+./scripts/cleanup.sh --help
+
+# Clean build artifacts only
+./scripts/cleanup.sh --build
+
+# Clean Python/Java bindings
+./scripts/cleanup.sh --bindings
+
+# Complete cleanup (bindings, build artifacts, data, config)
+./scripts/cleanup.sh --all
+```
+
+**What gets cleaned**:
+- `--build`: Rust build artifacts, compiled binaries, Cargo.lock
+- `--bindings`: Python packages, Java artifacts, compiled libraries
+- `--all`: Everything above plus database files, configuration, logs
+
+</details>
 
 ---
 
