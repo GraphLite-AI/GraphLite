@@ -1,0 +1,82 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    # Run weekly on Monday at 9:00 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  update-rust-dependencies:
+    name: Update Rust Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-edit
+        run: cargo install cargo-edit
+
+      - name: Update dependencies
+        run: |
+          cargo update
+          cargo upgrade --workspace
+
+      - name: Run tests
+        run: |
+          ./scripts/build_all.sh --release --test
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: update Rust dependencies'
+          title: 'chore: Update Rust dependencies'
+          body: |
+            ## Automated Dependency Update
+
+            This PR updates the Rust dependencies to their latest compatible versions.
+
+            ### Changes
+            - Updated `Cargo.lock` with latest dependency versions
+            - Verified builds and tests pass with new versions
+
+            ### Next Steps
+            - Review the changes
+            - Check for any breaking changes in updated dependencies
+            - Merge if all checks pass
+          branch: chore/update-rust-deps
+          delete-branch: true
+          labels: dependencies, automated
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run security audit
+        run: cargo audit
+
+      - name: Create issue if vulnerabilities found
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'Security vulnerabilities found in dependencies',
+              body: 'The scheduled security audit found vulnerabilities. Please review and update affected dependencies.\n\nRun `cargo audit` locally for details.',
+              labels: ['security', 'dependencies', 'automated']
+            })

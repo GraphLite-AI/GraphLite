@@ -1,0 +1,180 @@
+name: Python Bindings
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'bindings/python/**'
+      - 'graphlite-ffi/**'
+      - '.github/workflows/python-bindings.yml'
+  workflow_dispatch:
+
+jobs:
+  test-python-bindings:
+    name: Test Python Bindings - ${{ matrix.os }} - Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install build dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-ffi-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build Rust FFI library
+        run: |
+          cd graphlite-ffi
+          cargo build --release
+
+      - name: Install Python package in development mode
+        run: |
+          cd bindings/python
+          pip install -e ".[dev]"
+
+      - name: Run Python tests
+        run: |
+          cd bindings/python
+          pytest tests/ -v --cov=graphlite --cov-report=xml --cov-report=term
+
+      - name: Check code formatting with black
+        run: |
+          cd bindings/python
+          black --check .
+
+      - name: Run type checking with mypy
+        run: |
+          cd bindings/python
+          mypy graphlite --ignore-missing-imports
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./bindings/python/coverage.xml
+          flags: python-${{ matrix.python-version }}
+          fail_ci_if_error: false
+
+  build-wheels:
+    name: Build Python Wheels - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install build dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Build Rust FFI library
+        run: |
+          cd graphlite-ffi
+          cargo build --release
+
+      - name: Install Python build tools
+        run: |
+          pip install build wheel setuptools
+
+      - name: Build wheel
+        run: |
+          cd bindings/python
+          python -m build
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-wheel-${{ matrix.os }}
+          path: bindings/python/dist/*.whl
+          retention-days: 7
+
+  quick-start-example:
+    name: Test Quick Start Example - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install build dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Build Rust FFI library
+        run: |
+          cd graphlite-ffi
+          cargo build --release
+
+      - name: Install Python package
+        run: |
+          cd bindings/python
+          pip install -e .
+
+      - name: Run quick start example
+        run: |
+          cd bindings/python
+          if [ -f examples/quick_start.py ]; then
+            python examples/quick_start.py
+          else
+            echo "Quick start example not found, skipping..."
+          fi

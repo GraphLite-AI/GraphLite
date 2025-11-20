@@ -1,0 +1,14 @@
+# act configuration for local GitHub Actions testing
+# See: https://github.com/nektos/act
+
+# Use larger runner images (recommended for Rust projects)
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+
+# Set container architecture
+--container-architecture linux/amd64
+
+# Bind workspace for better performance
+--bind
+
+# Use .secrets file for secrets (create this file locally, add to .gitignore)
+# --secret-file .secrets
