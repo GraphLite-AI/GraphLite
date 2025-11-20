@@ -85,24 +85,24 @@ CALL show_session();
 -- Copy-paste this entire block into GraphLite REPL
 -- ============================================
 
--- Insert Person nodes
-INSERT (:Person {name: 'Alice Johnson', age: 30, email: 'alice@example.com', city: 'New York', joined: '2020-01-15', status: 'active'});
-INSERT (:Person {name: 'Bob Smith', age: 25, email: 'bob@example.com', city: 'San Francisco', joined: '2021-03-20', status: 'active'});
-INSERT (:Person {name: 'Carol Williams', age: 28, email: 'carol@example.com', city: 'New York', joined: '2020-06-10', status: 'active'});
-INSERT (:Person {name: 'David Brown', age: 35, email: 'david@example.com', city: 'Chicago', joined: '2019-11-05', status: 'inactive'});
-INSERT (:Person {name: 'Eve Davis', age: 27, email: 'eve@example.com', city: 'San Francisco', joined: '2021-08-12', status: 'active'});
-INSERT (:Person {name: 'Frank Miller', age: 32, email: 'frank@example.com', city: 'Boston', joined: '2020-04-18', status: 'active'});
+-- Insert Person nodes (multiple nodes in one INSERT statement)
+INSERT (:Person {name: 'Alice Johnson', age: 30, email: 'alice@example.com', city: 'New York', joined: '2020-01-15', status: 'active'}),
+       (:Person {name: 'Bob Smith', age: 25, email: 'bob@example.com', city: 'San Francisco', joined: '2021-03-20', status: 'active'}),
+       (:Person {name: 'Carol Williams', age: 28, email: 'carol@example.com', city: 'New York', joined: '2020-06-10', status: 'active'}),
+       (:Person {name: 'David Brown', age: 35, email: 'david@example.com', city: 'Chicago', joined: '2019-11-05', status: 'inactive'}),
+       (:Person {name: 'Eve Davis', age: 27, email: 'eve@example.com', city: 'San Francisco', joined: '2021-08-12', status: 'active'}),
+       (:Person {name: 'Frank Miller', age: 32, email: 'frank@example.com', city: 'Boston', joined: '2020-04-18', status: 'active'});
 
 -- Insert Company nodes
-INSERT (:Company {name: 'TechCorp', industry: 'Technology', founded: '2010-01-01', employees: 500, revenue: 50000000});
-INSERT (:Company {name: 'DataInc', industry: 'Analytics', founded: '2015-06-15', employees: 200, revenue: 20000000});
-INSERT (:Company {name: 'CloudSystems', industry: 'Cloud Services', founded: '2012-03-10', employees: 800, revenue: 100000000});
+INSERT (:Company {name: 'TechCorp', industry: 'Technology', founded: '2010-01-01', employees: 500, revenue: 50000000}),
+       (:Company {name: 'DataInc', industry: 'Analytics', founded: '2015-06-15', employees: 200, revenue: 20000000}),
+       (:Company {name: 'CloudSystems', industry: 'Cloud Services', founded: '2012-03-10', employees: 800, revenue: 100000000});
 
 -- Insert Project nodes
-INSERT (:Project {name: 'AI Platform', budget: 5000000, start_date: '2023-01-01', status: 'active', priority: 'high'});
-INSERT (:Project {name: 'Mobile App', budget: 2000000, start_date: '2023-03-15', status: 'active', priority: 'medium'});
-INSERT (:Project {name: 'Data Pipeline', budget: 3000000, start_date: '2022-09-01', status: 'completed', priority: 'high'});
-INSERT (:Project {name: 'Security Audit', budget: 500000, start_date: '2023-06-01', status: 'planned', priority: 'low'});
+INSERT (:Project {name: 'AI Platform', budget: 5000000, start_date: '2023-01-01', status: 'active', priority: 'high'}),
+       (:Project {name: 'Mobile App', budget: 2000000, start_date: '2023-03-15', status: 'active', priority: 'medium'}),
+       (:Project {name: 'Data Pipeline', budget: 3000000, start_date: '2022-09-01', status: 'completed', priority: 'high'}),
+       (:Project {name: 'Security Audit', budget: 500000, start_date: '2023-06-01', status: 'planned', priority: 'low'});
 
 -- Create KNOWS relationships
 MATCH (alice:Person {name: 'Alice Johnson'}), (bob:Person {name: 'Bob Smith'}) INSERT (alice)-[:KNOWS {since: '2020-05-10', strength: 'strong'}]->(bob);
