@@ -130,5 +130,28 @@ class Session:
         except Exception as e:
             raise QueryError(f"Execute failed: {e}")
 
+    def transaction(self):
+        """
+        Begin a new transaction
+
+        Returns a Transaction object that should be used as a context manager.
+        The transaction will automatically roll back when the context exits
+        unless commit() is explicitly called.
+
+        Returns:
+            Transaction instance
+
+        Raises:
+            TransactionError: If transaction cannot be started
+
+        Examples:
+            >>> with session.transaction() as tx:
+            ...     tx.execute("CREATE (p:Person {name: 'Alice'})")
+            ...     tx.execute("CREATE (p:Person {name: 'Bob'})")
+            ...     tx.commit()  # Must commit to persist changes
+        """
+        from .transaction import Transaction
+        return Transaction(self)
+
 
 __all__ = ['GraphLite', 'Session', 'QueryResult']

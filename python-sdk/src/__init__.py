@@ -60,7 +60,7 @@ Your Application
 
 from .error import GraphLiteError
 from .connection import GraphLite, Session
-# from .transaction import Transaction
+from .transaction import Transaction
 # from .query import QueryBuilder
 # from .result import TypedResult
 
@@ -72,7 +72,7 @@ __all__ = [
     "Session",
 
     # Transaction support
-    # "Transaction",
+    "Transaction",
 
     # Query building
     # "QueryBuilder",

@@ -51,33 +51,33 @@ def main() -> int:
         session = db.session("admin")
         print("   ✓ Session created for user 'admin'\n")
 
-        # # 3. Execute DDL statements
-        # print("3. Creating schema and graph...")
-        # session.execute("CREATE SCHEMA IF NOT EXISTS /example")
-        # session.execute("SESSION SET SCHEMA /example")
-        # session.execute("CREATE GRAPH IF NOT EXISTS social")
-        # session.execute("SESSION SET GRAPH social")
-        # print("   ✓ Schema and graph created\n")
+        # 3. Execute DDL statements
+        print("3. Creating schema and graph...")
+        session.execute("CREATE SCHEMA IF NOT EXISTS /example")
+        session.execute("SESSION SET SCHEMA /example")
+        session.execute("CREATE GRAPH IF NOT EXISTS social")
+        session.execute("SESSION SET GRAPH social")
+        print("   ✓ Schema and graph created\n")
 
-        # # 4. Insert data using transactions
-        # print("4. Inserting data with transaction...")
-        # with session.transaction() as tx:
-        #     tx.execute("CREATE (p:Person {name: 'Alice', age: 30})")
-        #     tx.execute("CREATE (p:Person {name: 'Bob', age: 25})")
-        #     tx.execute("CREATE (p:Person {name: 'Charlie', age: 35})")
-        #     tx.commit()
-        # print("   ✓ Inserted 3 persons\n")
+        # 4. Insert data using transactions
+        print("4. Inserting data with transaction...")
+        with session.transaction() as tx:
+            tx.execute("CREATE (p:Person {name: 'Alice', age: 30})")
+            tx.execute("CREATE (p:Person {name: 'Bob', age: 25})")
+            tx.execute("CREATE (p:Person {name: 'Charlie', age: 35})")
+            tx.commit()
+        print("   ✓ Inserted 3 persons\n")
 
-        # # 5. Query data directly
-        # print("5. Querying data...")
-        # result = session.query("MATCH (p:Person) RETURN p.name as name, p.age as age")
-        # print(f"   Found {len(result.rows)} persons:")
-        # for row in result.rows:
-        #     name = row.get_value("name")
-        #     age = row.get_value("age")
-        #     if name is not None and age is not None:
-        #         print(f"   - Name: {name}, Age: {age}")
-        # print()
+        # 5. Query data directly
+        print("5. Querying data...")
+        result = session.query("MATCH (p:Person) RETURN p.name as name, p.age as age")
+        print(f"   Found {len(result.rows)} persons:")
+        for row in result.rows:
+            name = row.get_value("name")
+            age = row.get_value("age")
+            if name is not None and age is not None:
+                print(f"   - Name: {name}, Age: {age}")
+        print()
 
         # # 6. Use query builder
         # print("6. Using query builder...")
