@@ -51,3 +51,7 @@ gradle/
 # Runtime database directories
 graphlite-ffi/data/
 my_db/
+
+# GitHub Actions local testing
+.secrets
+.env

@@ -1,0 +1,228 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g., v0.1.0)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.tag }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION}"
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          release_name: GraphLite ${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: false
+          body: |
+            ## GraphLite ${{ steps.get_version.outputs.version }}
+
+            ### Downloads
+            - Linux (x86_64): `graphlite-linux-x86_64`
+            - macOS (x86_64): `graphlite-macos-x86_64`
+            - macOS (ARM64): `graphlite-macos-aarch64`
+
+            ### Installation
+            ```bash
+            # Linux/macOS
+            chmod +x graphlite-*
+            sudo mv graphlite-* /usr/local/bin/graphlite
+            ```
+
+            ### Changes
+            See the commit history for detailed changes.
+
+  build-release:
+    name: Build Release - ${{ matrix.target }}
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: graphlite
+            asset_name: graphlite-linux-x86_64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: graphlite
+            asset_name: graphlite-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: graphlite
+            asset_name: graphlite-macos-aarch64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install build dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-build-release-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binary
+        run: |
+          ./scripts/build_all.sh --release
+
+      - name: Strip binary (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        run: strip target/release/${{ matrix.artifact_name }}
+
+      - name: Rename binary
+        run: |
+          cp target/release/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ matrix.asset_name }}
+          asset_name: ${{ matrix.asset_name }}
+          asset_content_type: application/octet-stream
+
+      - name: Generate checksum
+        run: |
+          if [ "${{ matrix.os }}" == "macos-latest" ]; then
+            shasum -a 256 ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256
+          else
+            sha256sum ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256
+          fi
+
+      - name: Upload checksum
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ matrix.asset_name }}.sha256
+          asset_name: ${{ matrix.asset_name }}.sha256
+          asset_content_type: text/plain
+
+  build-python-wheels:
+    name: Build Python Wheels - ${{ matrix.os }} - Python ${{ matrix.python-version }}
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install build dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Build Rust FFI library
+        run: |
+          cd graphlite-ffi
+          cargo build --release
+
+      - name: Install Python dependencies
+        run: |
+          cd bindings/python
+          pip install build wheel setuptools
+
+      - name: Build Python wheel
+        run: |
+          cd bindings/python
+          python -m build
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-wheel-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: bindings/python/dist/*.whl
+          retention-days: 7
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [create-release, build-python-wheels]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: python-wheel-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: true
