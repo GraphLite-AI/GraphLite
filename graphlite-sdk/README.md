@@ -8,14 +8,14 @@ The GraphLite SDK provides a developer-friendly API for working with GraphLite d
 
 ## Features
 
-- ✅ **Simple API** - Clean, intuitive interface following SQLite/rusqlite conventions
-- ✅ **Session Management** - User context and permissions support
-- ✅ **Transactions** - ACID guarantees with automatic rollback (RAII pattern)
-- ✅ **Query Builder** - Fluent API for constructing GQL queries
-- ✅ **Typed Results** - Deserialize query results into Rust structs
-- ✅ **Zero External Dependencies** - Fully embedded, no server required
-- ⏳ **Connection Pooling** - Efficient concurrent access (future)
-- ⏳ **Async Support** - Full tokio integration (future)
+- **Simple API** - Clean, intuitive interface following SQLite/rusqlite conventions
+- **Session Management** - User context and permissions support
+- **Transactions** - ACID guarantees with automatic rollback (RAII pattern)
+- **Query Builder** - Fluent API for constructing GQL queries
+- **Typed Results** - Deserialize query results into Rust structs
+- **Zero External Dependencies** - Fully embedded, no server required
+- **Connection Pooling** - Efficient concurrent access (future)
+- **Async Support** - Full tokio integration (future)
 
 ## Quick Start
 

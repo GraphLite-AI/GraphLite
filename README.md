@@ -7,13 +7,13 @@ GraphLite uses a single binary and is an ideal solution for applications requiri
 
 ## Features
 
-- ✅ **ISO GQL Standard** - Full implementation of ISO GQL query language based on grammar optimized from [OpenGQL](https://github.com/opengql/grammar/tree/main) project
-- ✅ **Pattern Matching** - Powerful MATCH clauses for graph traversal
-- ✅ **ACID Transactions** - Full transaction support with isolation levels
-- ✅ **Embedded Storage** - Sled-based embedded database (no server needed)
-- ✅ **Type System** - Strong typing with validation and inference
-- ✅ **Query Optimization** - Cost-based query optimization
-- ✅ **Pure Rust** - Memory-safe implementation in Rust
+- **ISO GQL Standard** - Full implementation of ISO GQL query language based on grammar optimized from [OpenGQL](https://github.com/opengql/grammar/tree/main) project
+- **Pattern Matching** - Powerful MATCH clauses for graph traversal
+- **ACID Transactions** - Full transaction support with isolation levels
+- **Embedded Storage** - Sled-based embedded database (no server needed)
+- **Type System** - Strong typing with validation and inference
+- **Query Optimization** - Cost-based query optimization
+- **Pure Rust** - Memory-safe implementation in Rust
 
 ## Prerequisites
 
@@ -154,7 +154,7 @@ That's it! You're now ready to create graphs and run queries:
 $ gql>
 ```
 
-**📚 Next Steps:**
+** Next Steps:**
 - **[Quick Start.md](docs/Quick%20Start.md)** - 5-minute tutorial with first queries
 - **[Getting Started With GQL.md](docs/Getting%20Started%20With%20GQL.md)** - Complete query language reference
 
@@ -215,7 +215,7 @@ cargo test --release --test <test_name>
 cargo test --release --test aggregation_tests
 ```
 
-**📚 Comprehensive testing documentation (In Progress)**, which will cover:
+** Comprehensive testing documentation (In Progress)**, which will cover:
 - Test configuration and architecture
 - Test categories and organization
 - Writing tests with TestFixture
@@ -234,7 +234,7 @@ GraphLite provides flexible configuration for logging, performance tuning, and p
 ./target/release/graphlite -v gql --path ./my_db -u admin -p secret
 ```
 
-**📚 Comprehensive configuration documentation (In Progress)**, which will cover:
+** Comprehensive configuration documentation (In Progress)**, which will cover:
 - Logging configuration (CLI flags, RUST_LOG, module-specific)
 - Performance tuning (caching, indexing, batch operations)
 - Production deployment (systemd, backups, monitoring)
@@ -348,7 +348,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Examples and Documentation
 
-📚 **For Rust Applications:**
+**For Rust Applications:**
 - **[SDK Examples](graphlite-sdk/examples/)** - Recommended high-level API (start here!)
 - **[Core Library Examples](examples-core/)** - Advanced low-level usage
 
@@ -418,7 +418,7 @@ GraphLite provides comprehensive documentation for all skill levels:
 - Open an issue for bugs or feature requests
 - Check existing issues before creating new ones
 - Join discussions in open issues and PRs
-- Contribution guidelines (In Progress)
+- **[Contribution Guidelines](CONTRIBUTING.md)** - How to contribute
 
 ---
 
@@ -435,7 +435,7 @@ cargo test
 ```
 
 
-**👉 Contribution guide (In Progress)** will include complete details on:
+** See [CONTRIBUTING.md](CONTRIBUTING.md) for complete details on:**
 - How to contribute
 - Development setup
 - Testing guidelines
@@ -455,4 +455,9 @@ GraphLite is built on top of excellent open source projects. We are grateful to 
 
 - **Rust Community** - For creating an amazing ecosystem of high-quality libraries
 - All open source contributors whose work makes projects like GraphLite possible
+
 ---
+
+## Security
+
+If you discover a security vulnerability in GraphLite, please report it to **gl@deepgraphai.com**. Do not create public GitHub issues for security vulnerabilities.

@@ -209,14 +209,14 @@ typedef enum {
 
 **Memory Leak Example (DON'T DO THIS):**
 ```c
-// ❌ Memory leak - session_id not freed
+// DON'T: Memory leak - session_id not freed
 char* session_id = graphlite_create_session(db, "user", NULL);
 graphlite_close(db); // session_id leaked!
 ```
 
 **Correct Usage:**
 ```c
-// ✅ Proper cleanup
+// DO: Proper cleanup
 char* session_id = graphlite_create_session(db, "user", &error);
 if (session_id != NULL) {
     // ... use session ...

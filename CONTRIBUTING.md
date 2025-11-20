@@ -19,9 +19,7 @@ Thank you for your interest in contributing to GraphLite! We're excited to have 
 
 ## Code of Conduct
 
-This project adheres to a Code of Conduct that all contributors are expected to follow. By participating, you are expected to uphold this code. Please read [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) before contributing.
-
-### Our Standards
+All contributors are expected to follow these standards:
 
 - **Treat everyone with respect** - We're building this together
 - **Be constructive in feedback** - Focus on improvements, not criticism
@@ -604,7 +602,7 @@ Closes #123
 Related to #456
 ```
 
-## 🔍 Review Process
+## Review Process
 
 ### What to Expect
 
