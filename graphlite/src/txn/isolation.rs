@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //! Transaction isolation level management
-//! 
+//!
 //! This module defines isolation levels and their behavior for transaction management.
 
 use serde::{Deserialize, Serialize};
@@ -128,19 +128,23 @@ mod tests {
 
     #[test]
     fn test_isolation_level_strictness() {
-        assert!(IsolationLevel::Serializable.is_at_least_as_strict_as(&IsolationLevel::ReadCommitted));
-        assert!(IsolationLevel::ReadCommitted.is_at_least_as_strict_as(&IsolationLevel::ReadUncommitted));
-        assert!(!IsolationLevel::ReadUncommitted.is_at_least_as_strict_as(&IsolationLevel::Serializable));
+        assert!(
+            IsolationLevel::Serializable.is_at_least_as_strict_as(&IsolationLevel::ReadCommitted)
+        );
+        assert!(IsolationLevel::ReadCommitted
+            .is_at_least_as_strict_as(&IsolationLevel::ReadUncommitted));
+        assert!(!IsolationLevel::ReadUncommitted
+            .is_at_least_as_strict_as(&IsolationLevel::Serializable));
     }
 
     #[test]
     fn test_isolation_level_properties() {
         assert!(IsolationLevel::ReadUncommitted.allows_dirty_reads());
         assert!(!IsolationLevel::ReadCommitted.allows_dirty_reads());
-        
+
         assert!(IsolationLevel::ReadCommitted.allows_non_repeatable_reads());
         assert!(!IsolationLevel::RepeatableRead.allows_non_repeatable_reads());
-        
+
         assert!(IsolationLevel::RepeatableRead.allows_phantom_reads());
         assert!(!IsolationLevel::Serializable.allows_phantom_reads());
     }

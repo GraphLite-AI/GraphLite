@@ -15,22 +15,22 @@ use thiserror::Error;
 pub enum GraphError {
     #[error("Node not found: {0}")]
     NodeNotFound(String),
-    
+
     #[error("Edge not found: {0}")]
     EdgeNotFound(String),
-    
+
     #[error("Node already exists: {0}")]
     NodeAlreadyExists(String),
-    
+
     #[error("Edge already exists: {0}")]
     EdgeAlreadyExists(String),
-    
+
     #[error("Invalid edge: from node {from} to node {to} - one or both nodes don't exist")]
     InvalidEdge { from: String, to: String },
-    
+
     #[error("Property error: {0}")]
     PropertyError(String),
-    
+
     #[error("Index error: {0}")]
     IndexError(String),
 }
@@ -40,25 +40,25 @@ pub enum GraphError {
 pub enum StorageError {
     #[error("Graph error: {0}")]
     Graph(#[from] GraphError),
-    
+
     #[error("Graph not found: {0}")]
     GraphNotFound(String),
-    
+
     #[error("Lock error: {0}")]
     LockError(String),
-    
+
     #[error("Invalid operation: {0}")]
     InvalidOperation(String),
-    
+
     #[error("Session error: {0}")]
     SessionError(String),
-    
+
     #[error("User not found: {0}")]
     UserNotFound(String),
-    
+
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
-    
+
     #[error("Persistence error: {0}")]
     PersistenceError(String),
 }
@@ -80,7 +80,7 @@ impl Node {
             properties: HashMap::new(),
         }
     }
-    
+
     /// Create a new node with id and labels
     pub fn with_labels(id: String, labels: Vec<String>) -> Self {
         Self {
@@ -89,34 +89,34 @@ impl Node {
             properties: HashMap::new(),
         }
     }
-    
+
     /// Add a label to this node
     pub fn add_label(&mut self, label: String) {
         if !self.labels.contains(&label) {
             self.labels.push(label);
         }
     }
-    
+
     /// Check if node has a specific label
     pub fn has_label(&self, label: &str) -> bool {
         self.labels.iter().any(|l| l == label)
     }
-    
+
     /// Set a property value
     pub fn set_property(&mut self, key: String, value: Value) {
         self.properties.insert(key, value);
     }
-    
+
     /// Get a property value
     pub fn get_property(&self, key: &str) -> Option<&Value> {
         self.properties.get(key)
     }
-    
+
     /// Remove a property
     pub fn remove_property(&mut self, key: &str) -> Option<Value> {
         self.properties.remove(key)
     }
-    
+
     /// Check if node has a specific property
     pub fn has_property(&self, key: &str) -> bool {
         self.properties.contains_key(key)
@@ -144,33 +144,33 @@ impl Edge {
             properties: HashMap::new(),
         }
     }
-    
+
     /// Set a property value
     pub fn set_property(&mut self, key: String, value: Value) {
         self.properties.insert(key, value);
     }
-    
+
     /// Get a property value
     pub fn get_property(&self, key: &str) -> Option<&Value> {
         self.properties.get(key)
     }
-    
+
     /// Remove a property
     pub fn remove_property(&mut self, key: &str) -> Option<Value> {
         self.properties.remove(key)
     }
-    
+
     /// Check if edge has a specific property
     pub fn has_property(&self, key: &str) -> bool {
         self.properties.contains_key(key)
     }
-    
+
     /// Check if this edge connects the given nodes (in either direction)
     pub fn connects(&self, node1: &str, node2: &str) -> bool {
-        (self.from_node == node1 && self.to_node == node2) ||
-        (self.from_node == node2 && self.to_node == node1)
+        (self.from_node == node1 && self.to_node == node2)
+            || (self.from_node == node2 && self.to_node == node1)
     }
-    
+
     /// Check if this edge goes from node1 to node2
     pub fn goes_from_to(&self, from: &str, to: &str) -> bool {
         self.from_node == from && self.to_node == to

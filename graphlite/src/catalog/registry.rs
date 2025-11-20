@@ -7,12 +7,12 @@
 //! The registry is responsible for catalog initialization, storage integration, and
 //! providing access to catalog instances.
 
-use std::collections::HashMap;
-use std::sync::Arc;
-use crate::storage::StorageManager;
-use super::traits::CatalogProvider;
 use super::error::{CatalogError, CatalogResult};
 use super::providers;
+use super::traits::CatalogProvider;
+use crate::storage::StorageManager;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Central registry for all catalog providers
 ///
@@ -42,12 +42,12 @@ impl CatalogRegistry {
             catalogs: HashMap::new(),
             storage,
         };
-        
+
         // Register all catalogs at initialization
         providers::register_all_catalogs(&mut registry);
         registry
     }
-    
+
     /// Register a new catalog provider
     ///
     /// Adds a catalog provider to the registry and initializes it with the storage manager.
@@ -61,11 +61,11 @@ impl CatalogRegistry {
         if let Err(e) = catalog.init(self.storage.clone()) {
             log::warn!("Failed to initialize catalog '{}': {}", name, e);
         }
-        
+
         self.catalogs.insert(name.to_string(), catalog);
         log::info!("Registered catalog provider: {}", name);
     }
-    
+
     /// Get immutable reference to a catalog provider
     ///
     /// # Arguments
@@ -77,7 +77,7 @@ impl CatalogRegistry {
     pub fn get(&self, name: &str) -> Option<&Box<dyn CatalogProvider>> {
         self.catalogs.get(name)
     }
-    
+
     /// Get mutable reference to a catalog provider
     ///
     /// # Arguments
@@ -89,7 +89,7 @@ impl CatalogRegistry {
     pub fn get_mut(&mut self, name: &str) -> Option<&mut Box<dyn CatalogProvider>> {
         self.catalogs.get_mut(name)
     }
-    
+
     /// List all registered catalog names
     ///
     /// # Returns
@@ -97,7 +97,7 @@ impl CatalogRegistry {
     pub fn list_catalog_names(&self) -> Vec<String> {
         self.catalogs.keys().cloned().collect()
     }
-    
+
     /// Check if a catalog is registered
     ///
     /// # Arguments
@@ -108,7 +108,7 @@ impl CatalogRegistry {
     pub fn has_catalog(&self, name: &str) -> bool {
         self.catalogs.contains_key(name)
     }
-    
+
     /// Get the number of registered catalogs
     ///
     /// # Returns
@@ -116,7 +116,7 @@ impl CatalogRegistry {
     pub fn catalog_count(&self) -> usize {
         self.catalogs.len()
     }
-    
+
     /// Save a specific catalog to storage
     ///
     /// Saves the state of a single catalog to storage using the catalog's save method.
@@ -129,20 +129,28 @@ impl CatalogRegistry {
     /// * `Err(CatalogError::CatalogNotFound)` if catalog doesn't exist
     /// * `Err(CatalogError)` if save operation fails
     pub fn save_catalog(&self, catalog_name: &str) -> CatalogResult<()> {
-        let catalog = self.catalogs.get(catalog_name)
+        let catalog = self
+            .catalogs
+            .get(catalog_name)
             .ok_or_else(|| CatalogError::CatalogNotFound(catalog_name.to_string()))?;
-        
-        let data = catalog.save()
-            .map_err(|e| CatalogError::OperationFailed(
-                format!("Failed to save catalog '{}': {}", catalog_name, e)
-            ))?;
-        
+
+        let data = catalog.save().map_err(|e| {
+            CatalogError::OperationFailed(format!(
+                "Failed to save catalog '{}': {}",
+                catalog_name, e
+            ))
+        })?;
+
         // Save catalog provider data to storage
-        self.storage.save_catalog_provider(catalog_name, &data)
-            .map_err(|e| CatalogError::OperationFailed(
-                format!("Failed to persist catalog '{}': {}", catalog_name, e)
-            ))?;
-        
+        self.storage
+            .save_catalog_provider(catalog_name, &data)
+            .map_err(|e| {
+                CatalogError::OperationFailed(format!(
+                    "Failed to persist catalog '{}': {}",
+                    catalog_name, e
+                ))
+            })?;
+
         log::debug!("Saved catalog '{}': {} bytes", catalog_name, data.len());
         Ok(())
     }
@@ -157,22 +165,25 @@ impl CatalogRegistry {
     /// * `Err(CatalogError)` if any catalog failed to save
     pub fn save_all(&self) -> CatalogResult<()> {
         for (name, catalog) in &self.catalogs {
-            let data = catalog.save()
-                .map_err(|e| CatalogError::OperationFailed(
-                    format!("Failed to save catalog '{}': {}", name, e)
-                ))?;
-            
+            let data = catalog.save().map_err(|e| {
+                CatalogError::OperationFailed(format!("Failed to save catalog '{}': {}", name, e))
+            })?;
+
             // Save catalog provider data to storage
-            self.storage.save_catalog_provider(name, &data)
-                .map_err(|e| CatalogError::OperationFailed(
-                    format!("Failed to persist catalog '{}': {}", name, e)
-                ))?;
-            
+            self.storage
+                .save_catalog_provider(name, &data)
+                .map_err(|e| {
+                    CatalogError::OperationFailed(format!(
+                        "Failed to persist catalog '{}': {}",
+                        name, e
+                    ))
+                })?;
+
             log::debug!("Saved catalog '{}': {} bytes", name, data.len());
         }
         Ok(())
     }
-    
+
     /// Load all catalogs from storage
     ///
     /// Iterates through all registered catalogs and loads their state from storage
@@ -184,26 +195,29 @@ impl CatalogRegistry {
     pub fn load_all(&mut self) -> CatalogResult<()> {
         for (name, catalog) in &mut self.catalogs {
             log::debug!("Loading catalog '{}'", name);
-            
+
             // Load catalog provider data from storage if it exists
-            if let Some(data) = self.storage.load_catalog_provider(name)
-                .map_err(|e| CatalogError::OperationFailed(
-                    format!("Failed to load catalog '{}': {}", name, e)
-                ))? {
-                
-                catalog.load(&data)
-                    .map_err(|e| CatalogError::OperationFailed(
-                        format!("Failed to deserialize catalog '{}': {}", name, e)
-                    ))?;
-                
+            if let Some(data) = self.storage.load_catalog_provider(name).map_err(|e| {
+                CatalogError::OperationFailed(format!("Failed to load catalog '{}': {}", name, e))
+            })? {
+                catalog.load(&data).map_err(|e| {
+                    CatalogError::OperationFailed(format!(
+                        "Failed to deserialize catalog '{}': {}",
+                        name, e
+                    ))
+                })?;
+
                 log::debug!("Loaded catalog '{}': {} bytes", name, data.len());
             } else {
-                log::debug!("No stored data found for catalog '{}', using empty state", name);
+                log::debug!(
+                    "No stored data found for catalog '{}', using empty state",
+                    name
+                );
             }
         }
         Ok(())
     }
-    
+
     /// Get reference to the storage manager
     ///
     /// # Returns

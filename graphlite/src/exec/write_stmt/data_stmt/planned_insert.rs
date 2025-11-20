@@ -4,13 +4,13 @@
 use std::collections::HashMap;
 
 use crate::ast::ast::InsertStatement;
-use crate::exec::ExecutionError;
-use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
 use crate::exec::write_stmt::data_stmt::DataStatementExecutor;
-use crate::storage::GraphCache;
-use crate::txn::UndoOperation;
+use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
+use crate::exec::ExecutionError;
 use crate::plan::insert_planner::InsertPlanner;
 use crate::plan::physical::PhysicalPlan;
+use crate::storage::GraphCache;
+use crate::txn::UndoOperation;
 
 /// Executor for INSERT statements using planned execution
 pub struct PlannedInsertExecutor {
@@ -35,13 +35,11 @@ impl PlannedInsertExecutor {
     ) {
         // Get index manager from storage manager
         let index_manager = match context.storage_manager.as_ref() {
-            Some(sm) => {
-                match sm.get_index_manager() {
-                    Some(mgr) => mgr,
-                    None => {
-                        log::debug!("No index manager available for automatic indexing");
-                        return;
-                    }
+            Some(sm) => match sm.get_index_manager() {
+                Some(mgr) => mgr,
+                None => {
+                    log::debug!("No index manager available for automatic indexing");
+                    return;
                 }
             },
             None => {
@@ -109,10 +107,14 @@ impl DataStatementExecutor for PlannedInsertExecutor {
     ) -> Result<(UndoOperation, usize), ExecutionError> {
         // Step 1: Logical planning
         let mut logical_planner = InsertPlanner::new();
-        let logical_plan = logical_planner.plan_insert(&self.statement)
+        let logical_plan = logical_planner
+            .plan_insert(&self.statement)
             .map_err(|e| ExecutionError::RuntimeError(format!("Logical planning error: {}", e)))?;
 
-        log::debug!("Logical plan created with {} variables", logical_plan.variables.len());
+        log::debug!(
+            "Logical plan created with {} variables",
+            logical_plan.variables.len()
+        );
 
         // Step 2: Physical planning
         let physical_plan = PhysicalPlan::from_logical(&logical_plan);
@@ -124,11 +126,14 @@ impl DataStatementExecutor for PlannedInsertExecutor {
         let mut undo_operations = Vec::new();
 
         // Get the graph path for undo operations
-        let graph_path = context.get_graph_name()
-            .unwrap_or_else(|_| String::new()); // Fall back to empty string if no graph context
+        let graph_path = context.get_graph_name().unwrap_or_else(|_| String::new()); // Fall back to empty string if no graph context
 
         match &physical_plan.root {
-            crate::plan::physical::PhysicalNode::Insert { node_creations, edge_creations, .. } => {
+            crate::plan::physical::PhysicalNode::Insert {
+                node_creations,
+                edge_creations,
+                ..
+            } => {
                 // Execute node creations
                 for node_creation in node_creations {
                     // Convert expression properties to storage values
@@ -138,7 +143,7 @@ impl DataStatementExecutor for PlannedInsertExecutor {
                         match context.evaluate_simple_expression(expr) {
                             Ok(value) => {
                                 properties.insert(key.clone(), value);
-                            },
+                            }
                             Err(e) => {
                                 log::warn!("Failed to evaluate property expression for '{}': {}. Skipping property.", key, e);
                             }
@@ -166,7 +171,7 @@ impl DataStatementExecutor for PlannedInsertExecutor {
                                 &node_id,
                                 &node_labels,
                                 &node_props,
-                                context
+                                context,
                             );
 
                             // Add undo operation for transaction management
@@ -174,15 +179,21 @@ impl DataStatementExecutor for PlannedInsertExecutor {
                                 graph_path: graph_path.clone(),
                                 node_id,
                             });
-                        },
+                        }
                         Err(crate::storage::types::GraphError::NodeAlreadyExists(_)) => {
-                            log::info!("Node '{}' already exists, skipping duplicate", node_creation.storage_id);
+                            log::info!(
+                                "Node '{}' already exists, skipping duplicate",
+                                node_creation.storage_id
+                            );
                             // Add warning about duplicate insertion
                             let warning_msg = format!("Duplicate node detected: Node with identical properties already exists (node_id: {})", node_creation.storage_id);
                             context.add_warning(warning_msg);
-                        },
+                        }
                         Err(e) => {
-                            return Err(ExecutionError::RuntimeError(format!("Failed to add node '{}': {}", node_creation.storage_id, e)));
+                            return Err(ExecutionError::RuntimeError(format!(
+                                "Failed to add node '{}': {}",
+                                node_creation.storage_id, e
+                            )));
                         }
                     }
                 }
@@ -196,7 +207,7 @@ impl DataStatementExecutor for PlannedInsertExecutor {
                         match context.evaluate_simple_expression(expr) {
                             Ok(value) => {
                                 properties.insert(key.clone(), value);
-                            },
+                            }
                             Err(e) => {
                                 log::warn!("Failed to evaluate property expression for '{}': {}. Skipping property.", key, e);
                             }
@@ -214,7 +225,10 @@ impl DataStatementExecutor for PlannedInsertExecutor {
                     // Add edge to graph
                     match graph.add_edge(edge) {
                         Ok(_) => {
-                            log::debug!("Successfully added edge '{}' to graph", edge_creation.storage_id);
+                            log::debug!(
+                                "Successfully added edge '{}' to graph",
+                                edge_creation.storage_id
+                            );
                             rows_affected += 1;
 
                             // Add undo operation for transaction management
@@ -222,20 +236,32 @@ impl DataStatementExecutor for PlannedInsertExecutor {
                                 graph_path: graph_path.clone(),
                                 edge_id: edge_creation.storage_id.clone(),
                             });
-                        },
+                        }
                         Err(crate::storage::types::GraphError::EdgeAlreadyExists(_)) => {
-                            log::info!("Edge '{}' already exists, skipping duplicate", edge_creation.storage_id);
-                        },
+                            log::info!(
+                                "Edge '{}' already exists, skipping duplicate",
+                                edge_creation.storage_id
+                            );
+                        }
                         Err(e) => {
-                            return Err(ExecutionError::RuntimeError(format!("Failed to add edge '{}': {}", edge_creation.storage_id, e)));
+                            return Err(ExecutionError::RuntimeError(format!(
+                                "Failed to add edge '{}': {}",
+                                edge_creation.storage_id, e
+                            )));
                         }
                     }
                 }
 
-                log::debug!("Planned INSERT completed: {} nodes, {} edges", node_creations.len(), edge_creations.len());
-            },
+                log::debug!(
+                    "Planned INSERT completed: {} nodes, {} edges",
+                    node_creations.len(),
+                    edge_creations.len()
+                );
+            }
             _ => {
-                return Err(ExecutionError::RuntimeError("Invalid physical plan for INSERT".to_string()));
+                return Err(ExecutionError::RuntimeError(
+                    "Invalid physical plan for INSERT".to_string(),
+                ));
             }
         }
 
@@ -244,7 +270,7 @@ impl DataStatementExecutor for PlannedInsertExecutor {
             // No operations were performed
             UndoOperation::InsertNode {
                 graph_path: graph_path.clone(),
-                node_id: "dummy".to_string()
+                node_id: "dummy".to_string(),
             }
         } else {
             // Return the first operation (the framework handles multiple operations via transaction logs)

@@ -8,7 +8,7 @@
 
 pub mod query_coordinator;
 
-pub use query_coordinator::{QueryCoordinator, QueryInfo, QueryType, QueryPlan};
+pub use query_coordinator::{QueryCoordinator, QueryInfo, QueryPlan, QueryType};
 
 // Re-export types needed for the public API
 pub use crate::exec::{QueryResult, Row};

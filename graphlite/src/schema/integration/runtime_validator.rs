@@ -4,18 +4,18 @@
 // Runtime validator for INSERT/UPDATE operations
 // Follows the synchronous pattern used by StorageManager and CatalogManager
 
-use std::sync::Arc;
 use parking_lot::RwLock;
+use serde_json::{json, Value};
 use std::collections::HashMap;
-use serde_json::{Value, json};
+use std::sync::Arc;
 
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::QueryType;
-use crate::schema::validator::{SchemaValidator};
-use crate::schema::enforcement::config::SchemaEnforcementConfig;
-use crate::schema::types::SchemaEnforcementMode;
-use crate::schema::types::GraphTypeDefinition;
 use crate::exec::ExecutionError;
+use crate::schema::enforcement::config::SchemaEnforcementConfig;
+use crate::schema::types::GraphTypeDefinition;
+use crate::schema::types::SchemaEnforcementMode;
+use crate::schema::validator::SchemaValidator;
 
 /// Runtime validator that hooks into query execution
 /// Uses synchronous operations using synchronous operations
@@ -69,12 +69,16 @@ impl RuntimeValidator {
                 // No schema defined, check enforcement mode
                 match self.enforcement_config.mode {
                     SchemaEnforcementMode::Strict => {
-                        return Err(ExecutionError::SchemaValidation(
-                            format!("No schema defined for graph '{}'", graph_name)
-                        ));
+                        return Err(ExecutionError::SchemaValidation(format!(
+                            "No schema defined for graph '{}'",
+                            graph_name
+                        )));
                     }
                     SchemaEnforcementMode::Advisory => {
-                        log::warn!("No schema defined for graph '{}', skipping validation", graph_name);
+                        log::warn!(
+                            "No schema defined for graph '{}', skipping validation",
+                            graph_name
+                        );
                         return Ok(());
                     }
                     SchemaEnforcementMode::Disabled => return Ok(()),
@@ -84,20 +88,21 @@ impl RuntimeValidator {
         };
 
         // Validate the node
-        match self.schema_validator.validate_node_with_type(&graph_type, label, properties) {
+        match self
+            .schema_validator
+            .validate_node_with_type(&graph_type, label, properties)
+        {
             Ok(()) => Ok(()),
-            Err(validation_error) => {
-                match self.enforcement_config.mode {
-                    SchemaEnforcementMode::Strict => {
-                        Err(ExecutionError::SchemaValidation(validation_error.to_string()))
-                    }
-                    SchemaEnforcementMode::Advisory => {
-                        log::warn!("Schema validation warning: {}", validation_error);
-                        Ok(())
-                    }
-                    SchemaEnforcementMode::Disabled => Ok(()),
+            Err(validation_error) => match self.enforcement_config.mode {
+                SchemaEnforcementMode::Strict => Err(ExecutionError::SchemaValidation(
+                    validation_error.to_string(),
+                )),
+                SchemaEnforcementMode::Advisory => {
+                    log::warn!("Schema validation warning: {}", validation_error);
+                    Ok(())
                 }
-            }
+                SchemaEnforcementMode::Disabled => Ok(()),
+            },
         }
     }
 
@@ -122,9 +127,10 @@ impl RuntimeValidator {
                 // No schema defined, check enforcement mode
                 match self.enforcement_config.mode {
                     SchemaEnforcementMode::Strict => {
-                        return Err(ExecutionError::SchemaValidation(
-                            format!("No schema defined for graph '{}'", graph_name)
-                        ));
+                        return Err(ExecutionError::SchemaValidation(format!(
+                            "No schema defined for graph '{}'",
+                            graph_name
+                        )));
                     }
                     _ => return Ok(()),
                 }
@@ -134,20 +140,21 @@ impl RuntimeValidator {
 
         // For partial updates, only validate the properties being updated
         if is_partial {
-            match self.schema_validator.validate_partial_node(&graph_type, label, properties) {
+            match self
+                .schema_validator
+                .validate_partial_node(&graph_type, label, properties)
+            {
                 Ok(()) => Ok(()),
-                Err(validation_error) => {
-                    match self.enforcement_config.mode {
-                        SchemaEnforcementMode::Strict => {
-                            Err(ExecutionError::SchemaValidation(validation_error.to_string()))
-                        }
-                        SchemaEnforcementMode::Advisory => {
-                            log::warn!("Schema validation warning: {}", validation_error);
-                            Ok(())
-                        }
-                        SchemaEnforcementMode::Disabled => Ok(()),
+                Err(validation_error) => match self.enforcement_config.mode {
+                    SchemaEnforcementMode::Strict => Err(ExecutionError::SchemaValidation(
+                        validation_error.to_string(),
+                    )),
+                    SchemaEnforcementMode::Advisory => {
+                        log::warn!("Schema validation warning: {}", validation_error);
+                        Ok(())
                     }
-                }
+                    SchemaEnforcementMode::Disabled => Ok(()),
+                },
             }
         } else {
             // Full update, validate all properties
@@ -173,44 +180,54 @@ impl RuntimeValidator {
         // Get the graph type for validation
         let graph_type = match self.get_graph_type(graph_name) {
             Ok(Some(gt)) => gt,
-            Ok(None) => {
-                match self.enforcement_config.mode {
-                    SchemaEnforcementMode::Strict => {
-                        return Err(ExecutionError::SchemaValidation(
-                            format!("No schema defined for graph '{}'", graph_name)
-                        ));
-                    }
-                    _ => return Ok(()),
+            Ok(None) => match self.enforcement_config.mode {
+                SchemaEnforcementMode::Strict => {
+                    return Err(ExecutionError::SchemaValidation(format!(
+                        "No schema defined for graph '{}'",
+                        graph_name
+                    )));
                 }
-            }
+                _ => return Ok(()),
+            },
             Err(e) => return Err(e),
         };
 
         // Validate the edge
-        match self.schema_validator.validate_edge(&graph_type, edge_type, from_label, to_label, properties) {
+        match self.schema_validator.validate_edge(
+            &graph_type,
+            edge_type,
+            from_label,
+            to_label,
+            properties,
+        ) {
             Ok(()) => Ok(()),
-            Err(validation_error) => {
-                match self.enforcement_config.mode {
-                    SchemaEnforcementMode::Strict => {
-                        Err(ExecutionError::SchemaValidation(validation_error.to_string()))
-                    }
-                    SchemaEnforcementMode::Advisory => {
-                        log::warn!("Schema validation warning: {}", validation_error);
-                        Ok(())
-                    }
-                    SchemaEnforcementMode::Disabled => Ok(()),
+            Err(validation_error) => match self.enforcement_config.mode {
+                SchemaEnforcementMode::Strict => Err(ExecutionError::SchemaValidation(
+                    validation_error.to_string(),
+                )),
+                SchemaEnforcementMode::Advisory => {
+                    log::warn!("Schema validation warning: {}", validation_error);
+                    Ok(())
                 }
-            }
+                SchemaEnforcementMode::Disabled => Ok(()),
+            },
         }
     }
 
     /// Get the graph type definition for a graph (synchronous)
-    fn get_graph_type(&self, graph_name: &str) -> Result<Option<GraphTypeDefinition>, ExecutionError> {
+    fn get_graph_type(
+        &self,
+        graph_name: &str,
+    ) -> Result<Option<GraphTypeDefinition>, ExecutionError> {
         // Try to get the graph type from the catalog
         let catalog_manager = self.catalog_manager.read();
 
         // First, try to get the graph metadata to find its type
-        match catalog_manager.query_read_only("graph", QueryType::GetGraph, json!({ "name": graph_name })) {
+        match catalog_manager.query_read_only(
+            "graph",
+            QueryType::GetGraph,
+            json!({ "name": graph_name }),
+        ) {
             Ok(response) => {
                 // Extract graph type name from response
                 if let Some(data) = response.data() {
@@ -219,12 +236,14 @@ impl RuntimeValidator {
                         match catalog_manager.query_read_only(
                             "graph_type",
                             QueryType::GetGraphType,
-                            json!({ "name": graph_type_name })
+                            json!({ "name": graph_type_name }),
                         ) {
                             Ok(type_response) => {
                                 // Parse the graph type definition from the response
                                 if let Some(type_data) = type_response.data() {
-                                    match serde_json::from_value::<GraphTypeDefinition>(type_data.clone()) {
+                                    match serde_json::from_value::<GraphTypeDefinition>(
+                                        type_data.clone(),
+                                    ) {
                                         Ok(graph_type) => Ok(Some(graph_type)),
                                         Err(_) => Ok(None),
                                     }

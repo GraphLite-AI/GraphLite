@@ -3,11 +3,11 @@
 //
 // CreateRoleExecutor - Implements CREATE ROLE statement execution
 use crate::ast::ast::CreateRoleStatement;
-use crate::exec::ExecutionError;
-use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
-use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::{CatalogOperation, EntityType};
+use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
+use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
+use crate::exec::ExecutionError;
 use crate::storage::StorageManager;
 use crate::txn::state::OperationType;
 use serde_json::Value;
@@ -26,7 +26,7 @@ impl StatementExecutor for CreateRoleExecutor {
     fn operation_type(&self) -> OperationType {
         OperationType::CreateRole
     }
-    
+
     fn operation_description(&self, _context: &ExecutionContext) -> String {
         format!("CREATE ROLE '{}'", self.statement.role_name)
     }
@@ -46,18 +46,29 @@ impl DDLStatementExecutor for CreateRoleExecutor {
         params.insert("name".to_string(), Value::String(role_name.clone()));
 
         if let Some(description) = &self.statement.description {
-            params.insert("description".to_string(), Value::String(description.clone()));
+            params.insert(
+                "description".to_string(),
+                Value::String(description.clone()),
+            );
         }
 
         // Convert permissions to JSON format if any
         if !self.statement.permissions.is_empty() {
-            let permissions: Vec<Value> = self.statement.permissions
+            let permissions: Vec<Value> = self
+                .statement
+                .permissions
                 .iter()
                 .map(|perm| {
                     let mut perm_obj = serde_json::Map::new();
-                    perm_obj.insert("resource_type".to_string(), Value::String(perm.resource_type.clone()));
+                    perm_obj.insert(
+                        "resource_type".to_string(),
+                        Value::String(perm.resource_type.clone()),
+                    );
                     if let Some(resource_name) = &perm.resource_name {
-                        perm_obj.insert("resource_name".to_string(), Value::String(resource_name.clone()));
+                        perm_obj.insert(
+                            "resource_name".to_string(),
+                            Value::String(resource_name.clone()),
+                        );
                     }
                     Value::Object(perm_obj)
                 })
@@ -65,7 +76,10 @@ impl DDLStatementExecutor for CreateRoleExecutor {
             params.insert("permissions".to_string(), Value::Array(permissions));
         }
 
-        params.insert("if_not_exists".to_string(), Value::Bool(self.statement.if_not_exists));
+        params.insert(
+            "if_not_exists".to_string(),
+            Value::Bool(self.statement.if_not_exists),
+        );
 
         // Create the catalog operation
         let operation = CatalogOperation::Create {
@@ -83,8 +97,7 @@ impl DDLStatementExecutor for CreateRoleExecutor {
                 if let Err(e) = persist_result {
                     return Err(ExecutionError::RuntimeError(format!(
                         "Failed to persist role '{}' to storage: {}",
-                        role_name,
-                        e
+                        role_name, e
                     )));
                 }
 
@@ -95,13 +108,10 @@ impl DDLStatementExecutor for CreateRoleExecutor {
                 };
                 Ok((message, 1))
             }
-            Err(catalog_error) => {
-                Err(ExecutionError::RuntimeError(format!(
-                    "Failed to create role '{}': {}",
-                    role_name,
-                    catalog_error
-                )))
-            }
+            Err(catalog_error) => Err(ExecutionError::RuntimeError(format!(
+                "Failed to create role '{}': {}",
+                role_name, catalog_error
+            ))),
         }
     }
 }

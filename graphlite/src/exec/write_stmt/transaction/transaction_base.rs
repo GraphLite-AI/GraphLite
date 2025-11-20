@@ -1,8 +1,8 @@
 // Copyright (c) 2024-2025 DeepGraph Inc.
 // SPDX-License-Identifier: Apache-2.0
 //
-use crate::exec::ExecutionError;
 use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
+use crate::exec::ExecutionError;
 use crate::exec::QueryResult;
 
 /// Base trait for transaction statement executors
@@ -13,7 +13,7 @@ pub trait TransactionStatementExecutor: StatementExecutor {
         &self,
         context: &ExecutionContext,
     ) -> Result<QueryResult, ExecutionError>;
-    
+
     /// Transaction statements typically don't require write permissions on graphs
     /// They manage transaction state instead
     #[allow(dead_code)] // ROADMAP v0.6.0 - Permission-based transaction control

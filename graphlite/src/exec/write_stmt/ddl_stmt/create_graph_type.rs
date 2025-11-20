@@ -3,14 +3,14 @@
 //
 // CREATE GRAPH TYPE executor implementation
 use crate::ast::ast::CreateGraphTypeStatement;
-use crate::exec::ExecutionError;
-use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
-use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::{CatalogOperation, EntityType};
+use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
+use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
+use crate::exec::ExecutionError;
+use crate::schema::types::{GraphTypeDefinition, GraphTypeVersion};
 use crate::storage::StorageManager;
 use crate::txn::state::OperationType;
-use crate::schema::types::{GraphTypeDefinition, GraphTypeVersion};
 use chrono::Utc;
 use serde_json::json;
 use std::collections::HashMap;
@@ -77,7 +77,8 @@ impl DDLStatementExecutor for CreateGraphTypeExecutor {
             edge_types,
             created_at: Utc::now(),
             updated_at: Utc::now(),
-            created_by: context.get_variable("user_id")
+            created_by: context
+                .get_variable("user_id")
                 .and_then(|v| v.as_string().map(|s| s.to_string()))
                 .unwrap_or_else(|| "system".to_string()),
             description: Some(format!("Graph type {}", name)),
@@ -91,8 +92,11 @@ impl DDLStatementExecutor for CreateGraphTypeExecutor {
             params: json!(graph_type_def),
         };
 
-        catalog_manager.execute("graph_type", operation)
-            .map_err(|e| ExecutionError::CatalogError(format!("Failed to create graph type: {}", e)))?;
+        catalog_manager
+            .execute("graph_type", operation)
+            .map_err(|e| {
+                ExecutionError::CatalogError(format!("Failed to create graph type: {}", e))
+            })?;
 
         Ok((format!("Graph type '{}' created successfully", name), 1))
     }
@@ -100,108 +104,140 @@ impl DDLStatementExecutor for CreateGraphTypeExecutor {
 
 impl CreateGraphTypeExecutor {
     /// Parse vertex types from GraphTypeSpec into NodeTypeDefinition
-    fn parse_vertex_types(&self, spec: &crate::ast::ast::GraphTypeSpec) -> Vec<crate::schema::types::NodeTypeDefinition> {
-        use crate::schema::types::{NodeTypeDefinition, PropertyDefinition, DataType};
+    fn parse_vertex_types(
+        &self,
+        spec: &crate::ast::ast::GraphTypeSpec,
+    ) -> Vec<crate::schema::types::NodeTypeDefinition> {
+        use crate::schema::types::{DataType, NodeTypeDefinition, PropertyDefinition};
 
-        spec.vertex_types.iter().map(|vertex_spec| {
-            // Get the label from identifier
-            let label = vertex_spec.identifier.clone().unwrap_or_else(|| "UnnamedNode".to_string());
+        spec.vertex_types
+            .iter()
+            .map(|vertex_spec| {
+                // Get the label from identifier
+                let label = vertex_spec
+                    .identifier
+                    .clone()
+                    .unwrap_or_else(|| "UnnamedNode".to_string());
 
-            // Parse properties
-            let properties = if let Some(ref prop_list) = vertex_spec.properties {
-                prop_list.properties.iter().map(|prop_decl| {
-                    // Convert AST TypeSpec to schema DataType
-                    let data_type = match &prop_decl.type_spec {
-                        crate::ast::ast::TypeSpec::String { .. } => DataType::String,
-                        crate::ast::ast::TypeSpec::Integer => DataType::Integer,
-                        crate::ast::ast::TypeSpec::BigInt => DataType::BigInt,
-                        crate::ast::ast::TypeSpec::Float { .. } => DataType::Float,
-                        crate::ast::ast::TypeSpec::Double => DataType::Double,
-                        crate::ast::ast::TypeSpec::Boolean => DataType::Boolean,
-                        crate::ast::ast::TypeSpec::Date => DataType::Date,
-                        crate::ast::ast::TypeSpec::LocalTime { .. } => DataType::Time,
-                        crate::ast::ast::TypeSpec::LocalDateTime { .. } => DataType::DateTime,
-                        _ => DataType::String, // Default to string for unsupported types
-                    };
+                // Parse properties
+                let properties = if let Some(ref prop_list) = vertex_spec.properties {
+                    prop_list
+                        .properties
+                        .iter()
+                        .map(|prop_decl| {
+                            // Convert AST TypeSpec to schema DataType
+                            let data_type = match &prop_decl.type_spec {
+                                crate::ast::ast::TypeSpec::String { .. } => DataType::String,
+                                crate::ast::ast::TypeSpec::Integer => DataType::Integer,
+                                crate::ast::ast::TypeSpec::BigInt => DataType::BigInt,
+                                crate::ast::ast::TypeSpec::Float { .. } => DataType::Float,
+                                crate::ast::ast::TypeSpec::Double => DataType::Double,
+                                crate::ast::ast::TypeSpec::Boolean => DataType::Boolean,
+                                crate::ast::ast::TypeSpec::Date => DataType::Date,
+                                crate::ast::ast::TypeSpec::LocalTime { .. } => DataType::Time,
+                                crate::ast::ast::TypeSpec::LocalDateTime { .. } => {
+                                    DataType::DateTime
+                                }
+                                _ => DataType::String, // Default to string for unsupported types
+                            };
 
-                    PropertyDefinition {
-                        name: prop_decl.name.clone(),
-                        data_type,
-                        required: false, // TODO: Parse from constraints
-                        unique: false,   // TODO: Parse from constraints
-                        default_value: None,
-                        description: None,
-                        deprecated: false,
-                        deprecation_message: None,
-                        validation_pattern: None,
-                        constraints: vec![],
-                    }
-                }).collect()
-            } else {
-                vec![]
-            };
+                            PropertyDefinition {
+                                name: prop_decl.name.clone(),
+                                data_type,
+                                required: false, // TODO: Parse from constraints
+                                unique: false,   // TODO: Parse from constraints
+                                default_value: None,
+                                description: None,
+                                deprecated: false,
+                                deprecation_message: None,
+                                validation_pattern: None,
+                                constraints: vec![],
+                            }
+                        })
+                        .collect()
+                } else {
+                    vec![]
+                };
 
-            NodeTypeDefinition {
-                label,
-                properties,
-                constraints: vec![], // TODO: Parse constraints from property annotations
-                description: None,
-                is_abstract: false,
-                extends: None,
-            }
-        }).collect()
+                NodeTypeDefinition {
+                    label,
+                    properties,
+                    constraints: vec![], // TODO: Parse constraints from property annotations
+                    description: None,
+                    is_abstract: false,
+                    extends: None,
+                }
+            })
+            .collect()
     }
 
     /// Parse edge types from GraphTypeSpec into EdgeTypeDefinition
-    fn parse_edge_types(&self, spec: &crate::ast::ast::GraphTypeSpec) -> Vec<crate::schema::types::EdgeTypeDefinition> {
-        use crate::schema::types::{EdgeTypeDefinition, PropertyDefinition, DataType, EdgeCardinality};
+    fn parse_edge_types(
+        &self,
+        spec: &crate::ast::ast::GraphTypeSpec,
+    ) -> Vec<crate::schema::types::EdgeTypeDefinition> {
+        use crate::schema::types::{
+            DataType, EdgeCardinality, EdgeTypeDefinition, PropertyDefinition,
+        };
 
-        spec.edge_types.iter().map(|edge_spec| {
-            // Get the type name from identifier
-            let type_name = edge_spec.identifier.clone().unwrap_or_else(|| "UnnamedEdge".to_string());
+        spec.edge_types
+            .iter()
+            .map(|edge_spec| {
+                // Get the type name from identifier
+                let type_name = edge_spec
+                    .identifier
+                    .clone()
+                    .unwrap_or_else(|| "UnnamedEdge".to_string());
 
-            // Parse properties
-            let properties = if let Some(ref prop_list) = edge_spec.properties {
-                prop_list.properties.iter().map(|prop_decl| {
-                    let data_type = match &prop_decl.type_spec {
-                        crate::ast::ast::TypeSpec::String { .. } => DataType::String,
-                        crate::ast::ast::TypeSpec::Integer => DataType::Integer,
-                        crate::ast::ast::TypeSpec::BigInt => DataType::BigInt,
-                        crate::ast::ast::TypeSpec::Float { .. } => DataType::Float,
-                        crate::ast::ast::TypeSpec::Double => DataType::Double,
-                        crate::ast::ast::TypeSpec::Boolean => DataType::Boolean,
-                        crate::ast::ast::TypeSpec::Date => DataType::Date,
-                        crate::ast::ast::TypeSpec::LocalTime { .. } => DataType::Time,
-                        crate::ast::ast::TypeSpec::LocalDateTime { .. } => DataType::DateTime,
-                        _ => DataType::String,
-                    };
+                // Parse properties
+                let properties = if let Some(ref prop_list) = edge_spec.properties {
+                    prop_list
+                        .properties
+                        .iter()
+                        .map(|prop_decl| {
+                            let data_type = match &prop_decl.type_spec {
+                                crate::ast::ast::TypeSpec::String { .. } => DataType::String,
+                                crate::ast::ast::TypeSpec::Integer => DataType::Integer,
+                                crate::ast::ast::TypeSpec::BigInt => DataType::BigInt,
+                                crate::ast::ast::TypeSpec::Float { .. } => DataType::Float,
+                                crate::ast::ast::TypeSpec::Double => DataType::Double,
+                                crate::ast::ast::TypeSpec::Boolean => DataType::Boolean,
+                                crate::ast::ast::TypeSpec::Date => DataType::Date,
+                                crate::ast::ast::TypeSpec::LocalTime { .. } => DataType::Time,
+                                crate::ast::ast::TypeSpec::LocalDateTime { .. } => {
+                                    DataType::DateTime
+                                }
+                                _ => DataType::String,
+                            };
 
-                    PropertyDefinition {
-                        name: prop_decl.name.clone(),
-                        data_type,
-                        required: false,
-                        unique: false,
-                        default_value: None,
-                        description: None,
-                        deprecated: false,
-                        deprecation_message: None,
-                        validation_pattern: None,
-                        constraints: vec![],
-                    }
-                }).collect()
-            } else {
-                vec![]
-            };
+                            PropertyDefinition {
+                                name: prop_decl.name.clone(),
+                                data_type,
+                                required: false,
+                                unique: false,
+                                default_value: None,
+                                description: None,
+                                deprecated: false,
+                                deprecation_message: None,
+                                validation_pattern: None,
+                                constraints: vec![],
+                            }
+                        })
+                        .collect()
+                } else {
+                    vec![]
+                };
 
-            EdgeTypeDefinition {
-                type_name,
-                from_node_types: vec![], // TODO: Parse from SOURCE clause
-                to_node_types: vec![],   // TODO: Parse from DESTINATION clause
-                properties,
-                constraints: vec![],
-                description: None,
-                cardinality: EdgeCardinality::default(), // Default (no constraints)
-            }
-        }).collect()
+                EdgeTypeDefinition {
+                    type_name,
+                    from_node_types: vec![], // TODO: Parse from SOURCE clause
+                    to_node_types: vec![],   // TODO: Parse from DESTINATION clause
+                    properties,
+                    constraints: vec![],
+                    description: None,
+                    cardinality: EdgeCardinality::default(), // Default (no constraints)
+                }
+            })
+            .collect()
     }
 }

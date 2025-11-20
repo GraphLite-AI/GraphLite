@@ -1,19 +1,30 @@
 #[path = "testutils/mod.rs"]
 mod testutils;
-use testutils::test_fixture::TestFixture;
 use graphlite::Value;
+use testutils::test_fixture::TestFixture;
 
 #[test]
 fn test_simple_union_without_relationships() {
     let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Create schema (required before creating graphs - ISO GQL compliant)
-    fixture.assert_query_succeeds(&format!("CREATE SCHEMA IF NOT EXISTS /{}", fixture.schema_name()));
+    fixture.assert_query_succeeds(&format!(
+        "CREATE SCHEMA IF NOT EXISTS /{}",
+        fixture.schema_name()
+    ));
 
     // Create a test graph
     let graph_name = "simple_union_test";
-    fixture.assert_query_succeeds(&format!("CREATE GRAPH /{}/{}", fixture.schema_name(), graph_name));
-    fixture.assert_query_succeeds(&format!("SESSION SET GRAPH /{}/{}", fixture.schema_name(), graph_name));
+    fixture.assert_query_succeeds(&format!(
+        "CREATE GRAPH /{}/{}",
+        fixture.schema_name(),
+        graph_name
+    ));
+    fixture.assert_query_succeeds(&format!(
+        "SESSION SET GRAPH /{}/{}",
+        fixture.schema_name(),
+        graph_name
+    ));
 
     // Insert simple test data
     fixture.assert_query_succeeds("INSERT (p1:Person {name: 'Alice', age: 25})");
@@ -28,7 +39,9 @@ fn test_simple_union_without_relationships() {
     // Should find Alice (age 25) and Charlie (age 45)
     assert_eq!(result.rows.len(), 2, "UNION should return 2 rows");
 
-    let names: Vec<String> = result.rows.iter()
+    let names: Vec<String> = result
+        .rows
+        .iter()
         .filter_map(|row| {
             if let Some(Value::String(name)) = row.values.get("p.name") {
                 Some(name.clone())

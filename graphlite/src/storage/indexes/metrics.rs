@@ -3,12 +3,12 @@
 //
 //! Index performance metrics and monitoring system
 
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
-use chrono::{DateTime, Utc};
 
 /// Comprehensive metrics for index operations
 #[derive(Debug)]
@@ -242,7 +242,9 @@ impl IndexMetrics {
 
     fn calculate_qps(&self) -> f64 {
         let total_queries = self.queries.load(Ordering::Relaxed) as f64;
-        let elapsed_seconds = Utc::now().signed_duration_since(self.created_at).num_seconds() as f64;
+        let elapsed_seconds = Utc::now()
+            .signed_duration_since(self.created_at)
+            .num_seconds() as f64;
 
         if elapsed_seconds == 0.0 {
             0.0
@@ -253,7 +255,9 @@ impl IndexMetrics {
 
     fn calculate_ips(&self) -> f64 {
         let total_inserts = self.inserts.load(Ordering::Relaxed) as f64;
-        let elapsed_seconds = Utc::now().signed_duration_since(self.created_at).num_seconds() as f64;
+        let elapsed_seconds = Utc::now()
+            .signed_duration_since(self.created_at)
+            .num_seconds() as f64;
 
         if elapsed_seconds == 0.0 {
             0.0
@@ -345,18 +349,28 @@ impl IndexStats {
 
         // Check for slow queries (>100ms average)
         if self.avg_query_time.as_millis() > 100 {
-            issues.push(format!("Slow average query time: {}ms", self.avg_query_time.as_millis()));
+            issues.push(format!(
+                "Slow average query time: {}ms",
+                self.avg_query_time.as_millis()
+            ));
         }
 
         // Check for low cache hit rate (<70%)
         if self.cache_hit_rate < 0.7 && (self.cache_hits + self.cache_misses) > 100 {
-            issues.push(format!("Low cache hit rate: {:.1}%", self.cache_hit_rate * 100.0));
+            issues.push(format!(
+                "Low cache hit rate: {:.1}%",
+                self.cache_hit_rate * 100.0
+            ));
         }
 
         // Check for high error rate (>5%)
-        let total_operations = self.total_queries + self.total_inserts + self.total_updates + self.total_deletes;
+        let total_operations =
+            self.total_queries + self.total_inserts + self.total_updates + self.total_deletes;
         if total_operations > 0 && (self.total_errors as f64 / total_operations as f64) > 0.05 {
-            issues.push(format!("High error rate: {:.1}%", (self.total_errors as f64 / total_operations as f64) * 100.0));
+            issues.push(format!(
+                "High error rate: {:.1}%",
+                (self.total_errors as f64 / total_operations as f64) * 100.0
+            ));
         }
 
         issues
@@ -382,7 +396,10 @@ impl IndexMetricsManager {
     #[allow(dead_code)] // ROADMAP v0.4.0 - System-wide index metrics (see ROADMAP.md §6)
     pub fn register_index(&self, index_name: String, index_type: String) -> Arc<IndexMetrics> {
         let metrics = Arc::new(IndexMetrics::new(index_name.clone(), index_type));
-        self.metrics.write().unwrap().insert(index_name, metrics.clone());
+        self.metrics
+            .write()
+            .unwrap()
+            .insert(index_name, metrics.clone());
         metrics
     }
 

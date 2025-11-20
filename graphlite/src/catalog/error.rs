@@ -9,43 +9,43 @@ use thiserror::Error;
 pub enum CatalogError {
     #[error("Catalog not found: {0}")]
     CatalogNotFound(String),
-    
+
     #[error("Catalog operation failed: {0}")]
     OperationFailed(String),
-    
+
     #[error("Serialization error: {0}")]
     SerializationError(String),
-    
+
     #[error("Deserialization error: {0}")]
     DeserializationError(String),
-    
+
     #[error("Storage error: {0}")]
     StorageError(String),
-    
+
     #[error("Entity not found: {0}")]
     EntityNotFound(String),
-    
+
     #[error("Entity already exists: {0}")]
     EntityAlreadyExists(String),
-    
+
     #[error("Invalid parameters: {0}")]
     InvalidParameters(String),
-    
+
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
-    
+
     #[error("IO error: {0}")]
     IoError(String),
-    
+
     #[error("Not supported: {0}")]
     NotSupported(String),
-    
+
     #[error("Duplicate entry: {0}")]
     DuplicateEntry(String),
-    
+
     #[error("Not found: {0}")]
     NotFound(String),
-    
+
     #[error("Invalid operation: {0}")]
     InvalidOperation(String),
 }

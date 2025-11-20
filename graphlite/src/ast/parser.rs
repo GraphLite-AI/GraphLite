@@ -6,14 +6,14 @@
 use log::debug;
 use nom::{
     branch::alt,
-    combinator::{map, value, opt, success, verify},
+    combinator::{map, opt, success, value, verify},
     multi::{many0, many1, separated_list1},
-    sequence::{tuple, delimited, preceded, terminated, pair},
+    sequence::{delimited, pair, preceded, terminated, tuple},
     IResult,
 };
 
-use super::lexer::{Token, tokenize};
 use super::ast::*;
+use super::lexer::{tokenize, Token};
 use super::pretty_printer::pretty_print_ast;
 
 /// Parser error type
@@ -42,20 +42,23 @@ pub enum ParserError {
 fn filter_sql_comments(tokens: Vec<Token>) -> Vec<Token> {
     let mut filtered = Vec::new();
     let mut i = 0;
-    
+
     while i < tokens.len() {
         // Check for SQL comment pattern: Dash, Dash, ...
-        if i + 1 < tokens.len() 
+        if i + 1 < tokens.len()
             && matches!(tokens[i], Token::Dash)
-            && matches!(tokens[i + 1], Token::Dash) {
-            
+            && matches!(tokens[i + 1], Token::Dash)
+        {
             // Check if this is actually a comment (not part of an edge pattern)
             // SQL comments are recognized when -- is followed by whitespace or identifiers
             // but NOT when followed by >, <, [, or (
             if i + 2 < tokens.len() {
                 match &tokens[i + 2] {
-                    Token::Arrow | Token::ArrowLeft | Token::ArrowBoth |
-                    Token::LeftParen | Token::LeftBracket => {
+                    Token::Arrow
+                    | Token::ArrowLeft
+                    | Token::ArrowBoth
+                    | Token::LeftParen
+                    | Token::LeftBracket => {
                         // This is an edge pattern, not a comment
                         filtered.push(tokens[i].clone());
                         i += 1;
@@ -84,7 +87,7 @@ fn filter_sql_comments(tokens: Vec<Token>) -> Vec<Token> {
             i += 1;
         }
     }
-    
+
     filtered
 }
 
@@ -92,7 +95,10 @@ fn filter_sql_comments(tokens: Vec<Token>) -> Vec<Token> {
 pub fn parse_query(input: &str) -> Result<Document, ParserError> {
     // Debug: Print query text if it contains GROUP BY
     if input.contains("GROUP BY") {
-        log::debug!("PARSER: Parsing query with GROUP BY: {}", input.trim().split('\n').collect::<Vec<_>>().join(" "));
+        log::debug!(
+            "PARSER: Parsing query with GROUP BY: {}",
+            input.trim().split('\n').collect::<Vec<_>>().join(" ")
+        );
     }
 
     // First tokenize the input
@@ -105,7 +111,11 @@ pub fn parse_query(input: &str) -> Result<Document, ParserError> {
     if input.contains("GROUP BY") {
         let has_group_token = tokens.iter().any(|t| matches!(t, Token::Group));
         let has_by_token = tokens.iter().any(|t| matches!(t, Token::By));
-        log::debug!("PARSER: Token stream has GROUP={}, BY={}", has_group_token, has_by_token);
+        log::debug!(
+            "PARSER: Token stream has GROUP={}, BY={}",
+            has_group_token,
+            has_by_token
+        );
     }
 
     // Check for invalid DELETE SCHEMA and DELETE GRAPH patterns before parsing
@@ -147,7 +157,9 @@ pub fn parse_query(input: &str) -> Result<Document, ParserError> {
 
     // Handle comment-only or empty input
     if tokens.is_empty() || (tokens.len() == 1 && matches!(tokens[0], Token::EOF)) {
-        return Err(ParserError::ExpectedToken(Token::Identifier("statement".to_string())));
+        return Err(ParserError::ExpectedToken(Token::Identifier(
+            "statement".to_string(),
+        )));
     }
 
     // Try to parse as different statement types
@@ -156,20 +168,20 @@ pub fn parse_query(input: &str) -> Result<Document, ParserError> {
             statement: Statement::AtLocation(at_stmt),
             location: Location::default(),
         };
-        
+
         debug!("Successfully parsed AT location statement into AST");
         pretty_print_ast(&document);
-        
+
         Ok(document)
     } else if let Ok((_, declare_stmt)) = declare_statement(&tokens) {
         let document = Document {
             statement: Statement::Declare(declare_stmt),
             location: Location::default(),
         };
-        
+
         debug!("Successfully parsed DECLARE statement into AST");
         pretty_print_ast(&document);
-        
+
         Ok(document)
     // NEXT statements are not allowed as standalone statements
     // They can only appear within procedure body contexts
@@ -178,17 +190,17 @@ pub fn parse_query(input: &str) -> Result<Document, ParserError> {
             statement: Statement::SessionStatement(session_stmt),
             location: Location::default(),
         };
-        
+
         debug!("Successfully parsed session statement into AST");
         pretty_print_ast(&document);
-        
+
         Ok(document)
     } else if let Ok((_, transaction_stmt)) = transaction_statement(&tokens) {
         let document = Document {
             statement: Statement::TransactionStatement(transaction_stmt),
             location: Location::default(),
         };
-        
+
         debug!("Successfully parsed transaction statement into AST");
         pretty_print_ast(&document);
 
@@ -214,18 +226,27 @@ pub fn parse_query(input: &str) -> Result<Document, ParserError> {
 
         Ok(document)
     } else if let Ok((_, data_stmt)) = data_statement(&tokens) {
-        log::debug!("PARSER: Matched as DataStatement: {:?}", std::mem::discriminant(&data_stmt));
+        log::debug!(
+            "PARSER: Matched as DataStatement: {:?}",
+            std::mem::discriminant(&data_stmt)
+        );
         let document = Document {
             statement: Statement::DataStatement(data_stmt.clone()),
             location: Location::default(),
         };
 
-        debug!("Successfully parsed data modification statement into AST: {:?}", std::mem::discriminant(&data_stmt));
+        debug!(
+            "Successfully parsed data modification statement into AST: {:?}",
+            std::mem::discriminant(&data_stmt)
+        );
         if let DataStatement::MatchSet(ref ms) = data_stmt {
-            debug!("PARSER: MatchSet has WITH clause: {}", ms.with_clause.is_some());
+            debug!(
+                "PARSER: MatchSet has WITH clause: {}",
+                ms.with_clause.is_some()
+            );
         }
         pretty_print_ast(&document);
-        
+
         Ok(document)
     } else if let Ok((_, procedure_body)) = procedure_body_statement(&tokens) {
         let document = Document {
@@ -240,12 +261,15 @@ pub fn parse_query(input: &str) -> Result<Document, ParserError> {
     } else if let Ok((remaining, call_stmt)) = call_statement(&tokens) {
         // Validate that only Semicolon/EOF remain after CALL statement
         // CALL cannot be combined with RETURN, MATCH, or other clauses
-        let only_terminators = remaining.iter().all(|t| matches!(t, Token::Semicolon | Token::EOF));
+        let only_terminators = remaining
+            .iter()
+            .all(|t| matches!(t, Token::Semicolon | Token::EOF));
 
         if !only_terminators {
             // Found unexpected tokens after CALL statement
             // Get the first unexpected token
-            let unexpected = remaining.iter()
+            let unexpected = remaining
+                .iter()
                 .find(|t| !matches!(t, Token::Semicolon | Token::EOF))
                 .unwrap_or(&Token::EOF);
             return Err(ParserError::UnexpectedToken(unexpected.clone()));
@@ -265,19 +289,31 @@ pub fn parse_query(input: &str) -> Result<Document, ParserError> {
             statement: Statement::Select(select_stmt),
             location: Location::default(),
         };
-        
+
         debug!("Successfully parsed SELECT statement into AST");
         pretty_print_ast(&document);
-        
+
         Ok(document)
     } else if let Ok((_, query)) = query(&tokens) {
-        log::debug!("PARSER: Matched as Query: {:?}", std::mem::discriminant(&query));
+        log::debug!(
+            "PARSER: Matched as Query: {:?}",
+            std::mem::discriminant(&query)
+        );
         if let Query::Basic(ref basic_query) = query {
-            log::debug!("PARSER: BasicQuery has GROUP BY: {}", basic_query.group_clause.is_some());
+            log::debug!(
+                "PARSER: BasicQuery has GROUP BY: {}",
+                basic_query.group_clause.is_some()
+            );
         } else if let Query::Limited { ref query, .. } = query {
-            log::debug!("PARSER: Limited query wrapping: {:?}", std::mem::discriminant(query.as_ref()));
+            log::debug!(
+                "PARSER: Limited query wrapping: {:?}",
+                std::mem::discriminant(query.as_ref())
+            );
             if let Query::Basic(ref basic_query) = query.as_ref() {
-                log::debug!("PARSER: Wrapped BasicQuery has GROUP BY: {}", basic_query.group_clause.is_some());
+                log::debug!(
+                    "PARSER: Wrapped BasicQuery has GROUP BY: {}",
+                    basic_query.group_clause.is_some()
+                );
             }
         }
         let document = Document {
@@ -285,16 +321,25 @@ pub fn parse_query(input: &str) -> Result<Document, ParserError> {
             location: Location::default(),
         };
 
-        debug!("Successfully parsed GQL query into AST: {:?}", std::mem::discriminant(&query));
+        debug!(
+            "Successfully parsed GQL query into AST: {:?}",
+            std::mem::discriminant(&query)
+        );
         if let Query::MutationPipeline(ref mp) = query {
-            debug!("PARSER: MutationPipeline has {} segments", mp.segments.len());
+            debug!(
+                "PARSER: MutationPipeline has {} segments",
+                mp.segments.len()
+            );
         }
         pretty_print_ast(&document);
-        
+
         Ok(document)
     } else {
         debug!("PARSER: Failed to parse as any statement type");
-        debug!("PARSER: First few tokens: {:?}", tokens.get(0..10).unwrap_or(&[]));
+        debug!(
+            "PARSER: First few tokens: {:?}",
+            tokens.get(0..10).unwrap_or(&[])
+        );
         // Return the first token as unexpected since we couldn't parse it
         let unexpected = tokens.first().unwrap_or(&Token::EOF);
         Err(ParserError::UnexpectedToken(unexpected.clone()))
@@ -316,7 +361,11 @@ fn parse_core_query(tokens: &[Token]) -> IResult<&[Token], Query> {
 
 /// Apply ORDER BY and LIMIT modifiers to any query type
 /// This is the unified approach - one function handles all query variants
-fn apply_query_modifiers(query: Query, order_clause: Option<OrderClause>, limit_clause: Option<LimitClause>) -> Query {
+fn apply_query_modifiers(
+    query: Query,
+    order_clause: Option<OrderClause>,
+    limit_clause: Option<LimitClause>,
+) -> Query {
     match (order_clause, limit_clause) {
         // No modifiers - return query as-is
         (None, None) => query,
@@ -329,7 +378,7 @@ fn apply_query_modifiers(query: Query, order_clause: Option<OrderClause>, limit_
                     set_op.order_clause = order;
                     set_op.limit_clause = limit;
                     Query::SetOperation(set_op)
-                },
+                }
 
                 // For BasicQuery, apply modifiers directly to preserve GROUP BY/HAVING
                 // BasicQuery already has order_clause and limit_clause fields
@@ -342,14 +391,14 @@ fn apply_query_modifiers(query: Query, order_clause: Option<OrderClause>, limit_
                         basic_query.limit_clause = limit;
                     }
                     Query::Basic(basic_query)
-                },
+                }
 
                 // For other query types, use the Limited wrapper
                 _ => Query::Limited {
                     query: Box::new(query),
                     order_clause: order,
                     limit_clause: limit,
-                }
+                },
             }
         }
     }
@@ -361,20 +410,30 @@ fn parse_set_operation(tokens: &[Token]) -> IResult<&[Token], Query> {
     // Step 1: Parse the core query (UNION, INTERSECT, MATCH, etc.)
     let (remaining, core_query) = parse_core_query(tokens)?;
 
-    log::debug!("parse_set_operation: core_query type = {:?}", std::mem::discriminant(&core_query));
+    log::debug!(
+        "parse_set_operation: core_query type = {:?}",
+        std::mem::discriminant(&core_query)
+    );
     match &core_query {
         Query::Basic(bq) => {
             log::debug!("parse_set_operation: BasicQuery has group_clause={}, order_clause={}, limit_clause={}",
                      bq.group_clause.is_some(), bq.order_clause.is_some(), bq.limit_clause.is_some());
-        },
-        Query::Limited { query, order_clause, limit_clause } => {
-            log::debug!("parse_set_operation: Limited query has order={}, limit={}",
-                     order_clause.is_some(), limit_clause.is_some());
+        }
+        Query::Limited {
+            query,
+            order_clause,
+            limit_clause,
+        } => {
+            log::debug!(
+                "parse_set_operation: Limited query has order={}, limit={}",
+                order_clause.is_some(),
+                limit_clause.is_some()
+            );
             if let Query::Basic(bq) = query.as_ref() {
                 log::debug!("parse_set_operation: Wrapped BasicQuery has group_clause={}, order_clause={}, limit_clause={}",
                          bq.group_clause.is_some(), bq.order_clause.is_some(), bq.limit_clause.is_some());
             }
-        },
+        }
         _ => {
             log::debug!("parse_set_operation: Other query type");
         }
@@ -384,12 +443,19 @@ fn parse_set_operation(tokens: &[Token]) -> IResult<&[Token], Query> {
     let (remaining, order_clause) = opt(order_clause)(remaining)?;
     let (remaining, limit_clause) = opt(limit_clause)(remaining)?;
 
-    log::debug!("parse_set_operation: Parsed order_clause={}, limit_clause={}", order_clause.is_some(), limit_clause.is_some());
+    log::debug!(
+        "parse_set_operation: Parsed order_clause={}, limit_clause={}",
+        order_clause.is_some(),
+        limit_clause.is_some()
+    );
 
     // Step 3: Apply modifiers using unified logic
     let final_query = apply_query_modifiers(core_query, order_clause, limit_clause);
 
-    log::debug!("parse_set_operation: final_query type = {:?}", std::mem::discriminant(&final_query));
+    log::debug!(
+        "parse_set_operation: final_query type = {:?}",
+        std::mem::discriminant(&final_query)
+    );
 
     Ok((remaining, final_query))
 }
@@ -417,13 +483,13 @@ fn parse_union_except(tokens: &[Token]) -> IResult<&[Token], Query> {
                 Token::Union => {
                     return Err(nom::Err::Error(nom::error::Error::new(
                         remaining,
-                        nom::error::ErrorKind::Alt
+                        nom::error::ErrorKind::Alt,
                     )));
                 }
                 Token::Except => {
                     return Err(nom::Err::Error(nom::error::Error::new(
                         remaining,
-                        nom::error::ErrorKind::Alt
+                        nom::error::ErrorKind::Alt,
                     )));
                 }
                 _ => {}
@@ -457,7 +523,7 @@ fn parse_intersect(tokens: &[Token]) -> IResult<&[Token], Query> {
                 Token::Intersect => {
                     return Err(nom::Err::Error(nom::error::Error::new(
                         remaining,
-                        nom::error::ErrorKind::Alt
+                        nom::error::ErrorKind::Alt,
                     )));
                 }
                 _ => {}
@@ -500,10 +566,10 @@ fn parse_parenthesized_query_with_modifiers(tokens: &[Token]) -> IResult<&[Token
     // Parse parenthesized query without trailing modifiers
     let (remaining, query) = delimited(
         expect_token(Token::LeftParen),
-        parse_set_operation,  // Use full parsing inside parentheses (this handles internal LIMIT/ORDER BY)
-        expect_token(Token::RightParen)
+        parse_set_operation, // Use full parsing inside parentheses (this handles internal LIMIT/ORDER BY)
+        expect_token(Token::RightParen),
     )(tokens)?;
-    
+
     Ok((remaining, query))
 }
 
@@ -520,9 +586,21 @@ fn basic_query(tokens: &[Token]) -> IResult<&[Token], Query> {
             opt(order_clause),
             opt(limit_clause),
         )),
-        |(match_clause, where_clause, return_clause, group_clause, having_clause, order_clause, limit_clause)| {
-            log::debug!("basic_query parser: group_clause={}, order_clause={}, limit_clause={}",
-                     group_clause.is_some(), order_clause.is_some(), limit_clause.is_some());
+        |(
+            match_clause,
+            where_clause,
+            return_clause,
+            group_clause,
+            having_clause,
+            order_clause,
+            limit_clause,
+        )| {
+            log::debug!(
+                "basic_query parser: group_clause={}, order_clause={}, limit_clause={}",
+                group_clause.is_some(),
+                order_clause.is_some(),
+                limit_clause.is_some()
+            );
             Query::Basic(BasicQuery {
                 match_clause,
                 where_clause,
@@ -533,7 +611,7 @@ fn basic_query(tokens: &[Token]) -> IResult<&[Token], Query> {
                 limit_clause,
                 location: Location::default(),
             })
-        }
+        },
     )(tokens)
 }
 
@@ -556,7 +634,7 @@ fn return_query(tokens: &[Token]) -> IResult<&[Token], Query> {
                 limit_clause,
                 location: Location::default(),
             })
-        }
+        },
     )(tokens)
 }
 
@@ -567,37 +645,43 @@ fn final_mutation(tokens: &[Token]) -> IResult<&[Token], FinalMutation> {
         map(
             preceded(
                 expect_token(Token::Remove),
-                separated_list1(expect_token(Token::Comma), remove_item)
+                separated_list1(expect_token(Token::Comma), remove_item),
             ),
-            FinalMutation::Remove
+            FinalMutation::Remove,
         ),
         // SET items
         map(
             preceded(
                 expect_token(Token::Set),
-                separated_list1(expect_token(Token::Comma), set_item)
+                separated_list1(expect_token(Token::Comma), set_item),
             ),
-            FinalMutation::Set
+            FinalMutation::Set,
         ),
         // DELETE expressions
         map(
             tuple((
-                opt(alt((expect_token(Token::Detach), expect_token(Token::NoDetach)))),
+                opt(alt((
+                    expect_token(Token::Detach),
+                    expect_token(Token::NoDetach),
+                ))),
                 expect_token(Token::Delete),
                 separated_list1(expect_token(Token::Comma), expression),
             )),
             |(detach_mode, _, expressions)| FinalMutation::Delete {
                 expressions,
-                detach: matches!(detach_mode, Some(Token::Detach))
-            }
+                detach: matches!(detach_mode, Some(Token::Detach)),
+            },
         ),
     ))(tokens)
 }
 
 /// Parse mutation pipeline: MATCH ... WITH ... [UNWIND ... [WHERE ...]] REMOVE/SET/DELETE ...
 fn mutation_pipeline(tokens: &[Token]) -> IResult<&[Token], Query> {
-    log::debug!("mutation_pipeline: trying to parse with tokens: {:?}", tokens.get(0..10));
-    
+    log::debug!(
+        "mutation_pipeline: trying to parse with tokens: {:?}",
+        tokens.get(0..10)
+    );
+
     // Try parsing: segments + UNWIND + WHERE + mutation
     let parse_with_unwind = map(
         tuple((
@@ -617,35 +701,28 @@ fn mutation_pipeline(tokens: &[Token]) -> IResult<&[Token], Query> {
                 final_mutation,
                 location: Location::default(),
             })
-        }
+        },
     );
-    
+
     // Try parsing: segments (with possible UNWIND in last segment) + mutation
     let parse_without_unwind = map(
-        tuple((
-            many1(query_segment),
-            final_mutation,
-        )),
+        tuple((many1(query_segment), final_mutation)),
         |(segments, final_mutation)| {
             Query::MutationPipeline(MutationPipeline {
                 segments,
                 final_mutation,
                 location: Location::default(),
             })
-        }
+        },
     );
-    
+
     alt((parse_with_unwind, parse_without_unwind))(tokens)
 }
 
 /// Parse a query segment without UNWIND: MATCH [WHERE] WITH
 fn query_segment_no_unwind(tokens: &[Token]) -> IResult<&[Token], QuerySegment> {
     map(
-        tuple((
-            match_clause,
-            opt(where_clause),
-            opt(with_clause),
-        )),
+        tuple((match_clause, opt(where_clause), opt(with_clause))),
         |(match_clause, where_clause, with_clause)| QuerySegment {
             match_clause,
             where_clause,
@@ -653,7 +730,7 @@ fn query_segment_no_unwind(tokens: &[Token]) -> IResult<&[Token], QuerySegment> 
             unwind_clause: None,
             post_unwind_where: None,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -678,7 +755,7 @@ fn with_query(tokens: &[Token]) -> IResult<&[Token], Query> {
                 limit_clause,
                 location: Location::default(),
             })
-        }
+        },
     )(tokens)
 }
 
@@ -687,35 +764,26 @@ fn let_statement(tokens: &[Token]) -> IResult<&[Token], Query> {
     preceded(
         tag_token(Token::Let),
         map(
-            separated_list1(
-                tag_token(Token::Comma),
-                variable_definition
-            ),
+            separated_list1(tag_token(Token::Comma), variable_definition),
             |variable_definitions| {
                 Query::Let(LetStatement {
                     variable_definitions,
                     location: Location::default(),
                 })
-            }
-        )
+            },
+        ),
     )(tokens)
 }
 
 /// Parse variable definition: variable = expression
 fn variable_definition(tokens: &[Token]) -> IResult<&[Token], VariableDefinition> {
     map(
-        tuple((
-            identifier,
-            tag_token(Token::Equal),
-            expression,
-        )),
-        |(variable_name, _, expr)| {
-            VariableDefinition {
-                variable_name,
-                expression: expr,
-                location: Location::default(),
-            }
-        }
+        tuple((identifier, tag_token(Token::Equal), expression)),
+        |(variable_name, _, expr)| VariableDefinition {
+            variable_name,
+            expression: expr,
+            location: Location::default(),
+        },
     )(tokens)
 }
 
@@ -737,8 +805,8 @@ fn for_statement(tokens: &[Token]) -> IResult<&[Token], Query> {
                     expression: expr,
                     location: Location::default(),
                 })
-            }
-        )
+            },
+        ),
     )(tokens)
 }
 
@@ -761,8 +829,8 @@ fn filter_statement(tokens: &[Token]) -> IResult<&[Token], Query> {
                     },
                     location: Location::default(),
                 })
-            }
-        )
+            },
+        ),
     )(tokens)
 }
 
@@ -781,7 +849,7 @@ fn unwind_statement(tokens: &[Token]) -> IResult<&[Token], Query> {
                 variable: var,
                 location: Location::default(),
             })
-        }
+        },
     )(tokens)
 }
 
@@ -794,13 +862,11 @@ fn unwind_clause(tokens: &[Token]) -> IResult<&[Token], UnwindClause> {
             tag_token(Token::As),
             identifier,
         )),
-        |(_, expr, _, var)| {
-            UnwindClause {
-                expression: expr,
-                variable: var,
-                location: Location::default(),
-            }
-        }
+        |(_, expr, _, var)| UnwindClause {
+            expression: expr,
+            variable: var,
+            location: Location::default(),
+        },
     )(tokens)
 }
 
@@ -814,14 +880,16 @@ fn query_segment(tokens: &[Token]) -> IResult<&[Token], QuerySegment> {
             opt(unwind_clause),
             opt(where_clause),
         )),
-        |(match_clause, where_clause, with_clause, unwind_clause, post_unwind_where)| QuerySegment {
-            match_clause,
-            where_clause,
-            with_clause,
-            unwind_clause,
-            post_unwind_where,
-            location: Location::default(),
-        }
+        |(match_clause, where_clause, with_clause, unwind_clause, post_unwind_where)| {
+            QuerySegment {
+                match_clause,
+                where_clause,
+                with_clause,
+                unwind_clause,
+                post_unwind_where,
+                location: Location::default(),
+            }
+        },
     )(tokens)
 }
 
@@ -836,9 +904,13 @@ fn parse_union_except_op(tokens: &[Token]) -> IResult<&[Token], (SetOperationTyp
                 parse_intersect,
             )),
             |(_, all, right)| {
-                let op = if all.is_some() { SetOperationType::UnionAll } else { SetOperationType::Union };
+                let op = if all.is_some() {
+                    SetOperationType::UnionAll
+                } else {
+                    SetOperationType::Union
+                };
                 (op, right)
-            }
+            },
         ),
         // EXCEPT [ALL]
         map(
@@ -848,9 +920,13 @@ fn parse_union_except_op(tokens: &[Token]) -> IResult<&[Token], (SetOperationTyp
                 parse_intersect,
             )),
             |(_, all, right)| {
-                let op = if all.is_some() { SetOperationType::ExceptAll } else { SetOperationType::Except };
+                let op = if all.is_some() {
+                    SetOperationType::ExceptAll
+                } else {
+                    SetOperationType::Except
+                };
                 (op, right)
-            }
+            },
         ),
     ))(tokens)
 }
@@ -864,9 +940,13 @@ fn parse_intersect_op(tokens: &[Token]) -> IResult<&[Token], (SetOperationType, 
             parse_query_term,
         )),
         |(_, all, right)| {
-            let op = if all.is_some() { SetOperationType::IntersectAll } else { SetOperationType::Intersect };
+            let op = if all.is_some() {
+                SetOperationType::IntersectAll
+            } else {
+                SetOperationType::Intersect
+            };
             (op, right)
-        }
+        },
     )(tokens)
 }
 
@@ -884,7 +964,17 @@ fn select_statement(tokens: &[Token]) -> IResult<&[Token], SelectStatement> {
             opt(order_clause),
             opt(limit_clause),
         )),
-        |(_, distinct, return_items, from_clause, where_clause, group_clause, having_clause, order_clause, limit_clause)| SelectStatement {
+        |(
+            _,
+            distinct,
+            return_items,
+            from_clause,
+            where_clause,
+            group_clause,
+            having_clause,
+            order_clause,
+            limit_clause,
+        )| SelectStatement {
             distinct: distinct.unwrap_or(DistinctQualifier::None),
             return_items,
             from_clause,
@@ -894,7 +984,7 @@ fn select_statement(tokens: &[Token]) -> IResult<&[Token], SelectStatement> {
             order_clause,
             limit_clause,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -911,7 +1001,7 @@ fn select_list(tokens: &[Token]) -> IResult<&[Token], SelectItems> {
             |items| SelectItems::Explicit {
                 items,
                 location: Location::default(),
-            }
+            },
         ),
     ))(tokens)
 }
@@ -926,12 +1016,12 @@ fn from_clause(tokens: &[Token]) -> IResult<&[Token], FromClause> {
         |(_, graph_expressions)| FromClause {
             graph_expressions,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
 /// Parse FROM graph expression: graph_expression [match_statement] OR just match_statement
-/// 
+///
 /// NON-STANDARD EXTENSION: This parser supports "FROM MATCH ..." syntax for convenience,
 /// which is not part of ISO GQL standard. In ISO GQL, FROM clause requires a graph expression.
 /// Standard syntax: SELECT ... FROM /graph/path MATCH ...
@@ -940,26 +1030,20 @@ fn from_graph_expression(tokens: &[Token]) -> IResult<&[Token], FromGraphExpress
     alt((
         // NON-STANDARD: Support "FROM MATCH ..." syntax (Neo4j Cypher-style)
         // This uses the current session graph implicitly
-        map(
-            match_clause,
-            |match_statement| FromGraphExpression {
-                // Use CurrentGraph to indicate session graph should be used
-                graph_expression: GraphExpression::CurrentGraph,
-                match_statement: Some(match_statement),
-                location: Location::default(),
-            }
-        ),
+        map(match_clause, |match_statement| FromGraphExpression {
+            // Use CurrentGraph to indicate session graph should be used
+            graph_expression: GraphExpression::CurrentGraph,
+            match_statement: Some(match_statement),
+            location: Location::default(),
+        }),
         // STANDARD: FROM graph_expression [MATCH ...]
         map(
-            tuple((
-                graph_expression,
-                opt(match_clause),
-            )),
+            tuple((graph_expression, opt(match_clause))),
             |(graph_expression, match_statement)| FromGraphExpression {
                 graph_expression,
                 match_statement,
                 location: Location::default(),
-            }
+            },
         ),
     ))(tokens)
 }
@@ -988,7 +1072,7 @@ fn call_statement(tokens: &[Token]) -> IResult<&[Token], CallStatement> {
             yield_clause,
             where_clause,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -1001,7 +1085,7 @@ fn procedure_call(tokens: &[Token]) -> IResult<&[Token], (String, Vec<Expression
             opt(expression_list),
             expect_token(Token::RightParen),
         )),
-        |(proc_name, _, args, _)| (proc_name, args.unwrap_or_default())
+        |(proc_name, _, args, _)| (proc_name, args.unwrap_or_default()),
     )(tokens)
 }
 
@@ -1012,18 +1096,21 @@ fn property_access_as_string(tokens: &[Token]) -> IResult<&[Token], String> {
         Ok((&tokens[1..], prop_access.clone()))
     } else if let Some(Token::Identifier(name)) = tokens.first() {
         let rest = &tokens[1..];
-        
+
         // Check if this is a property access (name.property)
         if let Some(Token::Dot) = rest.first() {
             if let Some(Token::Identifier(property)) = rest.get(1) {
                 return Ok((&rest[2..], format!("{}.{}", name, property)));
             }
         }
-        
+
         // Simple identifier
         Ok((rest, name.clone()))
     } else {
-        Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+        Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        )))
     }
 }
 
@@ -1033,10 +1120,7 @@ fn yield_clause(tokens: &[Token]) -> IResult<&[Token], YieldClause> {
         tuple((
             expect_token(Token::Yield),
             yield_item,
-            many0(tuple((
-                expect_token(Token::Comma),
-                yield_item,
-            ))),
+            many0(tuple((expect_token(Token::Comma), yield_item))),
         )),
         |(_, first_item, additional_items)| {
             let mut items = vec![first_item];
@@ -1045,7 +1129,7 @@ fn yield_clause(tokens: &[Token]) -> IResult<&[Token], YieldClause> {
                 items,
                 location: Location::default(),
             }
-        }
+        },
     )(tokens)
 }
 
@@ -1054,16 +1138,13 @@ fn yield_item(tokens: &[Token]) -> IResult<&[Token], YieldItem> {
     map(
         tuple((
             identifier,
-            opt(tuple((
-                expect_token(Token::As),
-                identifier,
-            ))),
+            opt(tuple((expect_token(Token::As), identifier))),
         )),
         |(column_name, alias_opt)| YieldItem {
             column_name,
             alias: alias_opt.map(|(_, alias)| alias),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -1073,10 +1154,7 @@ fn match_clause(tokens: &[Token]) -> IResult<&[Token], MatchClause> {
         tuple((
             expect_token(Token::Match),
             path_pattern,
-            many0(tuple((
-                expect_token(Token::Comma),
-                path_pattern,
-            ))),
+            many0(tuple((expect_token(Token::Comma), path_pattern))),
         )),
         |(_, first_pattern, additional_patterns)| {
             let mut patterns = vec![first_pattern];
@@ -1085,7 +1163,7 @@ fn match_clause(tokens: &[Token]) -> IResult<&[Token], MatchClause> {
                 patterns,
                 location: Location::default(),
             }
-        }
+        },
     )(tokens)
 }
 
@@ -1102,7 +1180,7 @@ fn path_pattern(tokens: &[Token]) -> IResult<&[Token], PathPattern> {
             path_type,
             elements,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -1111,19 +1189,13 @@ fn path_type_keywords(tokens: &[Token]) -> IResult<&[Token], PathType> {
     alt((
         // ACYCLIC PATH (must come before ACYCLIC alone)
         map(
-            tuple((
-                expect_token(Token::Acyclic),
-                expect_token(Token::Path),
-            )),
-            |_| PathType::AcyclicPath
+            tuple((expect_token(Token::Acyclic), expect_token(Token::Path))),
+            |_| PathType::AcyclicPath,
         ),
         // SIMPLE PATH (must come before SIMPLE alone)
         map(
-            tuple((
-                expect_token(Token::Simple),
-                expect_token(Token::Path),
-            )),
-            |_| PathType::SimplePath
+            tuple((expect_token(Token::Simple), expect_token(Token::Path))),
+            |_| PathType::SimplePath,
         ),
         // TRAIL
         map(expect_token(Token::Trail), |_| PathType::Trail),
@@ -1143,28 +1215,21 @@ fn path_quantifier(tokens: &[Token]) -> IResult<&[Token], PathQuantifier> {
             alt((
                 // {n,m} - range
                 map(
-                    tuple((
-                        integer_literal,
-                        expect_token(Token::Comma),
-                        integer_literal,
-                    )),
-                    |(min, _, max)| PathQuantifier::Range { min: min as u32, max: max as u32 }
+                    tuple((integer_literal, expect_token(Token::Comma), integer_literal)),
+                    |(min, _, max)| PathQuantifier::Range {
+                        min: min as u32,
+                        max: max as u32,
+                    },
                 ),
                 // {n,} - at least
                 map(
-                    tuple((
-                        integer_literal,
-                        expect_token(Token::Comma),
-                    )),
-                    |(min, _)| PathQuantifier::AtLeast(min as u32)
+                    tuple((integer_literal, expect_token(Token::Comma))),
+                    |(min, _)| PathQuantifier::AtLeast(min as u32),
                 ),
                 // {,m} - at most
                 map(
-                    tuple((
-                        expect_token(Token::Comma),
-                        integer_literal,
-                    )),
-                    |(_, max)| PathQuantifier::AtMost(max as u32)
+                    tuple((expect_token(Token::Comma), integer_literal)),
+                    |(_, max)| PathQuantifier::AtMost(max as u32),
                 ),
                 // {n} - exact
                 map(integer_literal, |n| PathQuantifier::Exact(n as u32)),
@@ -1197,7 +1262,7 @@ fn node_pattern(tokens: &[Token]) -> IResult<&[Token], Node> {
             labels: labels.unwrap_or_default(),
             properties,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -1214,18 +1279,23 @@ fn edge_pattern(tokens: &[Token]) -> IResult<&[Token], Edge> {
                         identifier,
                         opt(preceded(expect_token(Token::Colon), label_expression)),
                     )),
-                    |(identifier, label_expr)| (Some(identifier), label_expr.map(label_expression_to_strings))
+                    |(identifier, label_expr)| {
+                        (
+                            Some(identifier),
+                            label_expr.map(label_expression_to_strings),
+                        )
+                    },
                 ),
                 map(
                     preceded(expect_token(Token::Colon), label_expression),
-                    |label_expr| (None, Some(label_expression_to_strings(label_expr)))
+                    |label_expr| (None, Some(label_expression_to_strings(label_expr))),
                 ),
                 // Allow empty patterns like -[]->
                 value((None, None), success(())),
             )),
             opt(property_map),
             expect_token(Token::RightBracket),
-            opt(path_quantifier),  // ISO GQL: quantifier after ] but before final direction
+            opt(path_quantifier), // ISO GQL: quantifier after ] but before final direction
             edge_direction,
         )),
         |(left_dir, _, (identifier, labels), properties, _, quantifier, right_dir)| {
@@ -1240,10 +1310,10 @@ fn edge_pattern(tokens: &[Token]) -> IResult<&[Token], Edge> {
                 labels: labels.unwrap_or_default(),
                 properties,
                 direction,
-                quantifier,  // ISO GQL: quantifier parsed after ] but before final direction
+                quantifier, // ISO GQL: quantifier parsed after ] but before final direction
                 location: Location::default(),
             }
-        }
+        },
     )(tokens)
 }
 
@@ -1256,8 +1326,8 @@ fn label_list(tokens: &[Token]) -> IResult<&[Token], Vec<String>> {
             identifier_or_quoted,
             many0(tuple((
                 alt((
-                    expect_token(Token::Ampersand),  // BNF syntax: &label
-                    expect_token(Token::Colon),      // Legacy syntax: :label
+                    expect_token(Token::Ampersand), // BNF syntax: &label
+                    expect_token(Token::Colon),     // Legacy syntax: :label
                 )),
                 identifier_or_quoted,
             ))),
@@ -1266,7 +1336,7 @@ fn label_list(tokens: &[Token]) -> IResult<&[Token], Vec<String>> {
             let mut labels = vec![first_label];
             labels.extend(additional_labels.into_iter().map(|(_, label)| label));
             labels
-        }
+        },
     )(tokens)
 }
 
@@ -1277,10 +1347,7 @@ fn property_map(tokens: &[Token]) -> IResult<&[Token], PropertyMap> {
             expect_token(Token::LeftBrace),
             opt(tuple((
                 property_pair,
-                many0(tuple((
-                    expect_token(Token::Comma),
-                    property_pair,
-                ))),
+                many0(tuple((expect_token(Token::Comma), property_pair))),
             ))),
             expect_token(Token::RightBrace),
         ),
@@ -1296,7 +1363,7 @@ fn property_map(tokens: &[Token]) -> IResult<&[Token], PropertyMap> {
                 properties,
                 location: Location::default(),
             }
-        }
+        },
     )(tokens)
 }
 
@@ -1304,30 +1371,23 @@ fn property_map(tokens: &[Token]) -> IResult<&[Token], PropertyMap> {
 /// Supports regular identifiers, backtick-delimited identifiers, and keywords
 fn property_pair(tokens: &[Token]) -> IResult<&[Token], Property> {
     map(
-        tuple((
-            identifier_or_quoted,
-            expect_token(Token::Colon),
-            expression,
-        )),
+        tuple((identifier_or_quoted, expect_token(Token::Colon), expression)),
         |(key, _, value)| Property {
             key,
             value,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
 /// Parse WHERE clause
 fn where_clause(tokens: &[Token]) -> IResult<&[Token], WhereClause> {
     map(
-        tuple((
-            expect_token(Token::Where),
-            expression,
-        )),
+        tuple((expect_token(Token::Where), expression)),
         |(_, condition)| WhereClause {
             condition,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -1341,10 +1401,7 @@ fn return_clause(tokens: &[Token]) -> IResult<&[Token], ReturnClause> {
                 value(DistinctQualifier::All, expect_token(Token::All)),
             ))),
             return_item,
-            many0(tuple((
-                expect_token(Token::Comma),
-                return_item,
-            ))),
+            many0(tuple((expect_token(Token::Comma), return_item))),
         )),
         |(_, distinct_opt, first, rest)| {
             let mut items = vec![first];
@@ -1354,7 +1411,7 @@ fn return_clause(tokens: &[Token]) -> IResult<&[Token], ReturnClause> {
                 items,
                 location: Location::default(),
             }
-        }
+        },
     )(tokens)
 }
 
@@ -1363,16 +1420,13 @@ fn return_item(tokens: &[Token]) -> IResult<&[Token], ReturnItem> {
     map(
         tuple((
             expression,
-            opt(tuple((
-                expect_token(Token::As),
-                identifier,
-            ))),
+            opt(tuple((expect_token(Token::As), identifier))),
         )),
         |(expression, opt_alias)| ReturnItem {
             expression,
             alias: opt_alias.map(|(_, alias)| alias),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -1386,10 +1440,7 @@ fn with_clause(tokens: &[Token]) -> IResult<&[Token], WithClause> {
                 value(DistinctQualifier::All, expect_token(Token::All)),
             ))),
             with_item,
-            many0(tuple((
-                expect_token(Token::Comma),
-                with_item,
-            ))),
+            many0(tuple((expect_token(Token::Comma), with_item))),
             opt(where_clause),
             opt(order_clause),
             opt(limit_clause),
@@ -1405,7 +1456,7 @@ fn with_clause(tokens: &[Token]) -> IResult<&[Token], WithClause> {
                 limit_clause,
                 location: Location::default(),
             }
-        }
+        },
     )(tokens)
 }
 
@@ -1414,16 +1465,13 @@ fn with_item(tokens: &[Token]) -> IResult<&[Token], WithItem> {
     map(
         tuple((
             expression,
-            opt(tuple((
-                expect_token(Token::As),
-                identifier,
-            ))),
+            opt(tuple((expect_token(Token::As), identifier))),
         )),
         |(expression, opt_alias)| WithItem {
             expression,
             alias: opt_alias.map(|(_, alias)| alias),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -1434,10 +1482,7 @@ fn order_clause(tokens: &[Token]) -> IResult<&[Token], OrderClause> {
             expect_token(Token::Order),
             expect_token(Token::By),
             order_item,
-            many0(tuple((
-                expect_token(Token::Comma),
-                order_item,
-            ))),
+            many0(tuple((expect_token(Token::Comma), order_item))),
         )),
         |(_, _, first_item, additional_items)| {
             let mut items = vec![first_item];
@@ -1446,7 +1491,7 @@ fn order_clause(tokens: &[Token]) -> IResult<&[Token], OrderClause> {
                 items,
                 location: Location::default(),
             }
-        }
+        },
     )(tokens)
 }
 
@@ -1474,7 +1519,7 @@ fn order_item(tokens: &[Token]) -> IResult<&[Token], OrderItem> {
             direction: direction.unwrap_or(OrderDirection::Ascending), // Default to ASC
             nulls_ordering: nulls_clause.map(|(_, nulls_order)| nulls_order),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -1485,10 +1530,7 @@ fn group_clause(tokens: &[Token]) -> IResult<&[Token], GroupClause> {
             expect_token(Token::Group),
             expect_token(Token::By),
             expression,
-            many0(tuple((
-                expect_token(Token::Comma),
-                expression,
-            ))),
+            many0(tuple((expect_token(Token::Comma), expression))),
         )),
         |(_, _, first_expr, additional_exprs)| {
             let mut expressions = vec![first_expr];
@@ -1497,21 +1539,18 @@ fn group_clause(tokens: &[Token]) -> IResult<&[Token], GroupClause> {
                 expressions,
                 location: Location::default(),
             }
-        }
+        },
     )(tokens)
 }
 
 /// Parse HAVING clause: HAVING expression
 fn having_clause(tokens: &[Token]) -> IResult<&[Token], HavingClause> {
     map(
-        tuple((
-            expect_token(Token::Having),
-            expression,
-        )),
+        tuple((expect_token(Token::Having), expression)),
         |(_, condition)| HavingClause {
             condition,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -1521,16 +1560,13 @@ fn limit_clause(tokens: &[Token]) -> IResult<&[Token], LimitClause> {
         tuple((
             expect_token(Token::Limit),
             integer_literal,
-            opt(tuple((
-                expect_token(Token::Offset),
-                integer_literal,
-            ))),
+            opt(tuple((expect_token(Token::Offset), integer_literal))),
         )),
         |(_, count, opt_offset)| LimitClause {
             count: count as usize,
             offset: opt_offset.map(|(_, offset)| offset as usize),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -1544,10 +1580,7 @@ fn or_expression(tokens: &[Token]) -> IResult<&[Token], Expression> {
     map(
         tuple((
             xor_expression,
-            many0(tuple((
-                expect_token(Token::Or),
-                xor_expression,
-            ))),
+            many0(tuple((expect_token(Token::Or), xor_expression))),
         )),
         |(first, rest)| {
             rest.into_iter().fold(first, |left, (_, right)| {
@@ -1558,7 +1591,7 @@ fn or_expression(tokens: &[Token]) -> IResult<&[Token], Expression> {
                     location: Location::default(),
                 })
             })
-        }
+        },
     )(tokens)
 }
 
@@ -1567,10 +1600,7 @@ fn xor_expression(tokens: &[Token]) -> IResult<&[Token], Expression> {
     map(
         tuple((
             and_expression,
-            many0(tuple((
-                expect_token(Token::Xor),
-                and_expression,
-            ))),
+            many0(tuple((expect_token(Token::Xor), and_expression))),
         )),
         |(first, rest)| {
             rest.into_iter().fold(first, |left, (_, right)| {
@@ -1581,7 +1611,7 @@ fn xor_expression(tokens: &[Token]) -> IResult<&[Token], Expression> {
                     location: Location::default(),
                 })
             })
-        }
+        },
     )(tokens)
 }
 
@@ -1590,10 +1620,7 @@ fn and_expression(tokens: &[Token]) -> IResult<&[Token], Expression> {
     map(
         tuple((
             not_expression,
-            many0(tuple((
-                expect_token(Token::And),
-                not_expression,
-            ))),
+            many0(tuple((expect_token(Token::And), not_expression))),
         )),
         |(first, rest)| {
             rest.into_iter().fold(first, |left, (_, right)| {
@@ -1604,7 +1631,7 @@ fn and_expression(tokens: &[Token]) -> IResult<&[Token], Expression> {
                     location: Location::default(),
                 })
             })
-        }
+        },
     )(tokens)
 }
 
@@ -1612,15 +1639,14 @@ fn and_expression(tokens: &[Token]) -> IResult<&[Token], Expression> {
 fn not_expression(tokens: &[Token]) -> IResult<&[Token], Expression> {
     alt((
         map(
-            tuple((
-                expect_token(Token::Not),
-                comparison,
-            )),
-            |(_, expr)| Expression::Unary(UnaryExpression {
-                operator: Operator::Not,
-                expression: Box::new(expr),
-                location: Location::default(),
-            })
+            tuple((expect_token(Token::Not), comparison)),
+            |(_, expr)| {
+                Expression::Unary(UnaryExpression {
+                    operator: Operator::Not,
+                    expression: Box::new(expr),
+                    location: Location::default(),
+                })
+            },
         ),
         comparison,
     ))(tokens)
@@ -1629,11 +1655,7 @@ fn not_expression(tokens: &[Token]) -> IResult<&[Token], Expression> {
 /// Parse shorthand label predicate: identifier:label (e.g., n:Person)
 fn shorthand_label_predicate(tokens: &[Token]) -> IResult<&[Token], Expression> {
     map(
-        tuple((
-            identifier,
-            expect_token(Token::Colon),
-            identifier,
-        )),
+        tuple((identifier, expect_token(Token::Colon), identifier)),
         |(var_name, _, label_name)| {
             let label_expr = LabelExpression {
                 terms: vec![LabelTerm {
@@ -1642,7 +1664,7 @@ fn shorthand_label_predicate(tokens: &[Token]) -> IResult<&[Token], Expression> 
                 }],
                 location: Location::default(),
             };
-            
+
             Expression::IsPredicate(IsPredicateExpression {
                 subject: Box::new(Expression::Variable(Variable {
                     name: var_name,
@@ -1654,7 +1676,7 @@ fn shorthand_label_predicate(tokens: &[Token]) -> IResult<&[Token], Expression> 
                 type_spec: None,
                 location: Location::default(),
             })
-        }
+        },
     )(tokens)
 }
 
@@ -1686,7 +1708,7 @@ fn comparison(tokens: &[Token]) -> IResult<&[Token], Expression> {
                     })),
                     location: Location::default(),
                 })
-            }
+            },
         ),
         // Handle NOT IN subquery specially
         map(
@@ -1702,11 +1724,15 @@ fn comparison(tokens: &[Token]) -> IResult<&[Token], Expression> {
                             basic_query,
                             expect_token(Token::RightParen),
                         )),
-                        |(_, query, _)| Expression::NotInSubquery(NotInSubqueryExpression {
-                            expression: Box::new(Expression::Literal(Literal::String("placeholder".to_string()))), // Will be replaced
-                            query: Box::new(query),
-                            location: Location::default(),
-                        })
+                        |(_, query, _)| {
+                            Expression::NotInSubquery(NotInSubqueryExpression {
+                                expression: Box::new(Expression::Literal(Literal::String(
+                                    "placeholder".to_string(),
+                                ))), // Will be replaced
+                                query: Box::new(query),
+                                location: Location::default(),
+                            })
+                        },
                     ),
                     // Try parenthesized list: NOT IN ('a', 'b', 'c')
                     map(
@@ -1715,32 +1741,37 @@ fn comparison(tokens: &[Token]) -> IResult<&[Token], Expression> {
                             expression_list,
                             expect_token(Token::RightParen),
                         )),
-                        |(_, exprs, _)| Expression::Literal(Literal::List(exprs.into_iter().map(|e| {
-                            // Convert expressions to literals if possible
-                            match e {
-                                Expression::Literal(lit) => lit,
-                                _ => Literal::String(format!("{:?}", e)), // Fallback
-                            }
-                        }).collect()))
+                        |(_, exprs, _)| {
+                            Expression::Literal(Literal::List(
+                                exprs
+                                    .into_iter()
+                                    .map(|e| {
+                                        // Convert expressions to literals if possible
+                                        match e {
+                                            Expression::Literal(lit) => lit,
+                                            _ => Literal::String(format!("{:?}", e)), // Fallback
+                                        }
+                                    })
+                                    .collect(),
+                            ))
+                        },
                     ),
                     // Fallback: variable or array expression
                     additive_expression,
                 )),
             )),
-            |(left, _, _, right)| {
-                match right {
-                    Expression::NotInSubquery(mut not_in_subquery) => {
-                        not_in_subquery.expression = Box::new(left);
-                        Expression::NotInSubquery(not_in_subquery)
-                    }
-                    _ => Expression::Binary(BinaryExpression {
-                        left: Box::new(left),
-                        operator: Operator::NotIn,
-                        right: Box::new(right),
-                        location: Location::default(),
-                    })
+            |(left, _, _, right)| match right {
+                Expression::NotInSubquery(mut not_in_subquery) => {
+                    not_in_subquery.expression = Box::new(left);
+                    Expression::NotInSubquery(not_in_subquery)
                 }
-            }
+                _ => Expression::Binary(BinaryExpression {
+                    left: Box::new(left),
+                    operator: Operator::NotIn,
+                    right: Box::new(right),
+                    location: Location::default(),
+                }),
+            },
         ),
         // Handle IN subquery specially
         map(
@@ -1755,11 +1786,15 @@ fn comparison(tokens: &[Token]) -> IResult<&[Token], Expression> {
                             basic_query,
                             expect_token(Token::RightParen),
                         )),
-                        |(_, query, _)| Expression::InSubquery(InSubqueryExpression {
-                            expression: Box::new(Expression::Literal(Literal::String("placeholder".to_string()))), // Will be replaced
-                            query: Box::new(query),
-                            location: Location::default(),
-                        })
+                        |(_, query, _)| {
+                            Expression::InSubquery(InSubqueryExpression {
+                                expression: Box::new(Expression::Literal(Literal::String(
+                                    "placeholder".to_string(),
+                                ))), // Will be replaced
+                                query: Box::new(query),
+                                location: Location::default(),
+                            })
+                        },
                     ),
                     // Try parenthesized list: IN ('a', 'b', 'c')
                     map(
@@ -1768,41 +1803,43 @@ fn comparison(tokens: &[Token]) -> IResult<&[Token], Expression> {
                             expression_list,
                             expect_token(Token::RightParen),
                         )),
-                        |(_, exprs, _)| Expression::Literal(Literal::List(exprs.into_iter().map(|e| {
-                            // Convert expressions to literals if possible
-                            match e {
-                                Expression::Literal(lit) => lit,
-                                _ => Literal::String(format!("{:?}", e)), // Fallback
-                            }
-                        }).collect()))
+                        |(_, exprs, _)| {
+                            Expression::Literal(Literal::List(
+                                exprs
+                                    .into_iter()
+                                    .map(|e| {
+                                        // Convert expressions to literals if possible
+                                        match e {
+                                            Expression::Literal(lit) => lit,
+                                            _ => Literal::String(format!("{:?}", e)), // Fallback
+                                        }
+                                    })
+                                    .collect(),
+                            ))
+                        },
                     ),
                     // Fallback: variable or array expression
                     additive_expression,
                 )),
             )),
-            |(left, _, right)| {
-                match right {
-                    Expression::InSubquery(mut in_subquery) => {
-                        in_subquery.expression = Box::new(left);
-                        Expression::InSubquery(in_subquery)
-                    }
-                    _ => Expression::Binary(BinaryExpression {
-                        left: Box::new(left),
-                        operator: Operator::In,
-                        right: Box::new(right),
-                        location: Location::default(),
-                    })
+            |(left, _, right)| match right {
+                Expression::InSubquery(mut in_subquery) => {
+                    in_subquery.expression = Box::new(left);
+                    Expression::InSubquery(in_subquery)
                 }
-            }
+                _ => Expression::Binary(BinaryExpression {
+                    left: Box::new(left),
+                    operator: Operator::In,
+                    right: Box::new(right),
+                    location: Location::default(),
+                }),
+            },
         ),
         // Regular comparison operations
         map(
             tuple((
                 additive_expression,
-                opt(tuple((
-                    comparison_operator,
-                    additive_expression,
-                ))),
+                opt(tuple((comparison_operator, additive_expression))),
             )),
             |(left, opt_right)| {
                 if let Some((op, right)) = opt_right {
@@ -1815,7 +1852,7 @@ fn comparison(tokens: &[Token]) -> IResult<&[Token], Expression> {
                 } else {
                     left
                 }
-            }
+            },
         ),
     ))(tokens)
 }
@@ -1829,7 +1866,7 @@ fn additive_expression(tokens: &[Token]) -> IResult<&[Token], Expression> {
                 alt((
                     expect_token(Token::Plus),
                     expect_token(Token::Minus),
-                    expect_token(Token::Dash),  // Accept Dash as arithmetic minus
+                    expect_token(Token::Dash), // Accept Dash as arithmetic minus
                     expect_token(Token::Concat), // Concatenation operator
                 )),
                 multiplicative_expression,
@@ -1840,9 +1877,9 @@ fn additive_expression(tokens: &[Token]) -> IResult<&[Token], Expression> {
                 let operator = match op {
                     Token::Plus => Operator::Plus,
                     Token::Minus => Operator::Minus,
-                    Token::Dash => Operator::Minus,  // Treat Dash as arithmetic minus
+                    Token::Dash => Operator::Minus, // Treat Dash as arithmetic minus
                     Token::Concat => Operator::Concat, // Concatenation
-                    _ => Operator::Plus, // Should not happen
+                    _ => Operator::Plus,            // Should not happen
                 };
                 Expression::Binary(BinaryExpression {
                     left: Box::new(left),
@@ -1851,7 +1888,7 @@ fn additive_expression(tokens: &[Token]) -> IResult<&[Token], Expression> {
                     location: Location::default(),
                 })
             })
-        }
+        },
     )(tokens)
 }
 
@@ -1884,7 +1921,7 @@ fn multiplicative_expression(tokens: &[Token]) -> IResult<&[Token], Expression> 
                     location: Location::default(),
                 })
             })
-        }
+        },
     )(tokens)
 }
 
@@ -1894,61 +1931,63 @@ fn multiplicative_expression(tokens: &[Token]) -> IResult<&[Token], Expression> 
 fn array_expression(tokens: &[Token]) -> IResult<&[Token], Literal> {
     // Parse [expr1, expr2, ...]
     let (tokens, _) = expect_token(Token::LeftBracket)(tokens)?;
-    
+
     // Check for empty array
     if matches!(tokens.first(), Some(Token::RightBracket)) {
         let (tokens, _) = expect_token(Token::RightBracket)(tokens)?;
         return Ok((tokens, Literal::Vector(vec![])));
     }
-    
+
     // Parse expressions
     let (tokens, expressions) = expression_list(tokens)?;
     let (tokens, _) = expect_token(Token::RightBracket)(tokens)?;
-    
+
     // For now, we'll convert all expressions to a simple numeric vector
     // In the future, we might want to support more complex array types
     // For AI functions, we typically expect numeric arrays
     // Removed unused values vector since we now use literals directly
-    
+
     // Try to convert to a Literal list
     let mut literals = Vec::new();
     let mut all_numeric = true;
     let mut numeric_values = Vec::new();
-    
+
     for expr in expressions {
         // Try to extract a literal value from the expression
         match expr {
-            Expression::Literal(literal) => {
-                match &literal {
-                    Literal::Integer(n) => {
-                        numeric_values.push(*n as f64);
-                        literals.push(literal);
-                    },
-                    Literal::Float(f) => {
-                        numeric_values.push(*f);
-                        literals.push(literal);
-                    },
-                    _ => {
-                        all_numeric = false;
-                        literals.push(literal);
-                    }
+            Expression::Literal(literal) => match &literal {
+                Literal::Integer(n) => {
+                    numeric_values.push(*n as f64);
+                    literals.push(literal);
+                }
+                Literal::Float(f) => {
+                    numeric_values.push(*f);
+                    literals.push(literal);
+                }
+                _ => {
+                    all_numeric = false;
+                    literals.push(literal);
                 }
             },
             _ => {
                 // For complex expressions, we can't evaluate them at parse time
                 // This is problematic, so we'll return an error for now
                 return Err(nom::Err::Error(nom::error::Error::new(
-                    tokens, 
-                    nom::error::ErrorKind::Tag
+                    tokens,
+                    nom::error::ErrorKind::Tag,
                 )));
             }
         }
     }
-    
+
     // If all elements are numeric, return a Vector for backwards compatibility
     // Otherwise return a generic List
-    if all_numeric && !literals.is_empty() && 
-       literals.iter().all(|lit| matches!(lit, Literal::Integer(_) | Literal::Float(_))) {
+    if all_numeric
+        && !literals.is_empty()
+        && literals
+            .iter()
+            .all(|lit| matches!(lit, Literal::Integer(_) | Literal::Float(_)))
+    {
         Ok((tokens, Literal::Vector(numeric_values)))
     } else {
         Ok((tokens, Literal::List(literals)))
@@ -1958,63 +1997,73 @@ fn array_expression(tokens: &[Token]) -> IResult<&[Token], Literal> {
 /// Parse PATH constructor: PATH[expr1, expr2, ...] or PATH + vector
 fn path_constructor(tokens: &[Token]) -> IResult<&[Token], PathConstructor> {
     let (tokens, _) = expect_token(Token::Path)(tokens)?;
-    
+
     // Handle case where lexer parsed brackets with numbers as a vector literal
     if let Some(Token::Vector(values)) = tokens.first() {
         let (tokens, _) = expect_token_variant(&|t| matches!(t, Token::Vector(_)))(tokens)?;
-        
+
         // Convert vector values to literal expressions
-        let elements = values.iter().map(|&v| {
-            Expression::Literal(crate::ast::ast::Literal::Float(v))
-        }).collect();
-        
-        return Ok((tokens, PathConstructor {
-            elements,
-            location: Location::default(),
-        }));
+        let elements = values
+            .iter()
+            .map(|&v| Expression::Literal(crate::ast::ast::Literal::Float(v)))
+            .collect();
+
+        return Ok((
+            tokens,
+            PathConstructor {
+                elements,
+                location: Location::default(),
+            },
+        ));
     }
-    
+
     let (tokens, _) = expect_token(Token::LeftBracket)(tokens)?;
-    
+
     // Check for empty PATH[]
     if matches!(tokens.first(), Some(Token::RightBracket)) {
         let (tokens, _) = expect_token(Token::RightBracket)(tokens)?;
-        return Ok((tokens, PathConstructor {
-            elements: vec![],
-            location: Location::default(),
-        }));
+        return Ok((
+            tokens,
+            PathConstructor {
+                elements: vec![],
+                location: Location::default(),
+            },
+        ));
     }
-    
+
     // Parse expressions
     let (tokens, elements) = expression_list(tokens)?;
     let (tokens, _) = expect_token(Token::RightBracket)(tokens)?;
-    
-    Ok((tokens, PathConstructor {
-        elements,
-        location: Location::default(),
-    }))
+
+    Ok((
+        tokens,
+        PathConstructor {
+            elements,
+            location: Location::default(),
+        },
+    ))
 }
 
 /// Parse postfix expressions: primary_expr[index] | primary_expr
 fn postfix_expression(tokens: &[Token]) -> IResult<&[Token], Expression> {
     let (mut remaining, mut expr) = primary_expression(tokens)?;
-    
+
     // Check for array indexing: [expression]
     while let Ok((tokens_after_bracket, _)) = expect_token(Token::LeftBracket)(remaining) {
         // Parse the index expression
         let (tokens_after_index, index_expr) = expression(tokens_after_bracket)?;
         let (tokens_after_close, _) = expect_token(Token::RightBracket)(tokens_after_index)?;
-        
+
         // Create an ArrayIndexExpression
         expr = Expression::ArrayIndex(ArrayIndexExpression {
             array: Box::new(expr),
             index: Box::new(index_expr),
             location: Location::default(),
         });
-        
+
         remaining = tokens_after_close;
     }
-    
+
     Ok((remaining, expr))
 }
 
@@ -2062,38 +2111,35 @@ fn expression_list(tokens: &[Token]) -> IResult<&[Token], Vec<Expression>> {
     map(
         tuple((
             expression,
-            many0(tuple((
-                expect_token(Token::Comma),
-                expression,
-            ))),
+            many0(tuple((expect_token(Token::Comma), expression))),
         )),
         |(first_expr, additional_exprs)| {
             let mut expressions = vec![first_expr];
             expressions.extend(additional_exprs.into_iter().map(|(_, expr)| expr));
             expressions
-        }
+        },
     )(tokens)
 }
 
 /// Parse function call: name(args...) using ISO GQL compliant token-based parsing
 fn function_call(tokens: &[Token]) -> IResult<&[Token], FunctionCall> {
     // ISO GQL: <function-call> ::= <identifier> "(" [DISTINCT|ALL] [<expression> ("," <expression>)*] ")"
-    
+
     // Parse function name (identifier)
     let (tokens, name) = identifier(tokens)?;
     let name = name.to_uppercase(); // Normalize function names to uppercase
-    
+
     // Parse opening parenthesis
     let (tokens, _) = expect_token(Token::LeftParen)(tokens)?;
-    
+
     // Parse optional DISTINCT/ALL qualifier for aggregate functions
     let (tokens, distinct_qualifier) = opt(distinct_qualifier)(tokens)?;
     let distinct = distinct_qualifier.unwrap_or(DistinctQualifier::None);
-    
+
     // Parse arguments (expressions separated by commas)
     let mut arguments = Vec::new();
     let mut remaining = tokens;
-    
+
     // Check if there are arguments (not immediate closing paren)
     if !matches!(remaining.first(), Some(Token::RightParen)) {
         // Special case for COUNT(*) and similar aggregate functions with *
@@ -2111,7 +2157,7 @@ fn function_call(tokens: &[Token]) -> IResult<&[Token], FunctionCall> {
                 let (new_remaining, expr) = expression(remaining)?;
                 arguments.push(expr);
                 remaining = new_remaining;
-                
+
                 // Check for comma (more arguments) or closing paren (end)
                 match remaining.first() {
                     Some(Token::Comma) => {
@@ -2119,37 +2165,49 @@ fn function_call(tokens: &[Token]) -> IResult<&[Token], FunctionCall> {
                         continue;
                     }
                     Some(Token::RightParen) => break,
-                    _ => return Err(nom::Err::Error(nom::error::Error::new(remaining, nom::error::ErrorKind::Tag))),
+                    _ => {
+                        return Err(nom::Err::Error(nom::error::Error::new(
+                            remaining,
+                            nom::error::ErrorKind::Tag,
+                        )))
+                    }
                 }
             }
         }
     }
-    
+
     // Parse closing parenthesis
     let (remaining, _) = expect_token(Token::RightParen)(remaining)?;
-    
-    Ok((remaining, FunctionCall {
-        name,
-        distinct,
-        arguments,
-        location: Location::default(),
-    }))
+
+    Ok((
+        remaining,
+        FunctionCall {
+            name,
+            distinct,
+            arguments,
+            location: Location::default(),
+        },
+    ))
 }
 
 /// Parse special TRIM function with ISO GQL FROM clause syntax
 /// TRIM "(" [("LEADING" | "TRAILING" | "BOTH") [<string-expr>] "FROM"] <string-expr> ")"
 fn trim_function_call(tokens: &[Token]) -> IResult<&[Token], FunctionCall> {
     // Check if this is a TRIM function call
-    if !matches!(tokens.first(), Some(Token::Identifier(name)) if name.eq_ignore_ascii_case("TRIM")) {
-        return Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)));
+    if !matches!(tokens.first(), Some(Token::Identifier(name)) if name.eq_ignore_ascii_case("TRIM"))
+    {
+        return Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        )));
     }
-    
+
     let (tokens, _name) = identifier(tokens)?; // Consume TRIM
     let (tokens, _) = expect_token(Token::LeftParen)(tokens)?; // Consume (
-    
+
     let mut arguments = Vec::new();
     let mut remaining = tokens;
-    
+
     // Check for trim mode keywords: LEADING, TRAILING, BOTH
     let trim_mode = match remaining.first() {
         Some(Token::Leading) => {
@@ -2166,28 +2224,29 @@ fn trim_function_call(tokens: &[Token]) -> IResult<&[Token], FunctionCall> {
         }
         _ => None,
     };
-    
+
     // If we have a trim mode, check for optional trim character and FROM keyword
     if let Some(mode) = trim_mode {
         // Add mode as first argument
         arguments.push(Expression::Literal(Literal::String(mode.to_string())));
-        
+
         // Check if next token is FROM (no trim character specified) or an expression (trim character)
         if matches!(remaining.first(), Some(Token::From)) {
             // TRIM(MODE FROM string) - no trim character, use default whitespace
             remaining = &remaining[1..]; // consume FROM
-            arguments.push(Expression::Literal(Literal::String(" ".to_string()))); // default trim char
+            arguments.push(Expression::Literal(Literal::String(" ".to_string())));
+        // default trim char
         } else {
             // TRIM(MODE char_expr FROM string) - parse trim character
             let (new_remaining, trim_char_expr) = expression(remaining)?;
             remaining = new_remaining;
             arguments.push(trim_char_expr); // trim character
-            
+
             // Expect FROM keyword
             let (new_remaining, _) = expect_token(Token::From)(remaining)?;
             remaining = new_remaining;
         }
-        
+
         // Parse the string expression to trim
         let (new_remaining, string_expr) = expression(remaining)?;
         remaining = new_remaining;
@@ -2198,26 +2257,32 @@ fn trim_function_call(tokens: &[Token]) -> IResult<&[Token], FunctionCall> {
             remaining = &remaining[1..]; // consume FROM
             arguments.push(Expression::Literal(Literal::String("BOTH".to_string()))); // mode
             arguments.push(Expression::Literal(Literal::String(" ".to_string()))); // default trim char
-            
+
             // Parse the string expression to trim
             let (new_remaining, string_expr) = expression(remaining)?;
             remaining = new_remaining;
             arguments.push(string_expr);
         } else {
             // This is regular TRIM(string) or TRIM(char, string) - let regular function_call handle it
-            return Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)));
+            return Err(nom::Err::Error(nom::error::Error::new(
+                tokens,
+                nom::error::ErrorKind::Tag,
+            )));
         }
     }
-    
+
     // Parse closing parenthesis
     let (remaining, _) = expect_token(Token::RightParen)(remaining)?;
-    
-    Ok((remaining, FunctionCall {
-        name: "TRIM".to_string(),
-        distinct: DistinctQualifier::None,
-        arguments,
-        location: Location::default(),
-    }))
+
+    Ok((
+        remaining,
+        FunctionCall {
+            name: "TRIM".to_string(),
+            distinct: DistinctQualifier::None,
+            arguments,
+            location: Location::default(),
+        },
+    ))
 }
 
 /// Parse property access: object.property
@@ -2227,10 +2292,7 @@ fn property_access(tokens: &[Token]) -> IResult<&[Token], PropertyAccess> {
             identifier,
             expect_token(Token::Dot),
             identifier,
-            many0(tuple((
-                expect_token(Token::Dot),
-                identifier,
-            ))),
+            many0(tuple((expect_token(Token::Dot), identifier))),
         )),
         |(object, _, first_property, additional_properties)| {
             // Build the full property path: object.property1.property2...
@@ -2243,7 +2305,7 @@ fn property_access(tokens: &[Token]) -> IResult<&[Token], PropertyAccess> {
                 property: property_path,
                 location: Location::default(),
             }
-        }
+        },
     )(tokens)
 }
 
@@ -2252,10 +2314,7 @@ fn property_access_continued(tokens: &[Token]) -> IResult<&[Token], PropertyAcce
     map(
         tuple((
             property_access_token,
-            many0(tuple((
-                expect_token(Token::Dot),
-                identifier,
-            ))),
+            many0(tuple((expect_token(Token::Dot), identifier))),
         )),
         |(base_access, additional_properties)| {
             // Build the full property path by extending the base property access
@@ -2268,19 +2327,16 @@ fn property_access_continued(tokens: &[Token]) -> IResult<&[Token], PropertyAcce
                 property: property_path,
                 location: Location::default(),
             }
-        }
+        },
     )(tokens)
 }
 
 /// Parse variable reference: identifier (bound in MATCH/LET clauses)
 fn variable(tokens: &[Token]) -> IResult<&[Token], Variable> {
-    map(
-        identifier,
-        |name| Variable {
-            name,
-            location: Location::default(),
-        }
-    )(tokens)
+    map(identifier, |name| Variable {
+        name,
+        location: Location::default(),
+    })(tokens)
 }
 
 /// Parse property access token: object.property
@@ -2289,16 +2345,25 @@ fn property_access_token(tokens: &[Token]) -> IResult<&[Token], PropertyAccess> 
         // Parse the property access string "object.property"
         let parts: Vec<&str> = s.split('.').collect();
         if parts.len() == 2 {
-            Ok((&tokens[1..], PropertyAccess {
-                object: parts[0].to_string(),
-                property: parts[1].to_string(),
-                location: Location::default(),
-            }))
+            Ok((
+                &tokens[1..],
+                PropertyAccess {
+                    object: parts[0].to_string(),
+                    property: parts[1].to_string(),
+                    location: Location::default(),
+                },
+            ))
         } else {
-            Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+            Err(nom::Err::Error(nom::error::Error::new(
+                tokens,
+                nom::error::ErrorKind::Tag,
+            )))
         }
     } else {
-        Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+        Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        )))
     }
 }
 
@@ -2329,22 +2394,28 @@ fn identifier(tokens: &[Token]) -> IResult<&[Token], String> {
             Token::Parameter => Some("parameter".to_string()),
             Token::Order => Some("order".to_string()),
             Token::Contains => Some("contains".to_string()),
-            Token::Next => Some("next".to_string()),  // Allow NEXT as edge label
-            Token::Start => Some("start".to_string()),  // Allow START as identifier
-            Token::End => Some("end".to_string()),  // Allow END as identifier
-            Token::Register => Some("register".to_string()),  // Allow REGISTER as identifier
-            Token::Unregister => Some("unregister".to_string()),  // Allow UNREGISTER as identifier
-            Token::Description => Some("description".to_string()),  // Allow DESCRIPTION in YIELD clauses
+            Token::Next => Some("next".to_string()), // Allow NEXT as edge label
+            Token::Start => Some("start".to_string()), // Allow START as identifier
+            Token::End => Some("end".to_string()),   // Allow END as identifier
+            Token::Register => Some("register".to_string()), // Allow REGISTER as identifier
+            Token::Unregister => Some("unregister".to_string()), // Allow UNREGISTER as identifier
+            Token::Description => Some("description".to_string()), // Allow DESCRIPTION in YIELD clauses
             _ => None,
         };
-        
+
         if let Some(s) = identifier_str {
             Ok((&tokens[1..], s))
         } else {
-            Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+            Err(nom::Err::Error(nom::error::Error::new(
+                tokens,
+                nom::error::ErrorKind::Tag,
+            )))
         }
     } else {
-        Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+        Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        )))
     }
 }
 
@@ -2371,8 +2442,14 @@ fn comparison_operator(tokens: &[Token]) -> IResult<&[Token], Operator> {
         value(Operator::Like, expect_token(Token::Like)),
         value(Operator::Contains, expect_token(Token::Contains)),
         // Handle compound operators
-        value(Operator::Starts, tuple((expect_token(Token::Starts), expect_token(Token::With)))),
-        value(Operator::Ends, tuple((expect_token(Token::Ends), expect_token(Token::With)))),
+        value(
+            Operator::Starts,
+            tuple((expect_token(Token::Starts), expect_token(Token::With))),
+        ),
+        value(
+            Operator::Ends,
+            tuple((expect_token(Token::Ends), expect_token(Token::With))),
+        ),
     ))(tokens)
 }
 
@@ -2435,14 +2512,23 @@ fn identifier_or_quoted(tokens: &[Token]) -> IResult<&[Token], String> {
         if let Some(s) = identifier_str {
             // Reject empty identifiers
             if s.is_empty() {
-                return Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Verify)));
+                return Err(nom::Err::Error(nom::error::Error::new(
+                    tokens,
+                    nom::error::ErrorKind::Verify,
+                )));
             }
             Ok((&tokens[1..], s))
         } else {
-            Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+            Err(nom::Err::Error(nom::error::Error::new(
+                tokens,
+                nom::error::ErrorKind::Tag,
+            )))
         }
     } else {
-        Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+        Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        )))
     }
 }
 
@@ -2451,7 +2537,10 @@ fn string_literal(tokens: &[Token]) -> IResult<&[Token], String> {
     if let Some(Token::String(s)) = tokens.first() {
         Ok((&tokens[1..], s.clone()))
     } else {
-        Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+        Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        )))
     }
 }
 
@@ -2460,7 +2549,10 @@ fn integer_literal(tokens: &[Token]) -> IResult<&[Token], i64> {
     if let Some(Token::Integer(n)) = tokens.first() {
         Ok((&tokens[1..], *n))
     } else {
-        Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+        Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        )))
     }
 }
 
@@ -2469,7 +2561,10 @@ fn float_literal(tokens: &[Token]) -> IResult<&[Token], f64> {
     if let Some(Token::Float(f)) = tokens.first() {
         Ok((&tokens[1..], *f))
     } else {
-        Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+        Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        )))
     }
 }
 
@@ -2478,7 +2573,10 @@ fn boolean_literal(tokens: &[Token]) -> IResult<&[Token], bool> {
     if let Some(Token::Boolean(b)) = tokens.first() {
         Ok((&tokens[1..], *b))
     } else {
-        Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+        Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        )))
     }
 }
 
@@ -2492,7 +2590,10 @@ fn vector_literal(tokens: &[Token]) -> IResult<&[Token], Vec<f64>> {
     if let Some(Token::Vector(v)) = tokens.first() {
         Ok((&tokens[1..], v.clone()))
     } else {
-        Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+        Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        )))
     }
 }
 
@@ -2503,7 +2604,10 @@ fn catalog_statement(tokens: &[Token]) -> IResult<&[Token], CatalogStatement> {
         map(drop_schema_statement, CatalogStatement::DropSchema),
         // IMPORTANT: Parse CREATE/DROP/ALTER GRAPH TYPE before CREATE/DROP GRAPH
         // because "CREATE GRAPH" would match "CREATE GRAPH TYPE" prematurely
-        map(create_graph_type_statement, CatalogStatement::CreateGraphType),
+        map(
+            create_graph_type_statement,
+            CatalogStatement::CreateGraphType,
+        ),
         map(drop_graph_type_statement, CatalogStatement::DropGraphType),
         map(alter_graph_type_statement, CatalogStatement::AlterGraphType),
         map(create_graph_statement, CatalogStatement::CreateGraph),
@@ -2516,7 +2620,10 @@ fn catalog_statement(tokens: &[Token]) -> IResult<&[Token], CatalogStatement> {
         map(drop_role_statement, CatalogStatement::DropRole),
         map(grant_role_statement, CatalogStatement::GrantRole),
         map(revoke_role_statement, CatalogStatement::RevokeRole),
-        map(create_procedure_statement, CatalogStatement::CreateProcedure),
+        map(
+            create_procedure_statement,
+            CatalogStatement::CreateProcedure,
+        ),
         map(drop_procedure_statement, CatalogStatement::DropProcedure),
     ))(tokens)
 }
@@ -2525,7 +2632,7 @@ fn catalog_statement(tokens: &[Token]) -> IResult<&[Token], CatalogStatement> {
 fn validated_schema_name(tokens: &[Token]) -> IResult<&[Token], CatalogPath> {
     // First parse as a regular catalog path
     let (remaining, schema_path) = catalog_path(tokens)?;
-    
+
     // Validate schema name is not empty
     if schema_path.segments.is_empty() || schema_path.segments.iter().any(|s| s.trim().is_empty()) {
         // Return a custom error that will be converted to "Invalid schema name"
@@ -2534,7 +2641,7 @@ fn validated_schema_name(tokens: &[Token]) -> IResult<&[Token], CatalogPath> {
             nom::error::ErrorKind::Verify,
         )));
     }
-    
+
     Ok((remaining, schema_path))
 }
 
@@ -2555,7 +2662,7 @@ fn create_schema_statement(tokens: &[Token]) -> IResult<&[Token], CreateSchemaSt
             schema_path,
             if_not_exists: if_not_exists.is_some(),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -2580,7 +2687,7 @@ fn drop_schema_statement(tokens: &[Token]) -> IResult<&[Token], DropSchemaStatem
             if_exists: if_exists.is_some(),
             cascade: cascade.unwrap_or(false),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -2600,7 +2707,10 @@ fn create_graph_statement(tokens: &[Token]) -> IResult<&[Token], CreateGraphStat
 
         if tokens.len() > skip_count && matches!(tokens[skip_count], Token::Type) {
             // This is CREATE GRAPH TYPE, not CREATE GRAPH
-            return Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Alt)));
+            return Err(nom::Err::Error(nom::error::Error::new(
+                tokens,
+                nom::error::ErrorKind::Alt,
+            )));
         }
     }
 
@@ -2620,19 +2730,18 @@ fn create_graph_statement(tokens: &[Token]) -> IResult<&[Token], CreateGraphStat
             ))),
             catalog_path,
             opt(graph_type_spec),
-            opt(tuple((
-                expect_token(Token::As),
-                query,
-            ))),
+            opt(tuple((expect_token(Token::As), query))),
         )),
-        |(_, or_replace, _, _, if_not_exists, graph_path, graph_type_spec, as_query)| CreateGraphStatement {
-            graph_path,
-            graph_type_spec,
-            if_not_exists: if_not_exists.is_some(),
-            or_replace: or_replace.is_some(),
-            as_query: as_query.map(|(_, query)| Box::new(query)),
-            location: Location::default(),
-        }
+        |(_, or_replace, _, _, if_not_exists, graph_path, graph_type_spec, as_query)| {
+            CreateGraphStatement {
+                graph_path,
+                graph_type_spec,
+                if_not_exists: if_not_exists.is_some(),
+                or_replace: or_replace.is_some(),
+                as_query: as_query.map(|(_, query)| Box::new(query)),
+                location: Location::default(),
+            }
+        },
     )(tokens)
 }
 
@@ -2649,7 +2758,10 @@ fn drop_graph_statement(tokens: &[Token]) -> IResult<&[Token], DropGraphStatemen
 
         if tokens.len() > skip_count && matches!(tokens[skip_count], Token::Type) {
             // This is DROP GRAPH TYPE, not DROP GRAPH
-            return Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Alt)));
+            return Err(nom::Err::Error(nom::error::Error::new(
+                tokens,
+                nom::error::ErrorKind::Alt,
+            )));
         }
     }
 
@@ -2670,7 +2782,7 @@ fn drop_graph_statement(tokens: &[Token]) -> IResult<&[Token], DropGraphStatemen
             if_exists: if_exists.is_some(),
             cascade: cascade.is_some(),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -2685,7 +2797,7 @@ fn truncate_graph_statement(tokens: &[Token]) -> IResult<&[Token], TruncateGraph
         |(_, _, graph_path)| TruncateGraphStatement {
             graph_path,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -2700,7 +2812,7 @@ fn clear_graph_statement(tokens: &[Token]) -> IResult<&[Token], ClearGraphStatem
         |(_, _, graph_path)| ClearGraphStatement {
             graph_path,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -2729,14 +2841,16 @@ fn create_graph_type_statement(tokens: &[Token]) -> IResult<&[Token], CreateGrap
             ))),
             graph_type_spec,
         )),
-        |(_, or_replace, _, _, _, if_not_exists, graph_type_path, copy_of, graph_type_spec)| CreateGraphTypeStatement {
-            graph_type_path,
-            copy_of: copy_of.map(|(_, _, path)| path),
-            graph_type_spec,
-            if_not_exists: if_not_exists.is_some(),
-            or_replace: or_replace.is_some(),
-            location: Location::default(),
-        }
+        |(_, or_replace, _, _, _, if_not_exists, graph_type_path, copy_of, graph_type_spec)| {
+            CreateGraphTypeStatement {
+                graph_type_path,
+                copy_of: copy_of.map(|(_, _, path)| path),
+                graph_type_spec,
+                if_not_exists: if_not_exists.is_some(),
+                or_replace: or_replace.is_some(),
+                location: Location::default(),
+            }
+        },
     )(tokens)
 }
 
@@ -2763,7 +2877,7 @@ fn drop_graph_type_statement(tokens: &[Token]) -> IResult<&[Token], DropGraphTyp
             if_exists: if_exists.is_some(),
             cascade: cascade.unwrap_or(false),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -2779,7 +2893,7 @@ fn alter_graph_type_statement(tokens: &[Token]) -> IResult<&[Token], AlterGraphT
         |(_, _, _, name)| AlterGraphTypeStatement {
             name,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -2795,9 +2909,7 @@ fn catalog_path(tokens: &[Token]) -> IResult<&[Token], CatalogPath> {
             // Optional trailing slash
             opt(expect_token(Token::Slash)),
         )),
-        |(_, segments, _)| {
-            CatalogPath::new(segments, Location::default())
-        }
+        |(_, segments, _)| CatalogPath::new(segments, Location::default()),
     )(tokens)
 }
 
@@ -2806,17 +2918,14 @@ fn graph_type_spec(tokens: &[Token]) -> IResult<&[Token], GraphTypeSpec> {
     map(
         delimited(
             expect_token(Token::LeftParen),
-            tuple((
-                opt(vertex_types_clause),
-                opt(edge_types_clause),
-            )),
+            tuple((opt(vertex_types_clause), opt(edge_types_clause))),
             expect_token(Token::RightParen),
         ),
         |(vertex_types, edge_types)| GraphTypeSpec {
             vertex_types: vertex_types.unwrap_or_default(),
             edge_types: edge_types.unwrap_or_default(),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -2824,25 +2933,16 @@ fn graph_type_spec(tokens: &[Token]) -> IResult<&[Token], GraphTypeSpec> {
 fn vertex_types_clause(tokens: &[Token]) -> IResult<&[Token], Vec<VertexTypeSpec>> {
     map(
         tuple((
-            alt((
-                expect_token(Token::Vertex),
-                expect_token(Token::Node),
-            )),
-            alt((
-                expect_token(Token::Type),
-                expect_token(Token::Types),
-            )),
+            alt((expect_token(Token::Vertex), expect_token(Token::Node))),
+            alt((expect_token(Token::Type), expect_token(Token::Types))),
             vertex_type_spec,
-            many0(tuple((
-                expect_token(Token::Comma),
-                vertex_type_spec,
-            ))),
+            many0(tuple((expect_token(Token::Comma), vertex_type_spec))),
         )),
         |(_, _, first_type, additional_types)| {
             let mut types = vec![first_type];
             types.extend(additional_types.into_iter().map(|(_, spec)| spec));
             types
-        }
+        },
     )(tokens)
 }
 
@@ -2851,21 +2951,15 @@ fn edge_types_clause(tokens: &[Token]) -> IResult<&[Token], Vec<EdgeTypeSpec>> {
     map(
         tuple((
             expect_token(Token::Edge),
-            alt((
-                expect_token(Token::Type),
-                expect_token(Token::Types),
-            )),
+            alt((expect_token(Token::Type), expect_token(Token::Types))),
             edge_type_spec,
-            many0(tuple((
-                expect_token(Token::Comma),
-                edge_type_spec,
-            ))),
+            many0(tuple((expect_token(Token::Comma), edge_type_spec))),
         )),
         |(_, _, first_type, additional_types)| {
             let mut types = vec![first_type];
             types.extend(additional_types.into_iter().map(|(_, spec)| spec));
             types
-        }
+        },
     )(tokens)
 }
 
@@ -2885,7 +2979,7 @@ fn vertex_type_spec(tokens: &[Token]) -> IResult<&[Token], VertexTypeSpec> {
             labels: labels.map(|(_, expr)| expr),
             properties,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -2899,14 +2993,8 @@ fn edge_type_spec(tokens: &[Token]) -> IResult<&[Token], EdgeTypeSpec> {
                 label_expression,
             ))),
             opt(property_type_list),
-            opt(tuple((
-                expect_token(Token::Source),
-                identifier,
-            ))),
-            opt(tuple((
-                expect_token(Token::Destination),
-                identifier,
-            ))),
+            opt(tuple((expect_token(Token::Source), identifier))),
+            opt(tuple((expect_token(Token::Destination), identifier))),
         )),
         |(identifier, labels, properties, source, destination)| EdgeTypeSpec {
             identifier,
@@ -2915,7 +3003,7 @@ fn edge_type_spec(tokens: &[Token]) -> IResult<&[Token], EdgeTypeSpec> {
             source_vertex: source.map(|(_, id)| id),
             destination_vertex: destination.map(|(_, id)| id),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -2924,10 +3012,7 @@ fn label_expression(tokens: &[Token]) -> IResult<&[Token], LabelExpression> {
     map(
         tuple((
             label_term,
-            many0(tuple((
-                expect_token(Token::Pipe),
-                label_term,
-            ))),
+            many0(tuple((expect_token(Token::Pipe), label_term))),
         )),
         |(first_term, additional_terms)| {
             let mut terms = vec![first_term];
@@ -2936,7 +3021,7 @@ fn label_expression(tokens: &[Token]) -> IResult<&[Token], LabelExpression> {
                 terms,
                 location: Location::default(),
             }
-        }
+        },
     )(tokens)
 }
 
@@ -2947,17 +3032,11 @@ fn label_term(tokens: &[Token]) -> IResult<&[Token], LabelTerm> {
             label_factor,
             many0(alt((
                 // Traditional NOT-separated factors
-                tuple((
-                    expect_token(Token::Not),
-                    label_factor,
-                )),
+                tuple((expect_token(Token::Not), label_factor)),
                 // Consecutive colon-separated labels (for syntax like :Manager:TeamLead or :`Special-Label`)
                 map(
-                    tuple((
-                        expect_token(Token::Colon),
-                        identifier_or_quoted,
-                    )),
-                    |(_, name)| (Token::Not, LabelFactor::Identifier(name)) // Dummy token, we only use the factor
+                    tuple((expect_token(Token::Colon), identifier_or_quoted)),
+                    |(_, name)| (Token::Not, LabelFactor::Identifier(name)), // Dummy token, we only use the factor
                 ),
             ))),
         )),
@@ -2968,7 +3047,7 @@ fn label_term(tokens: &[Token]) -> IResult<&[Token], LabelTerm> {
                 factors,
                 location: Location::default(),
             }
-        }
+        },
     )(tokens)
 }
 
@@ -2978,11 +3057,8 @@ fn label_factor(tokens: &[Token]) -> IResult<&[Token], LabelFactor> {
     alt((
         // Colon-prefixed identifier: :LABEL_NAME or :`Special-Label`
         map(
-            tuple((
-                expect_token(Token::Colon),
-                identifier_or_quoted,
-            )),
-            |(_, name)| LabelFactor::Identifier(name)
+            tuple((expect_token(Token::Colon), identifier_or_quoted)),
+            |(_, name)| LabelFactor::Identifier(name),
         ),
         // Regular identifier: LABEL_NAME or `Special-Label`
         map(identifier_or_quoted, LabelFactor::Identifier),
@@ -2995,7 +3071,7 @@ fn label_factor(tokens: &[Token]) -> IResult<&[Token], LabelFactor> {
                 label_expression,
                 expect_token(Token::RightParen),
             ),
-            |expr| LabelFactor::Parenthesized(Box::new(expr))
+            |expr| LabelFactor::Parenthesized(Box::new(expr)),
         ),
     ))(tokens)
 }
@@ -3004,7 +3080,7 @@ fn label_factor(tokens: &[Token]) -> IResult<&[Token], LabelFactor> {
 /// This extracts all identifier labels from a label expression like "Transaction|Purchase" -> ["Transaction", "Purchase"]
 fn label_expression_to_strings(label_expr: LabelExpression) -> Vec<String> {
     let mut labels = Vec::new();
-    
+
     for term in label_expr.terms {
         for factor in term.factors {
             match factor {
@@ -3017,7 +3093,7 @@ fn label_expression_to_strings(label_expr: LabelExpression) -> Vec<String> {
             }
         }
     }
-    
+
     labels
 }
 
@@ -3029,10 +3105,7 @@ fn property_type_list(tokens: &[Token]) -> IResult<&[Token], PropertyTypeList> {
             expect_token(Token::LeftParen),
             tuple((
                 property_type_decl,
-                many0(tuple((
-                    opt(expect_token(Token::Comma)),
-                    property_type_decl,
-                ))),
+                many0(tuple((opt(expect_token(Token::Comma)), property_type_decl))),
             )),
             expect_token(Token::RightParen),
         ),
@@ -3043,23 +3116,19 @@ fn property_type_list(tokens: &[Token]) -> IResult<&[Token], PropertyTypeList> {
                 properties,
                 location: Location::default(),
             }
-        }
+        },
     )(tokens)
 }
 
 /// Parse property type declaration: name type_spec
 fn property_type_decl(tokens: &[Token]) -> IResult<&[Token], PropertyTypeDecl> {
-    map(
-        tuple((
-            identifier,
-            type_spec,
-        )),
-        |(name, type_spec)| PropertyTypeDecl {
+    map(tuple((identifier, type_spec)), |(name, type_spec)| {
+        PropertyTypeDecl {
             name,
             type_spec,
             location: Location::default(),
         }
-    )(tokens)
+    })(tokens)
 }
 
 /// Parse type specification (simplified for now)
@@ -3067,17 +3136,29 @@ fn type_spec(tokens: &[Token]) -> IResult<&[Token], TypeSpec> {
     alt((
         value(TypeSpec::Boolean, expect_token(Token::BooleanType)),
         value(TypeSpec::Integer, expect_token(Token::IntegerType)),
-        value(TypeSpec::String { max_length: None }, expect_token(Token::StringType)),
-        value(TypeSpec::Float { precision: None }, expect_token(Token::FloatType)),
+        value(
+            TypeSpec::String { max_length: None },
+            expect_token(Token::StringType),
+        ),
+        value(
+            TypeSpec::Float { precision: None },
+            expect_token(Token::FloatType),
+        ),
         value(TypeSpec::Real, expect_token(Token::RealType)),
         value(TypeSpec::Double, expect_token(Token::DoubleType)),
         value(TypeSpec::BigInt, expect_token(Token::BigIntType)),
         value(TypeSpec::SmallInt, expect_token(Token::SmallIntType)),
-        value(TypeSpec::Decimal { precision: None, scale: None }, expect_token(Token::DecimalType)),
+        value(
+            TypeSpec::Decimal {
+                precision: None,
+                scale: None,
+            },
+            expect_token(Token::DecimalType),
+        ),
         // Handle VECTOR as a special identifier case instead of a dedicated token
         map(
             verify(identifier, |id: &str| id.eq_ignore_ascii_case("VECTOR")),
-            |_| TypeSpec::Vector { dimension: None }
+            |_| TypeSpec::Vector { dimension: None },
         ),
     ))(tokens)
 }
@@ -3102,7 +3183,7 @@ fn session_set_statement(tokens: &[Token]) -> IResult<&[Token], SessionSetStatem
         |(_, _, clause)| SessionSetStatement {
             clause,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -3111,11 +3192,8 @@ fn session_set_clause(tokens: &[Token]) -> IResult<&[Token], SessionSetClause> {
     alt((
         // SESSION SET SCHEMA schema_reference
         map(
-            tuple((
-                expect_token(Token::Schema),
-                catalog_path,
-            )),
-            |(_, schema_reference)| SessionSetClause::Schema { schema_reference }
+            tuple((expect_token(Token::Schema), catalog_path)),
+            |(_, schema_reference)| SessionSetClause::Schema { schema_reference },
         ),
         // SESSION SET [PROPERTY] GRAPH graph_expression
         map(
@@ -3124,7 +3202,7 @@ fn session_set_clause(tokens: &[Token]) -> IResult<&[Token], SessionSetClause> {
                 expect_token(Token::Graph),
                 graph_expression,
             )),
-            |(_, _, graph_expression)| SessionSetClause::Graph { graph_expression }
+            |(_, _, graph_expression)| SessionSetClause::Graph { graph_expression },
         ),
         // SESSION SET TIME ZONE time_zone_string
         map(
@@ -3133,7 +3211,7 @@ fn session_set_clause(tokens: &[Token]) -> IResult<&[Token], SessionSetClause> {
                 expect_token(Token::Zone),
                 string_literal,
             )),
-            |(_, _, time_zone)| SessionSetClause::TimeZone { time_zone }
+            |(_, _, time_zone)| SessionSetClause::TimeZone { time_zone },
         ),
         // SESSION SET [PROPERTY] GRAPH [IF NOT EXISTS] parameter graph_initializer
         map(
@@ -3148,11 +3226,13 @@ fn session_set_clause(tokens: &[Token]) -> IResult<&[Token], SessionSetClause> {
                 parameter_name,
                 graph_initializer,
             )),
-            |(_, _, if_not_exists, parameter, graph_initializer)| SessionSetClause::GraphParameter {
-                parameter,
-                graph_initializer,
-                if_not_exists: if_not_exists.is_some(),
-            }
+            |(_, _, if_not_exists, parameter, graph_initializer)| {
+                SessionSetClause::GraphParameter {
+                    parameter,
+                    graph_initializer,
+                    if_not_exists: if_not_exists.is_some(),
+                }
+            },
         ),
         // SESSION SET [BINDING] TABLE [IF NOT EXISTS] parameter binding_table_initializer
         map(
@@ -3167,11 +3247,13 @@ fn session_set_clause(tokens: &[Token]) -> IResult<&[Token], SessionSetClause> {
                 parameter_name,
                 binding_table_initializer,
             )),
-            |(_, _, if_not_exists, parameter, binding_table_initializer)| SessionSetClause::BindingTableParameter {
-                parameter,
-                binding_table_initializer,
-                if_not_exists: if_not_exists.is_some(),
-            }
+            |(_, _, if_not_exists, parameter, binding_table_initializer)| {
+                SessionSetClause::BindingTableParameter {
+                    parameter,
+                    binding_table_initializer,
+                    if_not_exists: if_not_exists.is_some(),
+                }
+            },
         ),
         // SESSION SET VALUE [IF NOT EXISTS] parameter value_initializer
         map(
@@ -3189,7 +3271,7 @@ fn session_set_clause(tokens: &[Token]) -> IResult<&[Token], SessionSetClause> {
                 parameter,
                 value_initializer,
                 if_not_exists: if_not_exists.is_some(),
-            }
+            },
         ),
     ))(tokens)
 }
@@ -3205,7 +3287,7 @@ fn session_reset_statement(tokens: &[Token]) -> IResult<&[Token], SessionResetSt
         |(_, _, args)| SessionResetStatement {
             args,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -3217,11 +3299,17 @@ fn session_reset_args(tokens: &[Token]) -> IResult<&[Token], SessionResetArgs> {
             tuple((
                 opt(expect_token(Token::All)),
                 alt((
-                    value(SessionResetTarget::Parameters, expect_token(Token::Parameters)),
-                    value(SessionResetTarget::Characteristics, expect_token(Token::Characteristics)),
+                    value(
+                        SessionResetTarget::Parameters,
+                        expect_token(Token::Parameters),
+                    ),
+                    value(
+                        SessionResetTarget::Characteristics,
+                        expect_token(Token::Characteristics),
+                    ),
                 )),
             )),
-            |(_, target)| SessionResetArgs::All { target }
+            |(_, target)| SessionResetArgs::All { target },
         ),
         // SCHEMA
         value(SessionResetArgs::Schema, expect_token(Token::Schema)),
@@ -3231,23 +3319,19 @@ fn session_reset_args(tokens: &[Token]) -> IResult<&[Token], SessionResetArgs> {
                 opt(expect_token(Token::Property)),
                 expect_token(Token::Graph),
             )),
-            |_| SessionResetArgs::Graph
+            |_| SessionResetArgs::Graph,
         ),
         // TIME ZONE
         map(
-            tuple((
-                expect_token(Token::Time),
-                expect_token(Token::Zone),
-            )),
-            |_| SessionResetArgs::TimeZone
+            tuple((expect_token(Token::Time), expect_token(Token::Zone))),
+            |_| SessionResetArgs::TimeZone,
         ),
         // [PARAMETER] parameter
         map(
-            tuple((
-                opt(expect_token(Token::Parameter)),
-                parameter_name,
-            )),
-            |(_, parameter_name)| SessionResetArgs::Parameter { parameter: parameter_name }
+            tuple((opt(expect_token(Token::Parameter)), parameter_name)),
+            |(_, parameter_name)| SessionResetArgs::Parameter {
+                parameter: parameter_name,
+            },
         ),
     ))(tokens)
 }
@@ -3255,33 +3339,33 @@ fn session_reset_args(tokens: &[Token]) -> IResult<&[Token], SessionResetArgs> {
 /// Parse SESSION CLOSE statement
 fn session_close_statement(tokens: &[Token]) -> IResult<&[Token], SessionCloseStatement> {
     map(
-        tuple((
-            expect_token(Token::Session),
-            expect_token(Token::Close),
-        )),
+        tuple((expect_token(Token::Session), expect_token(Token::Close))),
         |(_, _)| SessionCloseStatement {
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
 /// Parse graph expression for session context
 fn graph_expression(tokens: &[Token]) -> IResult<&[Token], GraphExpression> {
-    log::debug!("graph_expression called with tokens: {:?}", tokens.get(0..3).unwrap_or(&[]));
-    
+    log::debug!(
+        "graph_expression called with tokens: {:?}",
+        tokens.get(0..3).unwrap_or(&[])
+    );
+
     // Parse union operations with precedence
     fn union_expr(tokens: &[Token]) -> IResult<&[Token], GraphExpression> {
         let (tokens, left) = primary_graph_expr(tokens)?;
-        
+
         // Check for UNION operators
         let mut current = left;
         let mut remaining = tokens;
-        
+
         while let Ok((tokens_after_union, _)) = expect_token(Token::Union)(remaining) {
             let (tokens_after_all, union_all) = opt(expect_token(Token::All))(tokens_after_union)?;
             let all = union_all.is_some();
             let (tokens_after_right, right) = primary_graph_expr(tokens_after_all)?;
-            
+
             current = GraphExpression::Union {
                 left: Box::new(current),
                 right: Box::new(right),
@@ -3289,10 +3373,10 @@ fn graph_expression(tokens: &[Token]) -> IResult<&[Token], GraphExpression> {
             };
             remaining = tokens_after_right;
         }
-        
+
         Ok((remaining, current))
     }
-    
+
     // Parse primary graph expressions (non-union)
     fn primary_graph_expr(tokens: &[Token]) -> IResult<&[Token], GraphExpression> {
         alt((
@@ -3300,7 +3384,7 @@ fn graph_expression(tokens: &[Token]) -> IResult<&[Token], GraphExpression> {
             delimited(
                 expect_token(Token::LeftParen),
                 union_expr,
-                expect_token(Token::RightParen)
+                expect_token(Token::RightParen),
             ),
             // parameter or catalog_path
             map(parameter_or_catalog_path, |path_or_param| {
@@ -3309,7 +3393,7 @@ fn graph_expression(tokens: &[Token]) -> IResult<&[Token], GraphExpression> {
             }),
         ))(tokens)
     }
-    
+
     let result = union_expr(tokens);
     if result.is_err() {
         log::debug!("graph_expression parsing failed: {:?}", result);
@@ -3320,58 +3404,42 @@ fn graph_expression(tokens: &[Token]) -> IResult<&[Token], GraphExpression> {
 /// Parse parameter: $identifier (returns Parameter struct for expressions)
 fn parameter(tokens: &[Token]) -> IResult<&[Token], Parameter> {
     map(
-        tuple((
-            expect_token(Token::Dollar),
-            identifier,
-        )),
+        tuple((expect_token(Token::Dollar), identifier)),
         |(_, name)| Parameter {
             name,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
 /// Parse parameter name: $identifier (returns String for session contexts)
 fn parameter_name(tokens: &[Token]) -> IResult<&[Token], String> {
     map(
-        tuple((
-            expect_token(Token::Dollar),
-            identifier,
-        )),
-        |(_, name)| name
+        tuple((expect_token(Token::Dollar), identifier)),
+        |(_, name)| name,
     )(tokens)
 }
 
 /// Parse graph initializer: = graph_expression
 fn graph_initializer(tokens: &[Token]) -> IResult<&[Token], GraphExpression> {
     map(
-        tuple((
-            expect_token(Token::Equal),
-            graph_expression,
-        )),
-        |(_, graph_expr)| graph_expr
+        tuple((expect_token(Token::Equal), graph_expression)),
+        |(_, graph_expr)| graph_expr,
     )(tokens)
 }
 
 /// Parse binding table initializer: = query_statement
 fn binding_table_initializer(tokens: &[Token]) -> IResult<&[Token], Box<Query>> {
-    map(
-        tuple((
-            expect_token(Token::Equal),
-            query,
-        )),
-        |(_, query)| Box::new(query)
-    )(tokens)
+    map(tuple((expect_token(Token::Equal), query)), |(_, query)| {
+        Box::new(query)
+    })(tokens)
 }
 
 /// Parse value initializer: = expression
 fn value_initializer(tokens: &[Token]) -> IResult<&[Token], Expression> {
     map(
-        tuple((
-            expect_token(Token::Equal),
-            expression,
-        )),
-        |(_, expr)| expr
+        tuple((expect_token(Token::Equal), expression)),
+        |(_, expr)| expr,
     )(tokens)
 }
 
@@ -3388,10 +3456,16 @@ fn expect_token(expected: Token) -> impl Fn(&[Token]) -> IResult<&[Token], Token
             if std::mem::discriminant(token) == std::mem::discriminant(&expected) {
                 Ok((&tokens[1..], token.clone()))
             } else {
-                Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+                Err(nom::Err::Error(nom::error::Error::new(
+                    tokens,
+                    nom::error::ErrorKind::Tag,
+                )))
             }
         } else {
-            Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+            Err(nom::Err::Error(nom::error::Error::new(
+                tokens,
+                nom::error::ErrorKind::Tag,
+            )))
         }
     }
 }
@@ -3411,10 +3485,16 @@ where
             if predicate(token) {
                 Ok((&tokens[1..], token.clone()))
             } else {
-                Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+                Err(nom::Err::Error(nom::error::Error::new(
+                    tokens,
+                    nom::error::ErrorKind::Tag,
+                )))
             }
         } else {
-            Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+            Err(nom::Err::Error(nom::error::Error::new(
+                tokens,
+                nom::error::ErrorKind::Tag,
+            )))
         }
     }
 }
@@ -3427,10 +3507,16 @@ fn expect_identifier(name: &str) -> impl Fn(&[Token]) -> IResult<&[Token], Token
                 Token::Identifier(id) if id.eq_ignore_ascii_case(name) => {
                     Ok((&tokens[1..], token.clone()))
                 }
-                _ => Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+                _ => Err(nom::Err::Error(nom::error::Error::new(
+                    tokens,
+                    nom::error::ErrorKind::Tag,
+                ))),
             }
         } else {
-            Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+            Err(nom::Err::Error(nom::error::Error::new(
+                tokens,
+                nom::error::ErrorKind::Tag,
+            )))
         }
     }
 }
@@ -3441,9 +3527,9 @@ fn create_user_statement(tokens: &[Token]) -> IResult<&[Token], CreateUserStatem
         tuple((
             expect_token(Token::Create),
             expect_token(Token::User),
-            string_literal,  // username
+            string_literal, // username
             expect_token(Token::Password),
-            string_literal,  // password
+            string_literal, // password
             opt(tuple((
                 expect_token(Token::Roles),
                 expect_token(Token::LeftParen),
@@ -3457,7 +3543,7 @@ fn create_user_statement(tokens: &[Token]) -> IResult<&[Token], CreateUserStatem
             roles: roles_opt.map(|(_, _, roles, _)| roles).unwrap_or_default(),
             if_not_exists: false, // TODO: Add IF NOT EXISTS support
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -3471,13 +3557,13 @@ fn drop_user_statement(tokens: &[Token]) -> IResult<&[Token], DropUserStatement>
                 expect_token(Token::If),
                 expect_token(Token::Exists),
             ))),
-            string_literal,  // username
+            string_literal, // username
         )),
         |(_, _, if_exists, username)| DropUserStatement {
             username,
             if_exists: if_exists.is_some(),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -3487,8 +3573,8 @@ fn create_role_statement(tokens: &[Token]) -> IResult<&[Token], CreateRoleStatem
         tuple((
             expect_token(Token::Create),
             expect_token(Token::Role),
-            string_literal,  // role_name
-            // TODO: Add description and permissions support
+            string_literal, // role_name
+                            // TODO: Add description and permissions support
         )),
         |(_, _, role_name)| CreateRoleStatement {
             role_name,
@@ -3496,7 +3582,7 @@ fn create_role_statement(tokens: &[Token]) -> IResult<&[Token], CreateRoleStatem
             permissions: vec![],
             if_not_exists: false,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -3510,13 +3596,13 @@ fn drop_role_statement(tokens: &[Token]) -> IResult<&[Token], DropRoleStatement>
                 expect_token(Token::If),
                 expect_token(Token::Exists),
             ))),
-            string_literal,  // role_name
+            string_literal, // role_name
         )),
         |(_, _, if_exists, role_name)| DropRoleStatement {
             role_name,
             if_exists: if_exists.is_some(),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -3526,15 +3612,15 @@ fn grant_role_statement(tokens: &[Token]) -> IResult<&[Token], GrantRoleStatemen
         tuple((
             expect_token(Token::Grant),
             expect_token(Token::Role),
-            string_literal,  // role_name
+            string_literal, // role_name
             expect_token(Token::To),
-            string_literal,  // username
+            string_literal, // username
         )),
         |(_, _, role_name, _, username)| GrantRoleStatement {
             role_name,
             username,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -3544,15 +3630,15 @@ fn revoke_role_statement(tokens: &[Token]) -> IResult<&[Token], RevokeRoleStatem
         tuple((
             expect_token(Token::Revoke),
             expect_token(Token::Role),
-            string_literal,  // role_name
+            string_literal, // role_name
             expect_token(Token::From),
-            string_literal,  // username
+            string_literal, // username
         )),
         |(_, _, role_name, _, username)| RevokeRoleStatement {
             role_name,
             username,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -3562,25 +3648,30 @@ fn create_procedure_statement(tokens: &[Token]) -> IResult<&[Token], CreateProce
     map(
         tuple((
             expect_token(Token::Create),
-            opt(tuple((expect_token(Token::Or), expect_token(Token::Replace)))),
+            opt(tuple((
+                expect_token(Token::Or),
+                expect_token(Token::Replace),
+            ))),
             expect_token(Token::Procedure),
             opt(tuple((
                 expect_token(Token::If),
                 expect_token(Token::Not),
                 expect_token(Token::Exists),
             ))),
-            identifier_or_quoted,  // procedure_name (supports backticks)
+            identifier_or_quoted, // procedure_name (supports backticks)
             procedure_parameters,
             procedure_body_statement,
         )),
-        |(_, or_replace, _, if_not_exists, procedure_name, parameters, procedure_body)| CreateProcedureStatement {
-            procedure_name,
-            parameters,
-            procedure_body,
-            or_replace: or_replace.is_some(),
-            if_not_exists: if_not_exists.is_some(),
-            location: Location::default(),
-        }
+        |(_, or_replace, _, if_not_exists, procedure_name, parameters, procedure_body)| {
+            CreateProcedureStatement {
+                procedure_name,
+                parameters,
+                procedure_body,
+                or_replace: or_replace.is_some(),
+                if_not_exists: if_not_exists.is_some(),
+                location: Location::default(),
+            }
+        },
     )(tokens)
 }
 
@@ -3591,14 +3682,17 @@ fn drop_procedure_statement(tokens: &[Token]) -> IResult<&[Token], DropProcedure
         tuple((
             expect_token(Token::Drop),
             expect_token(Token::Procedure),
-            opt(tuple((expect_token(Token::If), expect_token(Token::Exists)))),
-            identifier_or_quoted,  // procedure_name (supports backticks)
+            opt(tuple((
+                expect_token(Token::If),
+                expect_token(Token::Exists),
+            ))),
+            identifier_or_quoted, // procedure_name (supports backticks)
         )),
         |(_, _, if_exists, procedure_name)| DropProcedureStatement {
             procedure_name,
             if_exists: if_exists.is_some(),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -3618,26 +3712,27 @@ fn procedure_parameters(tokens: &[Token]) -> IResult<&[Token], Vec<ProcedurePara
                 let mut params = vec![first_param];
                 params.extend(additional_params.into_iter().map(|(_, param)| param));
                 params
-            }
+            },
         )),
         expect_token(Token::RightParen),
-    )(tokens).map(|(remaining, opt_params)| (remaining, opt_params.unwrap_or_default()))
+    )(tokens)
+    .map(|(remaining, opt_params)| (remaining, opt_params.unwrap_or_default()))
 }
 
 /// Parse single procedure parameter: name type_spec [= default_value]
 fn procedure_parameter(tokens: &[Token]) -> IResult<&[Token], ProcedureParameter> {
     map(
         tuple((
-            identifier_or_quoted,  // parameter name
-            type_spec,             // parameter type
-            opt(preceded(expect_token(Token::Equal), expression)),  // optional default value
+            identifier_or_quoted,                                  // parameter name
+            type_spec,                                             // parameter type
+            opt(preceded(expect_token(Token::Equal), expression)), // optional default value
         )),
         |(name, type_spec, default_value)| ProcedureParameter {
             name,
             type_spec,
             default_value,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -3650,39 +3745,60 @@ fn is_predicate(tokens: &[Token]) -> IResult<&[Token], Expression> {
             opt(expect_token(Token::Not)),
             alt((
                 // Value state predicates
-                map(expect_token(Token::Null), |_| (IsPredicateType::Null, None, None)),
-                map(expect_token(Token::Boolean(true)), |_| (IsPredicateType::True, None, None)),
-                map(expect_token(Token::Boolean(false)), |_| (IsPredicateType::False, None, None)),
-                map(expect_token(Token::Unknown), |_| (IsPredicateType::Unknown, None, None)),
-                
+                map(expect_token(Token::Null), |_| {
+                    (IsPredicateType::Null, None, None)
+                }),
+                map(expect_token(Token::Boolean(true)), |_| {
+                    (IsPredicateType::True, None, None)
+                }),
+                map(expect_token(Token::Boolean(false)), |_| {
+                    (IsPredicateType::False, None, None)
+                }),
+                map(expect_token(Token::Unknown), |_| {
+                    (IsPredicateType::Unknown, None, None)
+                }),
                 // Graph element predicates
-                map(expect_token(Token::Normalized), |_| (IsPredicateType::Normalized, None, None)),
-                map(expect_token(Token::Directed), |_| (IsPredicateType::Directed, None, None)),
-                
+                map(expect_token(Token::Normalized), |_| {
+                    (IsPredicateType::Normalized, None, None)
+                }),
+                map(expect_token(Token::Directed), |_| {
+                    (IsPredicateType::Directed, None, None)
+                }),
                 // Topology predicates with optional targets
                 map(
                     tuple((
                         expect_token(Token::Source),
                         opt(tuple((expect_token(Token::Of), additive_expression))),
                     )),
-                    |(_, target)| (IsPredicateType::Source, target.map(|(_, expr)| Box::new(expr)), None)
+                    |(_, target)| {
+                        (
+                            IsPredicateType::Source,
+                            target.map(|(_, expr)| Box::new(expr)),
+                            None,
+                        )
+                    },
                 ),
                 map(
                     tuple((
                         expect_token(Token::Destination),
                         opt(tuple((expect_token(Token::Of), additive_expression))),
                     )),
-                    |(_, target)| (IsPredicateType::Destination, target.map(|(_, expr)| Box::new(expr)), None)
+                    |(_, target)| {
+                        (
+                            IsPredicateType::Destination,
+                            target.map(|(_, expr)| Box::new(expr)),
+                            None,
+                        )
+                    },
                 ),
-                
                 // Type predicates
-                map(
-                    tuple((expect_token(Token::Typed), type_spec)),
-                    |(_, ts)| (IsPredicateType::Typed, None, Some(ts))
-                ),
-                
+                map(tuple((expect_token(Token::Typed), type_spec)), |(_, ts)| {
+                    (IsPredicateType::Typed, None, Some(ts))
+                }),
                 // Label predicates (enhanced)
-                map(label_expression, |label_expr| (IsPredicateType::Label(label_expr), None, None)),
+                map(label_expression, |label_expr| {
+                    (IsPredicateType::Label(label_expr), None, None)
+                }),
             )),
         )),
         |(subject, _, not_token, (predicate_type, target, type_spec))| {
@@ -3694,7 +3810,7 @@ fn is_predicate(tokens: &[Token]) -> IResult<&[Token], Expression> {
                 type_spec,
                 location: Location::default(),
             })
-        }
+        },
     )(tokens)
 }
 
@@ -3727,7 +3843,7 @@ fn cast_expression(tokens: &[Token]) -> IResult<&[Token], CastExpression> {
             expression: Box::new(expr),
             target_type,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -3745,7 +3861,7 @@ fn simple_case_expression(tokens: &[Token]) -> IResult<&[Token], SimpleCaseExpre
             test_expression: Box::new(test_expr),
             when_branches,
             else_expression: else_clause.map(|(_, expr)| Box::new(expr)),
-        }
+        },
     )(tokens)
 }
 
@@ -3761,7 +3877,7 @@ fn searched_case_expression(tokens: &[Token]) -> IResult<&[Token], SearchedCaseE
         |(_, when_branches, else_clause, _)| SearchedCaseExpression {
             when_branches,
             else_expression: else_clause.map(|(_, expr)| Box::new(expr)),
-        }
+        },
     )(tokens)
 }
 
@@ -3778,7 +3894,7 @@ fn simple_when_branch(tokens: &[Token]) -> IResult<&[Token], SimpleWhenBranch> {
             when_values,
             then_expression: Box::new(then_expr),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -3795,13 +3911,16 @@ fn searched_when_branch(tokens: &[Token]) -> IResult<&[Token], SearchedWhenBranc
             condition: Box::new(condition),
             then_expression: Box::new(then_expr),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
 /// Parse data modification statements (INSERT, MATCH INSERT, SET, REMOVE, DELETE)
 fn data_statement(tokens: &[Token]) -> IResult<&[Token], DataStatement> {
-    log::debug!("data_statement called with tokens: {:?}", tokens.get(0..3).unwrap_or(&[]));
+    log::debug!(
+        "data_statement called with tokens: {:?}",
+        tokens.get(0..3).unwrap_or(&[])
+    );
     let result = alt((
         // Try MATCH-* patterns first (more specific)
         map(match_insert_statement, DataStatement::MatchInsert),
@@ -3822,7 +3941,10 @@ fn data_statement(tokens: &[Token]) -> IResult<&[Token], DataStatement> {
 
 /// Parse MATCH INSERT statement: MATCH pattern... [WITH ...] [WHERE condition] INSERT graph_pattern [, graph_pattern]*
 fn match_insert_statement(tokens: &[Token]) -> IResult<&[Token], MatchInsertStatement> {
-    log::debug!("match_insert_statement called with tokens: {:?}", tokens.get(0..5).unwrap_or(&[]));
+    log::debug!(
+        "match_insert_statement called with tokens: {:?}",
+        tokens.get(0..5).unwrap_or(&[])
+    );
     let result = map(
         tuple((
             match_clause,
@@ -3831,26 +3953,31 @@ fn match_insert_statement(tokens: &[Token]) -> IResult<&[Token], MatchInsertStat
             expect_token(Token::Insert),
             separated_list1(expect_token(Token::Comma), graph_pattern),
         )),
-        |(match_clause, with_clause_opt, where_clause_opt, _, insert_graph_patterns)| MatchInsertStatement {
-            match_clause,
-            with_clause: with_clause_opt,
-            where_clause: where_clause_opt,
-            insert_graph_patterns,
-            location: Location::default(),
-        }
+        |(match_clause, with_clause_opt, where_clause_opt, _, insert_graph_patterns)| {
+            MatchInsertStatement {
+                match_clause,
+                with_clause: with_clause_opt,
+                where_clause: where_clause_opt,
+                insert_graph_patterns,
+                location: Location::default(),
+            }
+        },
     )(tokens);
-    
+
     match &result {
         Ok(_) => log::debug!("match_insert_statement successfully parsed MATCH INSERT"),
         Err(e) => log::debug!("match_insert_statement failed: {:?}", e),
     }
-    
+
     result
 }
 
 /// Parse MATCH SET statement: MATCH pattern... [WITH ...] [WHERE condition] SET item, item
 fn match_set_statement(tokens: &[Token]) -> IResult<&[Token], MatchSetStatement> {
-    log::debug!("PARSER: match_set_statement called with first 5 tokens: {:?}", tokens.get(0..5).unwrap_or(&[]));
+    log::debug!(
+        "PARSER: match_set_statement called with first 5 tokens: {:?}",
+        tokens.get(0..5).unwrap_or(&[])
+    );
     let result = map(
         tuple((
             match_clause,
@@ -3860,7 +3987,10 @@ fn match_set_statement(tokens: &[Token]) -> IResult<&[Token], MatchSetStatement>
             separated_list1(expect_token(Token::Comma), set_item),
         )),
         |(match_clause, with_clause_opt, where_clause_opt, _, items)| {
-            log::debug!("PARSER: Successfully parsed MatchSetStatement with WITH clause: {}", with_clause_opt.is_some());
+            log::debug!(
+                "PARSER: Successfully parsed MatchSetStatement with WITH clause: {}",
+                with_clause_opt.is_some()
+            );
             MatchSetStatement {
                 match_clause,
                 with_clause: with_clause_opt,
@@ -3868,14 +3998,17 @@ fn match_set_statement(tokens: &[Token]) -> IResult<&[Token], MatchSetStatement>
                 items,
                 location: Location::default(),
             }
-        }
+        },
     )(tokens);
-    
+
     match &result {
-        Ok((remaining, _)) => log::debug!("PARSER: match_set_statement succeeded, remaining tokens: {}", remaining.len()),
+        Ok((remaining, _)) => log::debug!(
+            "PARSER: match_set_statement succeeded, remaining tokens: {}",
+            remaining.len()
+        ),
         Err(e) => log::debug!("PARSER: match_set_statement failed: {:?}", e),
     }
-    
+
     result
 }
 
@@ -3895,7 +4028,7 @@ fn match_remove_statement(tokens: &[Token]) -> IResult<&[Token], MatchRemoveStat
             where_clause: where_clause_opt,
             items,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -3906,23 +4039,28 @@ fn match_delete_statement(tokens: &[Token]) -> IResult<&[Token], MatchDeleteStat
             match_clause,
             opt(with_clause),
             opt(where_clause),
-            opt(alt((expect_token(Token::Detach), expect_token(Token::NoDetach)))),
+            opt(alt((
+                expect_token(Token::Detach),
+                expect_token(Token::NoDetach),
+            ))),
             expect_token(Token::Delete),
             separated_list1(expect_token(Token::Comma), expression),
         )),
-        |(match_clause, with_clause_opt, where_clause_opt, detach_mode, _, expressions)| MatchDeleteStatement {
-            match_clause,
-            with_clause: with_clause_opt,
-            where_clause: where_clause_opt,
-            expressions,
-            detach: match detach_mode {
-                Some(Token::Detach) => true,
-                Some(Token::NoDetach) => false,
-                None => false,
-                _ => false, // Default to false for any other token
-            },
-            location: Location::default(),
-        }
+        |(match_clause, with_clause_opt, where_clause_opt, detach_mode, _, expressions)| {
+            MatchDeleteStatement {
+                match_clause,
+                with_clause: with_clause_opt,
+                where_clause: where_clause_opt,
+                expressions,
+                detach: match detach_mode {
+                    Some(Token::Detach) => true,
+                    Some(Token::NoDetach) => false,
+                    None => false,
+                    _ => false, // Default to false for any other token
+                },
+                location: Location::default(),
+            }
+        },
     )(tokens)
 }
 
@@ -3930,16 +4068,13 @@ fn match_delete_statement(tokens: &[Token]) -> IResult<&[Token], MatchDeleteStat
 fn insert_statement(tokens: &[Token]) -> IResult<&[Token], InsertStatement> {
     map(
         tuple((
-            alt((
-                expect_token(Token::Insert),
-                expect_token(Token::Create),
-            )),
+            alt((expect_token(Token::Insert), expect_token(Token::Create))),
             separated_list1(expect_token(Token::Comma), graph_pattern),
         )),
         |(_, graph_patterns)| InsertStatement {
             graph_patterns,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -3954,13 +4089,16 @@ fn graph_pattern(tokens: &[Token]) -> IResult<&[Token], PathPattern> {
             path_type: None,
             elements: vec![PatternElement::Node(node)],
             location: Location::default(),
-        })
+        }),
     ))(tokens)
 }
 
 /// Parse SET statement: SET set_item [, set_item]*
 fn set_statement(tokens: &[Token]) -> IResult<&[Token], SetStatement> {
-    log::debug!("set_statement called with tokens: {:?}", tokens.get(0..10).unwrap_or(&[]));
+    log::debug!(
+        "set_statement called with tokens: {:?}",
+        tokens.get(0..10).unwrap_or(&[])
+    );
     let result = map(
         tuple((
             expect_token(Token::Set),
@@ -3972,7 +4110,7 @@ fn set_statement(tokens: &[Token]) -> IResult<&[Token], SetStatement> {
                 items,
                 location: Location::default(),
             }
-        }
+        },
     )(tokens);
     if result.is_err() {
         log::debug!("set_statement parsing failed: {:?}", result);
@@ -3990,7 +4128,7 @@ fn set_item(tokens: &[Token]) -> IResult<&[Token], SetItem> {
                 expect_token(Token::Equal),
                 expression,
             )),
-            |(property, _, value)| SetItem::PropertyAssignment { property, value }
+            |(property, _, value)| SetItem::PropertyAssignment { property, value },
         ),
         // Label assignment: variable:label or variable IS label
         map(
@@ -3999,23 +4137,22 @@ fn set_item(tokens: &[Token]) -> IResult<&[Token], SetItem> {
                 alt((expect_token(Token::Colon), expect_token(Token::Is))),
                 label_expression,
             )),
-            |(variable, _, labels)| SetItem::LabelAssignment { variable, labels }
+            |(variable, _, labels)| SetItem::LabelAssignment { variable, labels },
         ),
         // Variable assignment: variable = value
         map(
-            tuple((
-                identifier,
-                expect_token(Token::Equal),
-                expression,
-            )),
-            |(variable, _, value)| SetItem::VariableAssignment { variable, value }
+            tuple((identifier, expect_token(Token::Equal), expression)),
+            |(variable, _, value)| SetItem::VariableAssignment { variable, value },
         ),
     ))(tokens)
 }
 
 /// Parse REMOVE statement: REMOVE remove_item [, remove_item]*
 fn remove_statement(tokens: &[Token]) -> IResult<&[Token], RemoveStatement> {
-    log::debug!("remove_statement called with tokens: {:?}", tokens.get(0..10).unwrap_or(&[]));
+    log::debug!(
+        "remove_statement called with tokens: {:?}",
+        tokens.get(0..10).unwrap_or(&[])
+    );
     let result = map(
         tuple((
             expect_token(Token::Remove),
@@ -4024,7 +4161,7 @@ fn remove_statement(tokens: &[Token]) -> IResult<&[Token], RemoveStatement> {
         |(_, items)| RemoveStatement {
             items,
             location: Location::default(),
-        }
+        },
     )(tokens);
     if result.is_err() {
         log::debug!("remove_statement parsing failed");
@@ -4044,7 +4181,7 @@ fn remove_item(tokens: &[Token]) -> IResult<&[Token], RemoveItem> {
                 alt((expect_token(Token::Colon), expect_token(Token::Is))),
                 label_expression,
             )),
-            |(variable, _, labels)| RemoveItem::Label { variable, labels }
+            |(variable, _, labels)| RemoveItem::Label { variable, labels },
         ),
         // Variable removal: variable
         map(identifier, RemoveItem::Variable),
@@ -4055,7 +4192,10 @@ fn remove_item(tokens: &[Token]) -> IResult<&[Token], RemoveItem> {
 fn delete_statement(tokens: &[Token]) -> IResult<&[Token], DeleteStatement> {
     map(
         tuple((
-            opt(alt((expect_token(Token::Detach), expect_token(Token::NoDetach)))),
+            opt(alt((
+                expect_token(Token::Detach),
+                expect_token(Token::NoDetach),
+            ))),
             expect_token(Token::Delete),
             separated_list1(expect_token(Token::Comma), expression),
         )),
@@ -4068,7 +4208,7 @@ fn delete_statement(tokens: &[Token]) -> IResult<&[Token], DeleteStatement> {
                 _ => true,
             },
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -4084,7 +4224,7 @@ fn exists_subquery(tokens: &[Token]) -> IResult<&[Token], ExistsSubqueryExpressi
         |(_, _, query, _)| ExistsSubqueryExpression {
             query: Box::new(query),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -4101,7 +4241,7 @@ fn not_exists_subquery(tokens: &[Token]) -> IResult<&[Token], NotExistsSubqueryE
         |(_, _, _, query, _)| NotExistsSubqueryExpression {
             query: Box::new(query),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -4116,7 +4256,7 @@ fn subquery_expression(tokens: &[Token]) -> IResult<&[Token], SubqueryExpression
         |(_, query, _)| SubqueryExpression {
             query: Box::new(query),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -4125,15 +4265,12 @@ fn declare_statement(tokens: &[Token]) -> IResult<&[Token], DeclareStatement> {
     map(
         tuple((
             expect_token(Token::Declare),
-            separated_list1(
-                expect_token(Token::Comma),
-                variable_declaration,
-            ),
+            separated_list1(expect_token(Token::Comma), variable_declaration),
         )),
         |(_, variable_declarations)| DeclareStatement {
             variable_declarations,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -4150,7 +4287,7 @@ fn variable_declaration(tokens: &[Token]) -> IResult<&[Token], VariableDeclarati
             type_spec,
             initial_value,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -4171,7 +4308,7 @@ fn procedure_body_statement(tokens: &[Token]) -> IResult<&[Token], ProcedureBody
             tuple((
                 many1(variable_declaration_for_procedure_body), // At least one variable definition
                 alt((
-                    map(query, |q| Statement::Query(q)),  // Accept any query including LET
+                    map(query, |q| Statement::Query(q)), // Accept any query including LET
                     map(data_statement, |ds| Statement::DataStatement(ds)),
                     map(catalog_statement, |cs| Statement::CatalogStatement(cs)),
                 )),
@@ -4179,33 +4316,37 @@ fn procedure_body_statement(tokens: &[Token]) -> IResult<&[Token], ProcedureBody
                     expect_token(Token::Next),
                     opt(yield_clause),
                     alt((
-                        map(query, |q| Statement::Query(q)),  // Accept any query after NEXT
+                        map(query, |q| Statement::Query(q)), // Accept any query after NEXT
                         map(data_statement, |ds| Statement::DataStatement(ds)),
                     )),
                 ))),
             )),
-            |(variable_defs, initial_statement, chained)| (variable_defs, initial_statement, chained)
+            |(variable_defs, initial_statement, chained)| {
+                (variable_defs, initial_statement, chained)
+            },
         ),
         // Case 2: No variable definitions but has NEXT statements
         map(
             tuple((
                 alt((
-                    map(query, |q| Statement::Query(q)),  // Accept any query including LET
+                    map(query, |q| Statement::Query(q)), // Accept any query including LET
                     map(data_statement, |ds| Statement::DataStatement(ds)),
                     map(catalog_statement, |cs| Statement::CatalogStatement(cs)),
                 )),
-                many1(tuple(( // At least one NEXT statement
+                many1(tuple((
+                    // At least one NEXT statement
                     expect_token(Token::Next),
                     opt(yield_clause),
                     alt((
-                        map(query, |q| Statement::Query(q)),  // Accept any query after NEXT
+                        map(query, |q| Statement::Query(q)), // Accept any query after NEXT
                         map(data_statement, |ds| Statement::DataStatement(ds)),
                     )),
                 ))),
             )),
-            |(initial_statement, chained)| (vec![], initial_statement, chained)
+            |(initial_statement, chained)| (vec![], initial_statement, chained),
         ),
-    ))(tokens).map(|(remaining, (variable_defs, initial_statement, chained))| {
+    ))(tokens)
+    .map(|(remaining, (variable_defs, initial_statement, chained))| {
         // Convert variable declarations to DeclareStatements
         let variable_definitions = if variable_defs.is_empty() {
             vec![]
@@ -4217,25 +4358,31 @@ fn procedure_body_statement(tokens: &[Token]) -> IResult<&[Token], ProcedureBody
         };
 
         // Convert chained statements
-        let chained_statements = chained.into_iter().map(|(_, yield_clause, statement)| {
-            ChainedStatement {
+        let chained_statements = chained
+            .into_iter()
+            .map(|(_, yield_clause, statement)| ChainedStatement {
                 yield_clause,
                 statement: Box::new(statement),
                 location: Location::default(),
-            }
-        }).collect();
+            })
+            .collect();
 
-        (remaining, ProcedureBodyStatement {
-            variable_definitions,
-            initial_statement: Box::new(initial_statement),
-            chained_statements,
-            location: Location::default(),
-        })
+        (
+            remaining,
+            ProcedureBodyStatement {
+                variable_definitions,
+                initial_statement: Box::new(initial_statement),
+                chained_statements,
+                location: Location::default(),
+            },
+        )
     })
 }
 
 /// Parse variable declaration for procedure body: [<type-spec>] <identifier> ["=" <expression>]
-fn variable_declaration_for_procedure_body(tokens: &[Token]) -> IResult<&[Token], VariableDeclaration> {
+fn variable_declaration_for_procedure_body(
+    tokens: &[Token],
+) -> IResult<&[Token], VariableDeclaration> {
     map(
         tuple((
             // Optional type specification
@@ -4252,7 +4399,7 @@ fn variable_declaration_for_procedure_body(tokens: &[Token]) -> IResult<&[Token]
                 initial_value,
                 location: Location::default(),
             }
-        }
+        },
     )(tokens)
 }
 
@@ -4288,8 +4435,12 @@ fn variable_declaration_for_procedure_body(tokens: &[Token]) -> IResult<&[Token]
 #[allow(dead_code)] // Reserved for ISO GQL AT/NEXT full implementation (ROADMAP.md v0.3.0)
 fn match_clause_for_procedure_body(tokens: &[Token]) -> IResult<&[Token], MatchClause> {
     // Find where WHERE starts or NEXT if no WHERE
-    let stop_pos = tokens.iter().position(|t| matches!(t, Token::Where | Token::Next))
-        .ok_or_else(|| nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Alt)))?;
+    let stop_pos = tokens
+        .iter()
+        .position(|t| matches!(t, Token::Where | Token::Next))
+        .ok_or_else(|| {
+            nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Alt))
+        })?;
 
     // Parse just the MATCH part
     let match_tokens = &tokens[..stop_pos];
@@ -4299,7 +4450,10 @@ fn match_clause_for_procedure_body(tokens: &[Token]) -> IResult<&[Token], MatchC
 
     // Ensure we consumed all MATCH tokens
     if !remaining.is_empty() {
-        return Err(nom::Err::Error(nom::error::Error::new(remaining, nom::error::ErrorKind::Complete)));
+        return Err(nom::Err::Error(nom::error::Error::new(
+            remaining,
+            nom::error::ErrorKind::Complete,
+        )));
     }
 
     // Return the remaining tokens starting from WHERE/NEXT
@@ -4350,8 +4504,12 @@ fn where_clause_for_procedure_body(tokens: &[Token]) -> IResult<&[Token], Option
     }
 
     // Find where NEXT starts
-    let next_pos = tokens.iter().position(|t| matches!(t, Token::Next))
-        .ok_or_else(|| nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Alt)))?;
+    let next_pos = tokens
+        .iter()
+        .position(|t| matches!(t, Token::Next))
+        .ok_or_else(|| {
+            nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Alt))
+        })?;
 
     // Parse WHERE clause tokens
     let where_tokens = &tokens[..next_pos];
@@ -4361,7 +4519,10 @@ fn where_clause_for_procedure_body(tokens: &[Token]) -> IResult<&[Token], Option
 
     // Ensure we consumed all WHERE tokens
     if !remaining.is_empty() {
-        return Err(nom::Err::Error(nom::error::Error::new(remaining, nom::error::ErrorKind::Complete)));
+        return Err(nom::Err::Error(nom::error::Error::new(
+            remaining,
+            nom::error::ErrorKind::Complete,
+        )));
     }
 
     // Return the remaining tokens starting from NEXT
@@ -4381,28 +4542,36 @@ fn at_location_statement(tokens: &[Token]) -> IResult<&[Token], AtLocationStatem
                         // NEXT statements removed - only allowed in procedure body context
                         map(basic_query, |q| Statement::Query(q)),
                         map(select_statement, Statement::Select),
-                        map(set_statement, |s| Statement::DataStatement(DataStatement::Set(s))),
+                        map(set_statement, |s| {
+                            Statement::DataStatement(DataStatement::Set(s))
+                        }),
                     )),
-                    opt(expect_token(Token::Semicolon))
+                    opt(expect_token(Token::Semicolon)),
                 )),
-                |(statement, _)| statement
+                |(statement, _)| statement,
             )),
         )),
         |(_, location_path, statements)| AtLocationStatement {
             location_path,
             statements,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
 /// Parse transaction statement
 fn transaction_statement(tokens: &[Token]) -> IResult<&[Token], TransactionStatement> {
     alt((
-        map(start_transaction_statement, TransactionStatement::StartTransaction),
+        map(
+            start_transaction_statement,
+            TransactionStatement::StartTransaction,
+        ),
         map(commit_statement, TransactionStatement::Commit),
         map(rollback_statement, TransactionStatement::Rollback),
-        map(set_transaction_characteristics_statement, TransactionStatement::SetTransactionCharacteristics),
+        map(
+            set_transaction_characteristics_statement,
+            TransactionStatement::SetTransactionCharacteristics,
+        ),
     ))(tokens)
 }
 
@@ -4419,18 +4588,15 @@ fn start_transaction_statement(tokens: &[Token]) -> IResult<&[Token], StartTrans
             |(_, _, characteristics)| StartTransactionStatement {
                 characteristics,
                 location: Location::default(),
-            }
+            },
         ),
         // BEGIN [characteristics] (alternative syntax)
         map(
-            tuple((
-                expect_token(Token::Begin),
-                opt(transaction_characteristics),
-            )),
+            tuple((expect_token(Token::Begin), opt(transaction_characteristics))),
             |(_, characteristics)| StartTransactionStatement {
                 characteristics,
                 location: Location::default(),
-            }
+            },
         ),
     ))(tokens)
 }
@@ -4438,14 +4604,11 @@ fn start_transaction_statement(tokens: &[Token]) -> IResult<&[Token], StartTrans
 /// Parse COMMIT [WORK]
 fn commit_statement(tokens: &[Token]) -> IResult<&[Token], CommitStatement> {
     map(
-        tuple((
-            expect_token(Token::Commit),
-            opt(expect_token(Token::Work)),
-        )),
+        tuple((expect_token(Token::Commit), opt(expect_token(Token::Work)))),
         |(_, work)| CommitStatement {
             work: work.is_some(),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -4459,12 +4622,14 @@ fn rollback_statement(tokens: &[Token]) -> IResult<&[Token], RollbackStatement> 
         |(_, work)| RollbackStatement {
             work: work.is_some(),
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
 /// Parse SET TRANSACTION characteristics
-fn set_transaction_characteristics_statement(tokens: &[Token]) -> IResult<&[Token], SetTransactionCharacteristicsStatement> {
+fn set_transaction_characteristics_statement(
+    tokens: &[Token],
+) -> IResult<&[Token], SetTransactionCharacteristicsStatement> {
     map(
         tuple((
             expect_token(Token::Set),
@@ -4474,22 +4639,19 @@ fn set_transaction_characteristics_statement(tokens: &[Token]) -> IResult<&[Toke
         |(_, _, characteristics)| SetTransactionCharacteristicsStatement {
             characteristics,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
 /// Parse transaction characteristics
 fn transaction_characteristics(tokens: &[Token]) -> IResult<&[Token], TransactionCharacteristics> {
     map(
-        tuple((
-            opt(isolation_level_clause),
-            opt(access_mode_clause),
-        )),
+        tuple((opt(isolation_level_clause), opt(access_mode_clause))),
         |(isolation_level, access_mode)| TransactionCharacteristics {
             isolation_level,
             access_mode,
             location: Location::default(),
-        }
+        },
     )(tokens)
 }
 
@@ -4501,30 +4663,23 @@ fn isolation_level_clause(tokens: &[Token]) -> IResult<&[Token], IsolationLevel>
             expect_token(Token::Level),
             alt((
                 map(
-                    tuple((
-                        expect_token(Token::Read),
-                        expect_token(Token::Uncommitted),
-                    )),
-                    |_| IsolationLevel::ReadUncommitted
+                    tuple((expect_token(Token::Read), expect_token(Token::Uncommitted))),
+                    |_| IsolationLevel::ReadUncommitted,
                 ),
                 map(
-                    tuple((
-                        expect_token(Token::Read),
-                        expect_token(Token::Committed),
-                    )),
-                    |_| IsolationLevel::ReadCommitted
+                    tuple((expect_token(Token::Read), expect_token(Token::Committed))),
+                    |_| IsolationLevel::ReadCommitted,
                 ),
                 map(
-                    tuple((
-                        expect_token(Token::Repeatable),
-                        expect_token(Token::Read),
-                    )),
-                    |_| IsolationLevel::RepeatableRead
+                    tuple((expect_token(Token::Repeatable), expect_token(Token::Read))),
+                    |_| IsolationLevel::RepeatableRead,
                 ),
-                map(expect_token(Token::Serializable), |_| IsolationLevel::Serializable),
+                map(expect_token(Token::Serializable), |_| {
+                    IsolationLevel::Serializable
+                }),
             )),
         )),
-        |(_, _, level)| level
+        |(_, _, level)| level,
     )(tokens)
 }
 
@@ -4532,18 +4687,12 @@ fn isolation_level_clause(tokens: &[Token]) -> IResult<&[Token], IsolationLevel>
 fn access_mode_clause(tokens: &[Token]) -> IResult<&[Token], AccessMode> {
     alt((
         map(
-            tuple((
-                expect_token(Token::Read),
-                expect_token(Token::Only),
-            )),
-            |_| AccessMode::ReadOnly
+            tuple((expect_token(Token::Read), expect_token(Token::Only))),
+            |_| AccessMode::ReadOnly,
         ),
         map(
-            tuple((
-                expect_token(Token::Read),
-                expect_token(Token::Write),
-            )),
-            |_| AccessMode::ReadWrite
+            tuple((expect_token(Token::Read), expect_token(Token::Write))),
+            |_| AccessMode::ReadWrite,
         ),
     ))(tokens)
 }
@@ -4563,13 +4712,10 @@ fn pattern_expression(tokens: &[Token]) -> IResult<&[Token], PatternExpression> 
                         match third_token {
                             Token::Colon | Token::RightParen | Token::LeftBrace => {
                                 // This looks like a node pattern, try to parse it
-                                return map(
-                                    path_pattern,
-                                    |pattern| PatternExpression {
-                                        pattern,
-                                        location: Location::default(),
-                                    }
-                                )(tokens);
+                                return map(path_pattern, |pattern| PatternExpression {
+                                    pattern,
+                                    location: Location::default(),
+                                })(tokens);
                             }
                             _ => {}
                         }
@@ -4578,13 +4724,10 @@ fn pattern_expression(tokens: &[Token]) -> IResult<&[Token], PatternExpression> 
                 // (:Label...
                 Token::Colon => {
                     // This looks like a label-only node pattern
-                    return map(
-                        path_pattern,
-                        |pattern| PatternExpression {
-                            pattern,
-                            location: Location::default(),
-                        }
-                    )(tokens);
+                    return map(path_pattern, |pattern| PatternExpression {
+                        pattern,
+                        location: Location::default(),
+                    })(tokens);
                 }
                 // ()... empty node pattern
                 Token::RightParen => {
@@ -4594,13 +4737,10 @@ fn pattern_expression(tokens: &[Token]) -> IResult<&[Token], PatternExpression> 
                             match fourth_token {
                                 Token::Dash | Token::LessThan => {
                                     // This looks like a pattern starting with empty node
-                                    return map(
-                                        path_pattern,
-                                        |pattern| PatternExpression {
-                                            pattern,
-                                            location: Location::default(),
-                                        }
-                                    )(tokens);
+                                    return map(path_pattern, |pattern| PatternExpression {
+                                        pattern,
+                                        location: Location::default(),
+                                    })(tokens);
                                 }
                                 _ => {}
                             }
@@ -4611,9 +4751,12 @@ fn pattern_expression(tokens: &[Token]) -> IResult<&[Token], PatternExpression> 
             }
         }
     }
-    
+
     // If we get here, this doesn't look like a pattern, so fail
-    Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+    Err(nom::Err::Error(nom::error::Error::new(
+        tokens,
+        nom::error::ErrorKind::Tag,
+    )))
 }
 
 // =============================================================================
@@ -4693,7 +4836,10 @@ fn parse_index_name(tokens: &[Token]) -> IResult<&[Token], String> {
         }
     }
 
-    Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+    Err(nom::Err::Error(nom::error::Error::new(
+        tokens,
+        nom::error::ErrorKind::Tag,
+    )))
 }
 
 /// Parse CREATE GRAPH INDEX [IF NOT EXISTS] statement
@@ -4705,22 +4851,23 @@ fn create_index_statement(tokens: &[Token]) -> IResult<&[Token], CreateIndexStat
         map(
             pair(
                 preceded(expect_identifier("GRAPH"), expect_identifier("INDEX")),
-                opt(graph_index_type)
+                opt(graph_index_type),
             ),
-            |(_, gtype)| IndexTypeSpecifier::Graph(gtype.unwrap_or(GraphIndexTypeSpecifier::AdjacencyList))
+            |(_, gtype)| {
+                IndexTypeSpecifier::Graph(gtype.unwrap_or(GraphIndexTypeSpecifier::AdjacencyList))
+            },
         ),
         // Default to adjacency list if just "CREATE INDEX"
-        map(
-            expect_identifier("INDEX"),
-            |_| IndexTypeSpecifier::Graph(GraphIndexTypeSpecifier::AdjacencyList)
-        ),
+        map(expect_identifier("INDEX"), |_| {
+            IndexTypeSpecifier::Graph(GraphIndexTypeSpecifier::AdjacencyList)
+        }),
     ))(tokens)?;
 
     // Parse optional IF NOT EXISTS
     let (tokens, if_not_exists) = opt(tuple((
         expect_token(Token::If),
         expect_token(Token::Not),
-        expect_token(Token::Exists)
+        expect_token(Token::Exists),
     )))(tokens)?;
     let if_not_exists = if_not_exists.is_some();
 
@@ -4730,14 +4877,14 @@ fn create_index_statement(tokens: &[Token]) -> IResult<&[Token], CreateIndexStat
     // Parse ON table_name
     let (tokens, _) = expect_token(Token::On)(tokens)?;
     let (tokens, table) = parse_table_name(tokens)?;
-    
+
     // Parse optional column list (column1, column2, ...)
     let (tokens, columns) = opt(delimited(
         expect_token(Token::LeftParen),
         separated_list1(expect_token(Token::Comma), identifier),
-        expect_token(Token::RightParen)
+        expect_token(Token::RightParen),
     ))(tokens)?;
-    
+
     // Parse optional USING clause
     let (tokens, _using_type) = opt(preceded(
         expect_identifier("USING"),
@@ -4751,24 +4898,24 @@ fn create_index_statement(tokens: &[Token]) -> IResult<&[Token], CreateIndexStat
             expect_identifier("PATH_INDEX"),
             expect_identifier("REACHABILITY"),
             expect_identifier("PATTERN_INDEX"),
-        ))
+        )),
     ))(tokens)?;
-    
+
     // Parse optional WITH clause (parameter=value, ...)
-    let (tokens, options) = opt(preceded(
-        expect_identifier("WITH"),
-        index_options
-    ))(tokens)?;
-    
-    Ok((tokens, CreateIndexStatement {
-        name,
-        table,
-        columns: columns.unwrap_or_default(),
-        index_type,
-        options: options.unwrap_or_default(),
-        if_not_exists,
-        location: Location::default(),
-    }))
+    let (tokens, options) = opt(preceded(expect_identifier("WITH"), index_options))(tokens)?;
+
+    Ok((
+        tokens,
+        CreateIndexStatement {
+            name,
+            table,
+            columns: columns.unwrap_or_default(),
+            index_type,
+            options: options.unwrap_or_default(),
+            if_not_exists,
+            location: Location::default(),
+        },
+    ))
 }
 
 /// Parse DROP INDEX statement
@@ -4779,45 +4926,58 @@ fn drop_index_statement(tokens: &[Token]) -> IResult<&[Token], DropIndexStatemen
     // Parse optional IF EXISTS
     let (tokens, if_exists) = opt(preceded(
         expect_token(Token::If),
-        expect_token(Token::Exists)
+        expect_token(Token::Exists),
     ))(tokens)?;
 
     // Parse index name - use lenient parser to accept various tokens for better error messages
     let (tokens, name) = parse_index_name(tokens)?;
 
-    Ok((tokens, DropIndexStatement {
-        name,
-        if_exists: if_exists.is_some(),
-        location: Location::default(),
-    }))
+    Ok((
+        tokens,
+        DropIndexStatement {
+            name,
+            if_exists: if_exists.is_some(),
+            location: Location::default(),
+        },
+    ))
 }
 
 /// Parse ALTER INDEX statement
 fn alter_index_statement(tokens: &[Token]) -> IResult<&[Token], AlterIndexStatement> {
     let (tokens, _) = expect_token(Token::Alter)(tokens)?;
     let (tokens, _) = expect_identifier("INDEX")(tokens)?;
-    
+
     // Parse index name
     let (tokens, name) = identifier(tokens)?;
-    
+
     // Parse operation
     let (tokens, operation) = alt((
-        map(expect_identifier("REBUILD"), |_| AlterIndexOperation::Rebuild),
-        map(expect_identifier("OPTIMIZE"), |_| AlterIndexOperation::Optimize),
+        map(expect_identifier("REBUILD"), |_| {
+            AlterIndexOperation::Rebuild
+        }),
+        map(expect_identifier("OPTIMIZE"), |_| {
+            AlterIndexOperation::Optimize
+        }),
         map(
             preceded(
                 tuple((expect_identifier("SET"), expect_identifier("OPTION"))),
-                tuple((identifier, preceded(expect_token(Token::Equal), parse_value)))
+                tuple((
+                    identifier,
+                    preceded(expect_token(Token::Equal), parse_value),
+                )),
             ),
-            |(key, value)| AlterIndexOperation::SetOption(key, value)
+            |(key, value)| AlterIndexOperation::SetOption(key, value),
         ),
     ))(tokens)?;
-    
-    Ok((tokens, AlterIndexStatement {
-        name,
-        operation,
-        location: Location::default(),
-    }))
+
+    Ok((
+        tokens,
+        AlterIndexStatement {
+            name,
+            operation,
+            location: Location::default(),
+        },
+    ))
 }
 
 /// Parse OPTIMIZE INDEX statement
@@ -4828,10 +4988,13 @@ fn optimize_index_statement(tokens: &[Token]) -> IResult<&[Token], OptimizeIndex
     // Parse index name
     let (tokens, name) = identifier(tokens)?;
 
-    Ok((tokens, OptimizeIndexStatement {
-        name,
-        location: Location::default(),
-    }))
+    Ok((
+        tokens,
+        OptimizeIndexStatement {
+            name,
+            location: Location::default(),
+        },
+    ))
 }
 
 /// Parse REINDEX statement
@@ -4842,20 +5005,30 @@ fn reindex_statement(tokens: &[Token]) -> IResult<&[Token], ReindexStatement> {
     // Parse index name
     let (tokens, name) = identifier(tokens)?;
 
-    Ok((tokens, ReindexStatement {
-        name,
-        location: Location::default(),
-    }))
+    Ok((
+        tokens,
+        ReindexStatement {
+            name,
+            location: Location::default(),
+        },
+    ))
 }
-
 
 /// Parse graph index type specifier
 fn graph_index_type(tokens: &[Token]) -> IResult<&[Token], GraphIndexTypeSpecifier> {
     alt((
-        map(expect_identifier("ADJACENCY_LIST"), |_| GraphIndexTypeSpecifier::AdjacencyList),
-        map(expect_identifier("PATH_INDEX"), |_| GraphIndexTypeSpecifier::PathIndex),
-        map(expect_identifier("REACHABILITY"), |_| GraphIndexTypeSpecifier::ReachabilityIndex),
-        map(expect_identifier("PATTERN_INDEX"), |_| GraphIndexTypeSpecifier::PatternIndex),
+        map(expect_identifier("ADJACENCY_LIST"), |_| {
+            GraphIndexTypeSpecifier::AdjacencyList
+        }),
+        map(expect_identifier("PATH_INDEX"), |_| {
+            GraphIndexTypeSpecifier::PathIndex
+        }),
+        map(expect_identifier("REACHABILITY"), |_| {
+            GraphIndexTypeSpecifier::ReachabilityIndex
+        }),
+        map(expect_identifier("PATTERN_INDEX"), |_| {
+            GraphIndexTypeSpecifier::PatternIndex
+        }),
     ))(tokens)
 }
 
@@ -4867,18 +5040,21 @@ fn index_options(tokens: &[Token]) -> IResult<&[Token], IndexOptions> {
             expect_token(Token::Comma),
             tuple((
                 identifier,
-                preceded(expect_token(Token::Equal), parse_value)
-            ))
+                preceded(expect_token(Token::Equal), parse_value),
+            )),
         ),
-        expect_token(Token::RightParen)
+        expect_token(Token::RightParen),
     )(tokens)?;
-    
+
     let parameters = params.into_iter().collect();
-    
-    Ok((tokens, IndexOptions {
-        parameters,
-        location: Location::default(),
-    }))
+
+    Ok((
+        tokens,
+        IndexOptions {
+            parameters,
+            location: Location::default(),
+        },
+    ))
 }
 
 /// Parse value for index parameters
@@ -4898,7 +5074,10 @@ fn parse_string_literal(tokens: &[Token]) -> IResult<&[Token], String> {
     if let Some((Token::String(s), rest)) = tokens.split_first() {
         Ok((rest, s.clone()))
     } else {
-        Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+        Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        )))
     }
 }
 
@@ -4908,10 +5087,16 @@ fn parse_number(tokens: &[Token]) -> IResult<&[Token], f64> {
         match token {
             Token::Integer(n) => Ok((rest, *n as f64)),
             Token::Float(f) => Ok((rest, *f)),
-            _ => Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+            _ => Err(nom::Err::Error(nom::error::Error::new(
+                tokens,
+                nom::error::ErrorKind::Tag,
+            ))),
         }
     } else {
-        Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+        Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        )))
     }
 }
 
@@ -4920,7 +5105,10 @@ fn parse_integer(tokens: &[Token]) -> IResult<&[Token], i64> {
     if let Some((Token::Integer(i), rest)) = tokens.split_first() {
         Ok((rest, *i))
     } else {
-        Err(nom::Err::Error(nom::error::Error::new(tokens, nom::error::ErrorKind::Tag)))
+        Err(nom::Err::Error(nom::error::Error::new(
+            tokens,
+            nom::error::ErrorKind::Tag,
+        )))
     }
 }
 
@@ -4950,322 +5138,382 @@ WHERE category = 'text' OR category = 'hybrid' OR category = 'fuzzy';"#;
             log::debug!("Has YIELD: {}", call_stmt.yield_clause.is_some());
             log::debug!("Has WHERE: {}", call_stmt.where_clause.is_some());
 
-            assert!(call_stmt.where_clause.is_some(), "WHERE clause should be captured!");
+            assert!(
+                call_stmt.where_clause.is_some(),
+                "WHERE clause should be captured!"
+            );
         } else {
             panic!("Expected Call statement");
         }
     }
 }
 
-    // ========================================================================
-    // CALL Statement Parser Tests
-    // ========================================================================
-    // Tests for CALL statement parser bug fixes:
-    // 1. 'description' keyword not recognized in YIELD clauses
-    // 2. IN operator not parsing parenthesized lists
-    // 3. Invalid CALL+RETURN syntax not rejected
+// ========================================================================
+// CALL Statement Parser Tests
+// ========================================================================
+// Tests for CALL statement parser bug fixes:
+// 1. 'description' keyword not recognized in YIELD clauses
+// 2. IN operator not parsing parenthesized lists
+// 3. Invalid CALL+RETURN syntax not rejected
 
-    #[test]
-    fn test_call_with_description_in_yield() {
-        // Bug #1: 'description' is a keyword but should be allowed as column name in YIELD
-        let query = r#"CALL system.list_functions()
+#[test]
+fn test_call_with_description_in_yield() {
+    // Bug #1: 'description' is a keyword but should be allowed as column name in YIELD
+    let query = r#"CALL system.list_functions()
 YIELD name, category, description;"#;
 
-        let result = parse_query(query);
-        assert!(result.is_ok(), "Failed to parse CALL with 'description' in YIELD");
+    let result = parse_query(query);
+    assert!(
+        result.is_ok(),
+        "Failed to parse CALL with 'description' in YIELD"
+    );
 
-        let doc = result.unwrap();
-        if let Statement::Call(ref call_stmt) = doc.statement {
-            assert_eq!(call_stmt.procedure_name, "system.list_functions");
+    let doc = result.unwrap();
+    if let Statement::Call(ref call_stmt) = doc.statement {
+        assert_eq!(call_stmt.procedure_name, "system.list_functions");
 
-            let yield_clause = call_stmt.yield_clause.as_ref()
-                .expect("YIELD clause should be present");
+        let yield_clause = call_stmt
+            .yield_clause
+            .as_ref()
+            .expect("YIELD clause should be present");
 
-            assert_eq!(yield_clause.items.len(), 3, "Should have 3 YIELD items");
-            assert_eq!(yield_clause.items[0].column_name, "name");
-            assert_eq!(yield_clause.items[1].column_name, "category");
-            assert_eq!(yield_clause.items[2].column_name, "description");
-        } else {
-            panic!("Expected CallStatement, got {:?}", std::mem::discriminant(&doc.statement));
-        }
+        assert_eq!(yield_clause.items.len(), 3, "Should have 3 YIELD items");
+        assert_eq!(yield_clause.items[0].column_name, "name");
+        assert_eq!(yield_clause.items[1].column_name, "category");
+        assert_eq!(yield_clause.items[2].column_name, "description");
+    } else {
+        panic!(
+            "Expected CallStatement, got {:?}",
+            std::mem::discriminant(&doc.statement)
+        );
     }
+}
 
-    #[test]
-    fn test_call_with_where_and_description() {
-        // Bug #1 + WHERE extension: Ensure WHERE is parsed after 'description' in YIELD
-        let query = r#"CALL system.list_functions()
+#[test]
+fn test_call_with_where_and_description() {
+    // Bug #1 + WHERE extension: Ensure WHERE is parsed after 'description' in YIELD
+    let query = r#"CALL system.list_functions()
 YIELD name, category, description
 WHERE category = 'string';"#;
 
-        let result = parse_query(query);
-        assert!(result.is_ok(), "Failed to parse CALL with WHERE after description");
+    let result = parse_query(query);
+    assert!(
+        result.is_ok(),
+        "Failed to parse CALL with WHERE after description"
+    );
 
-        let doc = result.unwrap();
-        if let Statement::Call(ref call_stmt) = doc.statement {
-            assert!(call_stmt.where_clause.is_some(),
-                "WHERE clause should be present after description in YIELD");
+    let doc = result.unwrap();
+    if let Statement::Call(ref call_stmt) = doc.statement {
+        assert!(
+            call_stmt.where_clause.is_some(),
+            "WHERE clause should be present after description in YIELD"
+        );
 
-            let yield_clause = call_stmt.yield_clause.as_ref()
-                .expect("YIELD clause should be present");
-            assert_eq!(yield_clause.items.len(), 3, "All 3 YIELD items should be parsed");
-        } else {
-            panic!("Expected CallStatement");
-        }
+        let yield_clause = call_stmt
+            .yield_clause
+            .as_ref()
+            .expect("YIELD clause should be present");
+        assert_eq!(
+            yield_clause.items.len(),
+            3,
+            "All 3 YIELD items should be parsed"
+        );
+    } else {
+        panic!("Expected CallStatement");
     }
+}
 
-    #[test]
-    fn test_call_where_in_with_list() {
-        // Bug #2: IN operator should parse parenthesized lists like IN ('a', 'b', 'c')
-        let query = r#"CALL system.list_functions()
+#[test]
+fn test_call_where_in_with_list() {
+    // Bug #2: IN operator should parse parenthesized lists like IN ('a', 'b', 'c')
+    let query = r#"CALL system.list_functions()
 YIELD name, category
 WHERE category IN ('string', 'numeric', 'aggregate');"#;
 
-        let result = parse_query(query);
-        assert!(result.is_ok(), "Failed to parse WHERE IN with parenthesized list");
+    let result = parse_query(query);
+    assert!(
+        result.is_ok(),
+        "Failed to parse WHERE IN with parenthesized list"
+    );
 
-        let doc = result.unwrap();
-        if let Statement::Call(ref call_stmt) = doc.statement {
-            let where_clause = call_stmt.where_clause.as_ref()
-                .expect("WHERE clause should be present");
+    let doc = result.unwrap();
+    if let Statement::Call(ref call_stmt) = doc.statement {
+        let where_clause = call_stmt
+            .where_clause
+            .as_ref()
+            .expect("WHERE clause should be present");
 
-            // Check that the WHERE condition is a Binary expression with IN operator
-            match &where_clause.condition {
-                Expression::Binary(binary) => {
-                    assert_eq!(binary.operator, Operator::In, "Expected IN operator");
+        // Check that the WHERE condition is a Binary expression with IN operator
+        match &where_clause.condition {
+            Expression::Binary(binary) => {
+                assert_eq!(binary.operator, Operator::In, "Expected IN operator");
 
-                    // Check that right side is a List literal
-                    match &*binary.right {
-                        Expression::Literal(Literal::List(list)) => {
-                            assert_eq!(list.len(), 3, "Should have 3 items in IN list");
-                        }
-                        other => panic!("Expected Literal::List, got {:?}", other),
+                // Check that right side is a List literal
+                match &*binary.right {
+                    Expression::Literal(Literal::List(list)) => {
+                        assert_eq!(list.len(), 3, "Should have 3 items in IN list");
                     }
+                    other => panic!("Expected Literal::List, got {:?}", other),
                 }
-                other => panic!("Expected Binary expression with IN, got {:?}", other),
             }
-        } else {
-            panic!("Expected CallStatement");
+            other => panic!("Expected Binary expression with IN, got {:?}", other),
         }
+    } else {
+        panic!("Expected CallStatement");
     }
+}
 
-    #[test]
-    fn test_call_where_in_simple() {
-        // Bug #2: Simple IN test with 2 items
-        let query = r#"CALL system.list_functions()
+#[test]
+fn test_call_where_in_simple() {
+    // Bug #2: Simple IN test with 2 items
+    let query = r#"CALL system.list_functions()
 YIELD name
 WHERE name IN ('UPPER', 'LOWER');"#;
 
-        let result = parse_query(query);
-        assert!(result.is_ok(), "Failed to parse simple WHERE IN");
+    let result = parse_query(query);
+    assert!(result.is_ok(), "Failed to parse simple WHERE IN");
 
-        let doc = result.unwrap();
-        if let Statement::Call(ref call_stmt) = doc.statement {
-            assert!(call_stmt.where_clause.is_some(), "WHERE clause should be present");
-        } else {
-            panic!("Expected CallStatement");
-        }
+    let doc = result.unwrap();
+    if let Statement::Call(ref call_stmt) = doc.statement {
+        assert!(
+            call_stmt.where_clause.is_some(),
+            "WHERE clause should be present"
+        );
+    } else {
+        panic!("Expected CallStatement");
     }
+}
 
-    #[test]
-    fn test_call_where_not_in() {
-        // Bug #2: NOT IN should also work with parenthesized lists
-        let query = r#"CALL system.list_functions()
+#[test]
+fn test_call_where_not_in() {
+    // Bug #2: NOT IN should also work with parenthesized lists
+    let query = r#"CALL system.list_functions()
 YIELD name, category
 WHERE category NOT IN ('aggregate', 'utility');"#;
 
-        let result = parse_query(query);
-        assert!(result.is_ok(), "Failed to parse WHERE NOT IN");
+    let result = parse_query(query);
+    assert!(result.is_ok(), "Failed to parse WHERE NOT IN");
 
-        let doc = result.unwrap();
-        if let Statement::Call(ref call_stmt) = doc.statement {
-            let where_clause = call_stmt.where_clause.as_ref()
-                .expect("WHERE clause should be present");
+    let doc = result.unwrap();
+    if let Statement::Call(ref call_stmt) = doc.statement {
+        let where_clause = call_stmt
+            .where_clause
+            .as_ref()
+            .expect("WHERE clause should be present");
 
-            match &where_clause.condition {
-                Expression::Binary(binary) => {
-                    assert_eq!(binary.operator, Operator::NotIn, "Expected NotIn operator");
-                }
-                other => panic!("Expected Binary expression with NOT IN, got {:?}", other),
+        match &where_clause.condition {
+            Expression::Binary(binary) => {
+                assert_eq!(binary.operator, Operator::NotIn, "Expected NotIn operator");
             }
-        } else {
-            panic!("Expected CallStatement");
+            other => panic!("Expected Binary expression with NOT IN, got {:?}", other),
         }
+    } else {
+        panic!("Expected CallStatement");
     }
+}
 
-    #[test]
-    fn test_call_with_return_rejected() {
-        // Bug #3: CALL+RETURN should be rejected as invalid syntax
-        let query = r#"CALL system.list_functions()
+#[test]
+fn test_call_with_return_rejected() {
+    // Bug #3: CALL+RETURN should be rejected as invalid syntax
+    let query = r#"CALL system.list_functions()
 YIELD name, category, description
 WHERE category = 'string'
 RETURN name;"#;
 
-        let result = parse_query(query);
-        assert!(result.is_err(), "Parser should reject CALL with RETURN clause");
+    let result = parse_query(query);
+    assert!(
+        result.is_err(),
+        "Parser should reject CALL with RETURN clause"
+    );
 
-        let error = result.unwrap_err();
-        let error_msg = error.to_string();
-        assert!(error_msg.contains("CALL statements cannot have additional clauses") ||
-                error_msg.contains("unexpected tokens") ||
-                error_msg.contains("Unexpected token"),
-            "Error message should mention invalid CALL syntax, got: {}", error_msg);
-    }
+    let error = result.unwrap_err();
+    let error_msg = error.to_string();
+    assert!(
+        error_msg.contains("CALL statements cannot have additional clauses")
+            || error_msg.contains("unexpected tokens")
+            || error_msg.contains("Unexpected token"),
+        "Error message should mention invalid CALL syntax, got: {}",
+        error_msg
+    );
+}
 
-    #[test]
-    fn test_call_with_match_rejected() {
-        // Bug #3: CALL+MATCH should also be rejected
-        let query = r#"CALL system.list_functions()
+#[test]
+fn test_call_with_match_rejected() {
+    // Bug #3: CALL+MATCH should also be rejected
+    let query = r#"CALL system.list_functions()
 YIELD name
 MATCH (n);"#;
 
-        let result = parse_query(query);
-        assert!(result.is_err(), "Parser should reject CALL with MATCH clause");
-    }
+    let result = parse_query(query);
+    assert!(
+        result.is_err(),
+        "Parser should reject CALL with MATCH clause"
+    );
+}
 
-    #[test]
-    fn test_call_complex_where_expression() {
-        // Combined test: Complex WHERE with IN, OR, and description in YIELD
-        let query = r#"CALL system.list_functions()
+#[test]
+fn test_call_complex_where_expression() {
+    // Combined test: Complex WHERE with IN, OR, and description in YIELD
+    let query = r#"CALL system.list_functions()
 YIELD name, category, description
 WHERE category IN ('string', 'numeric') OR category = 'aggregate';"#;
 
-        let result = parse_query(query);
-        assert!(result.is_ok(), "Failed to parse complex WHERE expression");
+    let result = parse_query(query);
+    assert!(result.is_ok(), "Failed to parse complex WHERE expression");
 
-        let doc = result.unwrap();
-        if let Statement::Call(ref call_stmt) = doc.statement {
-            assert!(call_stmt.yield_clause.is_some(), "YIELD should be present");
-            assert!(call_stmt.where_clause.is_some(), "WHERE should be present");
+    let doc = result.unwrap();
+    if let Statement::Call(ref call_stmt) = doc.statement {
+        assert!(call_stmt.yield_clause.is_some(), "YIELD should be present");
+        assert!(call_stmt.where_clause.is_some(), "WHERE should be present");
 
-            // Verify it's an OR expression
-            match &call_stmt.where_clause.as_ref().unwrap().condition {
-                Expression::Binary(binary) => {
-                    assert_eq!(binary.operator, Operator::Or, "Top-level should be OR operator");
-                }
-                other => panic!("Expected OR binary expression, got {:?}", other),
+        // Verify it's an OR expression
+        match &call_stmt.where_clause.as_ref().unwrap().condition {
+            Expression::Binary(binary) => {
+                assert_eq!(
+                    binary.operator,
+                    Operator::Or,
+                    "Top-level should be OR operator"
+                );
             }
-        } else {
-            panic!("Expected CallStatement");
+            other => panic!("Expected OR binary expression, got {:?}", other),
         }
+    } else {
+        panic!("Expected CallStatement");
     }
+}
 
-    #[test]
-    fn test_call_valid_without_where() {
-        // Sanity test: CALL without WHERE should still work
-        let query = r#"CALL system.list_functions()
+#[test]
+fn test_call_valid_without_where() {
+    // Sanity test: CALL without WHERE should still work
+    let query = r#"CALL system.list_functions()
 YIELD name, category, description;"#;
 
-        let result = parse_query(query);
-        assert!(result.is_ok(), "Valid CALL without WHERE should parse");
+    let result = parse_query(query);
+    assert!(result.is_ok(), "Valid CALL without WHERE should parse");
 
-        let doc = result.unwrap();
-        if let Statement::Call(ref call_stmt) = doc.statement {
-            assert!(call_stmt.yield_clause.is_some(), "YIELD should be present");
-            assert!(call_stmt.where_clause.is_none(), "WHERE should not be present");
-        } else {
-            panic!("Expected CallStatement");
-        }
+    let doc = result.unwrap();
+    if let Statement::Call(ref call_stmt) = doc.statement {
+        assert!(call_stmt.yield_clause.is_some(), "YIELD should be present");
+        assert!(
+            call_stmt.where_clause.is_none(),
+            "WHERE should not be present"
+        );
+    } else {
+        panic!("Expected CallStatement");
     }
+}
 
-    #[test]
-    fn test_call_valid_without_yield() {
-        // Sanity test: CALL without YIELD should work
-        let query = r#"CALL system.list_functions();"#;
+#[test]
+fn test_call_valid_without_yield() {
+    // Sanity test: CALL without YIELD should work
+    let query = r#"CALL system.list_functions();"#;
 
-        let result = parse_query(query);
-        assert!(result.is_ok(), "Valid CALL without YIELD should parse");
+    let result = parse_query(query);
+    assert!(result.is_ok(), "Valid CALL without YIELD should parse");
 
-        let doc = result.unwrap();
-        if let Statement::Call(ref call_stmt) = doc.statement {
-            assert!(call_stmt.yield_clause.is_none(), "YIELD should not be present");
-            assert!(call_stmt.where_clause.is_none(), "WHERE should not be present");
-        } else {
-            panic!("Expected CallStatement");
-        }
+    let doc = result.unwrap();
+    if let Statement::Call(ref call_stmt) = doc.statement {
+        assert!(
+            call_stmt.yield_clause.is_none(),
+            "YIELD should not be present"
+        );
+        assert!(
+            call_stmt.where_clause.is_none(),
+            "WHERE should not be present"
+        );
+    } else {
+        panic!("Expected CallStatement");
     }
+}
 
-    // ========================================================================
-    // Pattern and Complex Query Parser Tests
-    // Extracted from integration tests - tests lexer and parser for patterns
-    // ========================================================================
+// ========================================================================
+// Pattern and Complex Query Parser Tests
+// Extracted from integration tests - tests lexer and parser for patterns
+// ========================================================================
 
-    #[test]
-    fn test_lexer_basic_match_pattern() {
-        let result = crate::ast::lexer::tokenize("MATCH (a:User)");
-        assert!(result.is_ok(), "Basic MATCH pattern should tokenize");
-    }
+#[test]
+fn test_lexer_basic_match_pattern() {
+    let result = crate::ast::lexer::tokenize("MATCH (a:User)");
+    assert!(result.is_ok(), "Basic MATCH pattern should tokenize");
+}
 
-    #[test]
-    fn test_lexer_simple_edge_pattern() {
-        let result = crate::ast::lexer::tokenize("MATCH (a)-[:NEXT]->(b) RETURN a");
-        assert!(result.is_ok(), "Simple edge pattern should tokenize");
-    }
+#[test]
+fn test_lexer_simple_edge_pattern() {
+    let result = crate::ast::lexer::tokenize("MATCH (a)-[:NEXT]->(b) RETURN a");
+    assert!(result.is_ok(), "Simple edge pattern should tokenize");
+}
 
-    #[test]
-    fn test_lexer_complex_where_pattern() {
-        let query = "MATCH (start:TestNode)-[:CONNECTS_TO]->(end:TestNode) WHERE start.id = 1 RETURN count(end) as connected_count";
-        let result = crate::ast::lexer::tokenize(query);
-        assert!(result.is_ok(), "Complex WHERE pattern should tokenize");
-    }
+#[test]
+fn test_lexer_complex_where_pattern() {
+    let query = "MATCH (start:TestNode)-[:CONNECTS_TO]->(end:TestNode) WHERE start.id = 1 RETURN count(end) as connected_count";
+    let result = crate::ast::lexer::tokenize(query);
+    assert!(result.is_ok(), "Complex WHERE pattern should tokenize");
+}
 
-    #[test]
-    fn test_lexer_variable_length_pattern() {
-        let result = crate::ast::lexer::tokenize("-[:NEXT]{1,3}->");
-        assert!(result.is_ok(), "Variable-length pattern should tokenize");
-    }
+#[test]
+fn test_lexer_variable_length_pattern() {
+    let result = crate::ast::lexer::tokenize("-[:NEXT]{1,3}->");
+    assert!(result.is_ok(), "Variable-length pattern should tokenize");
+}
 
-    #[test]
-    fn test_parser_match_user_return() {
-        let result = parse_query("MATCH (a:User) RETURN a");
-        assert!(result.is_ok(), "MATCH User RETURN should parse");
-    }
+#[test]
+fn test_parser_match_user_return() {
+    let result = parse_query("MATCH (a:User) RETURN a");
+    assert!(result.is_ok(), "MATCH User RETURN should parse");
+}
 
-    #[test]
-    fn test_parser_match_with_label() {
-        let result = parse_query("MATCH (node0:ChainNode) RETURN node0");
-        assert!(result.is_ok(), "MATCH with label should parse");
-    }
+#[test]
+fn test_parser_match_with_label() {
+    let result = parse_query("MATCH (node0:ChainNode) RETURN node0");
+    assert!(result.is_ok(), "MATCH with label should parse");
+}
 
-    #[test]
-    fn test_parser_simple_edge_pattern_no_quantifier() {
-        let result = parse_query("MATCH (a)-[:NEXT]->(b) RETURN a");
-        assert!(result.is_ok(), "Simple edge pattern without quantifier should parse");
-    }
+#[test]
+fn test_parser_simple_edge_pattern_no_quantifier() {
+    let result = parse_query("MATCH (a)-[:NEXT]->(b) RETURN a");
+    assert!(
+        result.is_ok(),
+        "Simple edge pattern without quantifier should parse"
+    );
+}
 
-    #[test]
-    fn test_parser_variable_length_edge_pattern() {
-        let result = parse_query("MATCH (a)-[:NEXT]{1,3}->(b) RETURN a");
-        assert!(result.is_ok(), "Variable-length edge pattern should parse");
-    }
+#[test]
+fn test_parser_variable_length_edge_pattern() {
+    let result = parse_query("MATCH (a)-[:NEXT]{1,3}->(b) RETURN a");
+    assert!(result.is_ok(), "Variable-length edge pattern should parse");
+}
 
-    #[test]
-    fn test_parser_variable_length_with_path_assignment() {
-        let query = "MATCH path = (node0:ChainNode {id: 0})-[:NEXT]{1,3}->(node_end) RETURN count(path) as one_to_three_hop_paths";
-        let result = parse_query(query);
-        assert!(result.is_ok(), "Variable-length pattern with path assignment should parse");
-    }
+#[test]
+fn test_parser_variable_length_with_path_assignment() {
+    let query = "MATCH path = (node0:ChainNode {id: 0})-[:NEXT]{1,3}->(node_end) RETURN count(path) as one_to_three_hop_paths";
+    let result = parse_query(query);
+    assert!(
+        result.is_ok(),
+        "Variable-length pattern with path assignment should parse"
+    );
+}
 
-    #[test]
-    fn test_parser_connects_to_pattern() {
-        let query = "MATCH (start:TestNode)-[:CONNECTS_TO]->(end:TestNode) WHERE start.id = 1 RETURN count(end) as connected_count";
-        let result = parse_query(query);
-        assert!(result.is_ok(), "CONNECTS_TO pattern should parse");
-    }
+#[test]
+fn test_parser_connects_to_pattern() {
+    let query = "MATCH (start:TestNode)-[:CONNECTS_TO]->(end:TestNode) WHERE start.id = 1 RETURN count(end) as connected_count";
+    let result = parse_query(query);
+    assert!(result.is_ok(), "CONNECTS_TO pattern should parse");
+}
 
-    #[test]
-    fn test_parser_pattern_comprehension() {
-        let query = "MATCH (a:Account)
+#[test]
+fn test_parser_pattern_comprehension() {
+    let query = "MATCH (a:Account)
          RETURN a.account_number,
                 [(a)-[t:Transaction]->(m) | t.amount] as transaction_amounts,
                 [(a)-[t:Transaction]->(m) | m.category] as merchant_categories
          LIMIT 10";
-        let result = parse_query(query);
-        assert!(result.is_ok(), "Pattern comprehension should parse");
-    }
+    let result = parse_query(query);
+    assert!(result.is_ok(), "Pattern comprehension should parse");
+}
 
-    #[test]
-    fn test_parser_with_clause_aggregation() {
-        let query = "MATCH (a:Account)-[t:Transaction]->(m:Merchant)
+#[test]
+fn test_parser_with_clause_aggregation() {
+    let query = "MATCH (a:Account)-[t:Transaction]->(m:Merchant)
          WITH a, m, count(t) as transaction_count, sum(t.amount) as total_spent
          WHERE transaction_count > 5
          MATCH (m)<-[:Transaction]-(other:Account)
@@ -5277,35 +5525,43 @@ YIELD name, category, description;"#;
                 count(DISTINCT other) as fellow_customers
          ORDER BY total_spent DESC
          LIMIT 10";
-        let result = parse_query(query);
-        assert!(result.is_ok(), "WITH clause with aggregation should parse. Error: {:?}", result.err());
-    }
+    let result = parse_query(query);
+    assert!(
+        result.is_ok(),
+        "WITH clause with aggregation should parse. Error: {:?}",
+        result.err()
+    );
+}
 
-    #[test]
-    fn test_parser_simple_with_clause() {
-        let query = "MATCH (a:Account)-[t:Transaction]->(m:Merchant)
+#[test]
+fn test_parser_simple_with_clause() {
+    let query = "MATCH (a:Account)-[t:Transaction]->(m:Merchant)
          WITH a, m, count(t) as transaction_count
          RETURN a.account_number, transaction_count";
-        let result = parse_query(query);
-        assert!(result.is_ok(), "Simple WITH clause should parse");
-    }
+    let result = parse_query(query);
+    assert!(result.is_ok(), "Simple WITH clause should parse");
+}
 
-    #[test]
-    fn test_parser_with_where_clause() {
-        let query = "MATCH (a:Account)-[t:Transaction]->(m:Merchant)
+#[test]
+fn test_parser_with_where_clause() {
+    let query = "MATCH (a:Account)-[t:Transaction]->(m:Merchant)
          WITH a, m, count(t) as transaction_count
          WHERE transaction_count > 5
          RETURN a.account_number, transaction_count";
-        let result = parse_query(query);
-        assert!(result.is_ok(), "WITH + WHERE clause should parse");
-    }
+    let result = parse_query(query);
+    assert!(result.is_ok(), "WITH + WHERE clause should parse");
+}
 
-    #[test]
-    fn test_parser_with_then_match() {
-        let query = "MATCH (a:Account)-[t:Transaction]->(m:Merchant)
+#[test]
+fn test_parser_with_then_match() {
+    let query = "MATCH (a:Account)-[t:Transaction]->(m:Merchant)
          WITH a, m, count(t) as transaction_count
          MATCH (m)<-[:Transaction]-(other:Account)
          RETURN a.account_number, other.account_number";
-        let result = parse_query(query);
-        assert!(result.is_ok(), "WITH then MATCH should parse. Error: {:?}", result.err());
-    }
+    let result = parse_query(query);
+    assert!(
+        result.is_ok(),
+        "WITH then MATCH should parse. Error: {:?}",
+        result.err()
+    );
+}

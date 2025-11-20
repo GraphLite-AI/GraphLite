@@ -3,13 +3,13 @@
 //
 //! Execution context for variable management and session lookup
 
+use crate::functions::FunctionRegistry;
+use crate::session::manager::get_session;
+use crate::session::models::{Session, UserSession};
+use crate::storage::{StorageManager, Value};
+use crate::types::GqlType;
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::storage::{Value, StorageManager};
-use crate::types::GqlType;
-use crate::session::models::{UserSession, Session};
-use crate::session::manager::get_session;
-use crate::functions::FunctionRegistry;
 
 #[derive(Debug, Clone)]
 pub struct ExecutionContext {
@@ -99,14 +99,14 @@ impl ExecutionContext {
     pub fn set_variable(&mut self, name: String, value: Value) {
         self.variables.insert(name, value);
     }
-    
+
     /// Set a local variable with explicit type information
     #[allow(dead_code)] // ROADMAP v0.4.0 - Type-aware variable binding for schema validation
     pub fn set_variable_with_type(&mut self, name: String, value: Value, value_type: GqlType) {
         self.variables.insert(name.clone(), value);
         self.variable_types.insert(name, value_type);
     }
-    
+
     /// Get the type of a variable
     #[allow(dead_code)] // ROADMAP v0.4.0 - Variable type inspection for type checking
     pub fn get_variable_type(&self, name: &str) -> Option<&GqlType> {
@@ -133,7 +133,7 @@ impl ExecutionContext {
         let user_session = session_arc.read().ok()?;
         user_session.current_schema.clone()
     }
-    
+
     /// Set schema type information
     #[allow(dead_code)] // ROADMAP v0.4.0 - Schema-aware type tracking for validation
     pub fn set_schema_type(&mut self, name: String, schema_type: GqlType) {
@@ -162,30 +162,40 @@ impl ExecutionContext {
     pub fn session_id(&self) -> &str {
         &self.session_id
     }
-    
+
     /// Log an operation to the WAL if there's an active transaction
-    pub fn log_operation_to_wal(&self, operation_type: crate::txn::state::OperationType, description: String) -> Result<(), crate::exec::error::ExecutionError> {
+    pub fn log_operation_to_wal(
+        &self,
+        operation_type: crate::txn::state::OperationType,
+        description: String,
+    ) -> Result<(), crate::exec::error::ExecutionError> {
         if let Some(transaction_state) = self.transaction_state() {
             transaction_state.log_operation_to_wal(operation_type, description)
         } else {
             // No transaction state - skip WAL logging (common in unit tests)
-            log::debug!("Skipping WAL logging - no transaction state available: {:?} - {}", 
-                       operation_type, description);
+            log::debug!(
+                "Skipping WAL logging - no transaction state available: {:?} - {}",
+                operation_type,
+                description
+            );
             Ok(())
         }
     }
-    
+
     /// Log a transaction operation (undo operation) for rollback
-    pub fn log_transaction_operation(&self, operation: crate::txn::UndoOperation) -> Result<(), crate::exec::error::ExecutionError> {
+    pub fn log_transaction_operation(
+        &self,
+        operation: crate::txn::UndoOperation,
+    ) -> Result<(), crate::exec::error::ExecutionError> {
         if let Some(transaction_state) = self.transaction_state() {
             transaction_state.log_transaction_operation(operation)
         } else {
             Err(crate::exec::error::ExecutionError::RuntimeError(
-                "No transaction state available for transaction logging".to_string()
+                "No transaction state available for transaction logging".to_string(),
             ))
         }
     }
-    
+
     /// Get the graph name for operations using session-aware resolution
     /// Returns full path in /<schema-name>/<graph-name> format
     pub fn get_graph_name(&self) -> Result<String, crate::exec::error::ExecutionError> {
@@ -207,7 +217,6 @@ impl ExecutionContext {
     }
 
     /// Create a MetadataTracker from this execution context
-
     /// Create ExecutionContext from a simplified Session
     #[allow(dead_code)] // ROADMAP v0.5.0 - Session-to-context conversion for test utilities
     pub fn from_session(session: &Session) -> Self {
@@ -233,29 +242,35 @@ impl ExecutionContext {
 
     /// Evaluate a simple expression (literals and function calls) for INSERT/SET operations
     /// This is a lightweight evaluator for property expressions that don't require full row context
-    pub fn evaluate_simple_expression(&self, expr: &crate::ast::ast::Expression) -> Result<Value, crate::exec::error::ExecutionError> {
+    pub fn evaluate_simple_expression(
+        &self,
+        expr: &crate::ast::ast::Expression,
+    ) -> Result<Value, crate::exec::error::ExecutionError> {
         use crate::ast::ast::Expression;
-        use crate::functions::FunctionContext;
         use crate::exec::result::Row;
+        use crate::functions::FunctionContext;
 
         match expr {
             Expression::Literal(literal) => {
                 // Convert literal to value
                 Ok(Self::literal_to_value(literal))
-            },
+            }
 
             Expression::FunctionCall(func_call) => {
                 // Get the function registry
-                let function_registry = self.function_registry.as_ref()
-                    .ok_or_else(|| crate::exec::error::ExecutionError::RuntimeError(
-                        "Function registry not available in execution context".to_string()
-                    ))?;
+                let function_registry = self.function_registry.as_ref().ok_or_else(|| {
+                    crate::exec::error::ExecutionError::RuntimeError(
+                        "Function registry not available in execution context".to_string(),
+                    )
+                })?;
 
                 // Get the function from registry
-                let function = function_registry.get(&func_call.name)
-                    .ok_or_else(|| crate::exec::error::ExecutionError::UnsupportedOperator(
-                        format!("Function not found: {}", func_call.name)
-                    ))?;
+                let function = function_registry.get(&func_call.name).ok_or_else(|| {
+                    crate::exec::error::ExecutionError::UnsupportedOperator(format!(
+                        "Function not found: {}",
+                        func_call.name
+                    ))
+                })?;
 
                 // Evaluate arguments recursively
                 let mut evaluated_args = Vec::new();
@@ -276,24 +291,31 @@ impl ExecutionContext {
                 );
 
                 // Execute the function
-                function.execute(&function_context)
-                    .map_err(|e| crate::exec::error::ExecutionError::UnsupportedOperator(
-                        format!("Function execution error: {}", e)
+                function.execute(&function_context).map_err(|e| {
+                    crate::exec::error::ExecutionError::UnsupportedOperator(format!(
+                        "Function execution error: {}",
+                        e
                     ))
-            },
+                })
+            }
 
             Expression::Variable(var) => {
                 // Try to get variable from context
-                self.get_variable(&var.name)
-                    .ok_or_else(|| crate::exec::error::ExecutionError::ExpressionError(
-                        format!("Variable not found: {}", var.name)
+                self.get_variable(&var.name).ok_or_else(|| {
+                    crate::exec::error::ExecutionError::ExpressionError(format!(
+                        "Variable not found: {}",
+                        var.name
                     ))
-            },
+                })
+            }
 
             _ => {
                 // For other expression types, return an error
                 Err(crate::exec::error::ExecutionError::ExpressionError(
-                    format!("Expression type not supported in simple evaluation: {:?}", expr)
+                    format!(
+                        "Expression type not supported in simple evaluation: {:?}",
+                        expr
+                    ),
                 ))
             }
         }
@@ -310,11 +332,14 @@ impl ExecutionContext {
             crate::ast::ast::Literal::DateTime(dt) => Value::String(dt.clone()),
             crate::ast::ast::Literal::Duration(dur) => Value::String(dur.clone()),
             crate::ast::ast::Literal::TimeWindow(tw) => Value::String(tw.clone()),
-            crate::ast::ast::Literal::Vector(vec) => Value::Vector(vec.iter().map(|&f| f as f32).collect()),
+            crate::ast::ast::Literal::Vector(vec) => {
+                Value::Vector(vec.iter().map(|&f| f as f32).collect())
+            }
             crate::ast::ast::Literal::List(list) => {
-                let converted: Vec<Value> = list.iter().map(|lit| Self::literal_to_value(lit)).collect();
+                let converted: Vec<Value> =
+                    list.iter().map(|lit| Self::literal_to_value(lit)).collect();
                 Value::List(converted)
-            },
+            }
         }
     }
-} 
+}

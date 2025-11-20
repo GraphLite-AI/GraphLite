@@ -10,10 +10,10 @@
 use super::registry::CatalogRegistry;
 
 // Individual catalog provider modules
-pub mod index;
 pub mod graph_metadata; // Graph definitions (not metadata tracking) - needed for CREATE GRAPH
-pub mod security;
+pub mod index;
 pub mod schema;
+pub mod security;
 
 // Re-export GraphTypeCatalog from schema module
 pub use crate::schema::catalog::graph_type::GraphTypeCatalog;
@@ -40,7 +40,10 @@ pub use crate::schema::catalog::graph_type::GraphTypeCatalog;
 pub fn register_all_catalogs(registry: &mut CatalogRegistry) {
     // Register implemented catalog providers
     registry.register("index", index::IndexCatalog::new());
-    registry.register("graph_metadata", graph_metadata::GraphMetadataCatalog::new()); // Graph definitions (needed for CREATE GRAPH)
+    registry.register(
+        "graph_metadata",
+        graph_metadata::GraphMetadataCatalog::new(),
+    ); // Graph definitions (needed for CREATE GRAPH)
     registry.register("security", security::SecurityCatalog::new());
     registry.register("schema", schema::SchemaCatalog::new());
     registry.register("graph_type", Box::new(GraphTypeCatalog::new()));
@@ -49,6 +52,6 @@ pub fn register_all_catalogs(registry: &mut CatalogRegistry) {
     // registry.register("timeseries", timeseries::TimeSeriesCatalog::new());
     // registry.register("document", document::DocumentCatalog::new());
     // registry.register("spatial", spatial::SpatialCatalog::new());
-    
+
     log::info!("Catalog provider registration complete");
 }

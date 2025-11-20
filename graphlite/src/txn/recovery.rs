@@ -3,11 +3,11 @@
 //
 //! WAL Recovery Manager for crash recovery and replay operations
 
-use std::collections::HashMap;
 use chrono::{DateTime, Utc};
+use std::collections::HashMap;
 
+use super::state::{OperationType, TransactionId};
 use super::wal::{PersistentWAL, WALEntry, WALEntryType, WALError};
-use super::state::{TransactionId, OperationType};
 use crate::storage::StorageManager;
 
 /// Recovery Manager for WAL-based crash recovery
@@ -53,8 +53,7 @@ impl RecoveryManager {
     /// * `db_path` - The database directory path where WAL files are stored
     #[allow(dead_code)] // ROADMAP v0.3.0 - ARIES-style crash recovery (see ROADMAP.md §3)
     pub fn new(db_path: std::path::PathBuf) -> Self {
-        let wal = PersistentWAL::new(db_path)
-            .expect("Failed to initialize WAL for recovery");
+        let wal = PersistentWAL::new(db_path).expect("Failed to initialize WAL for recovery");
 
         Self {
             wal,
@@ -70,8 +69,7 @@ impl RecoveryManager {
     /// * `storage_manager` - The storage manager for recovery operations
     #[allow(dead_code)] // ROADMAP v0.3.0 - ARIES-style crash recovery (see ROADMAP.md §3)
     pub fn with_storage(db_path: std::path::PathBuf, storage_manager: StorageManager) -> Self {
-        let wal = PersistentWAL::new(db_path)
-            .expect("Failed to initialize WAL for recovery");
+        let wal = PersistentWAL::new(db_path).expect("Failed to initialize WAL for recovery");
 
         Self {
             wal,
@@ -84,34 +82,34 @@ impl RecoveryManager {
     #[allow(dead_code)] // ROADMAP v0.3.0 - Main recovery procedure (Analysis→Redo→Undo phases)
     pub fn recover(&mut self) -> Result<RecoveryReport, RecoveryError> {
         let mut report = RecoveryReport::new();
-        
+
         // Phase 1: Analysis - Scan WAL to determine transaction states
         self.analysis_phase(&mut report)?;
-        
+
         // Phase 2: Redo - Replay committed transactions
         self.redo_phase(&mut report)?;
-        
+
         // Phase 3: Undo - Rollback incomplete transactions
         self.undo_phase(&mut report)?;
-        
+
         Ok(report)
     }
 
     /// Analysis phase: scan WAL to determine transaction states
     fn analysis_phase(&mut self, report: &mut RecoveryReport) -> Result<(), RecoveryError> {
         log::debug!("🔍 Starting WAL analysis phase...");
-        
+
         // Read all WAL files
         let mut file_number = 1u64;
         loop {
             match self.wal.read_wal_file(file_number) {
                 Ok(entries) => {
                     report.total_wal_entries += entries.len();
-                    
+
                     for entry in entries {
                         self.process_entry_analysis(entry)?;
                     }
-                    
+
                     file_number += 1;
                 }
                 Err(WALError::IOError(msg)) if msg.contains("not found") => {
@@ -123,7 +121,7 @@ impl RecoveryManager {
                 }
             }
         }
-        
+
         // Determine which transactions need recovery
         for (txn_id, state) in &self.recovered_transactions {
             match state.status {
@@ -139,17 +137,19 @@ impl RecoveryManager {
                 _ => {}
             }
         }
-        
-        log::debug!("✅ Analysis phase complete: {} transactions to recover", 
-                 report.incomplete_transactions.len() + report.committed_transactions.len());
-        
+
+        log::debug!(
+            "✅ Analysis phase complete: {} transactions to recover",
+            report.incomplete_transactions.len() + report.committed_transactions.len()
+        );
+
         Ok(())
     }
 
     /// Process a WAL entry during analysis
     fn process_entry_analysis(&mut self, entry: WALEntry) -> Result<(), RecoveryError> {
         let txn_id = entry.transaction_id;
-        
+
         match entry.entry_type {
             WALEntryType::TransactionBegin => {
                 let state = TransactionRecoveryState {
@@ -161,35 +161,35 @@ impl RecoveryManager {
                 };
                 self.recovered_transactions.insert(txn_id, state);
             }
-            
+
             WALEntryType::TransactionCommit => {
                 if let Some(state) = self.recovered_transactions.get_mut(&txn_id) {
                     state.status = RecoveryStatus::Committed;
                     state.end_time = Some(DateTime::<Utc>::from(entry.timestamp));
                 }
             }
-            
+
             WALEntryType::TransactionRollback => {
                 if let Some(state) = self.recovered_transactions.get_mut(&txn_id) {
                     state.status = RecoveryStatus::RolledBack;
                     state.end_time = Some(DateTime::<Utc>::from(entry.timestamp));
                 }
             }
-            
+
             WALEntryType::TransactionOperation => {
                 if let Some(state) = self.recovered_transactions.get_mut(&txn_id) {
                     state.operations.push(entry);
                 }
             }
         }
-        
+
         Ok(())
     }
 
     /// Redo phase: replay committed transactions
     fn redo_phase(&mut self, report: &mut RecoveryReport) -> Result<(), RecoveryError> {
         log::debug!("🔄 Starting redo phase...");
-        
+
         let txn_ids = report.committed_transactions.clone();
         for txn_id in &txn_ids {
             // Clone operations to avoid borrow issues
@@ -199,7 +199,7 @@ impl RecoveryManager {
             } else {
                 continue;
             };
-            
+
             for operation in &operations {
                 // Apply operation if storage manager is available
                 if self.storage_manager.is_some() {
@@ -208,15 +208,18 @@ impl RecoveryManager {
                 report.operations_replayed += 1;
             }
         }
-        
-        log::debug!("✅ Redo phase complete: {} operations replayed", report.operations_replayed);
+
+        log::debug!(
+            "✅ Redo phase complete: {} operations replayed",
+            report.operations_replayed
+        );
         Ok(())
     }
 
     /// Undo phase: rollback incomplete transactions
     fn undo_phase(&mut self, report: &mut RecoveryReport) -> Result<(), RecoveryError> {
         log::debug!("↩️ Starting undo phase...");
-        
+
         let txn_ids = report.incomplete_transactions.clone();
         for txn_id in &txn_ids {
             // Clone operations to avoid borrow issues
@@ -226,7 +229,7 @@ impl RecoveryManager {
             } else {
                 continue;
             };
-            
+
             // Process operations in reverse order for undo
             for operation in operations.iter().rev() {
                 // Generate compensating operation if needed
@@ -236,8 +239,11 @@ impl RecoveryManager {
                 report.operations_undone += 1;
             }
         }
-        
-        log::debug!("✅ Undo phase complete: {} operations undone", report.operations_undone);
+
+        log::debug!(
+            "✅ Undo phase complete: {} operations undone",
+            report.operations_undone
+        );
         Ok(())
     }
 
@@ -245,28 +251,32 @@ impl RecoveryManager {
     fn apply_operation(&mut self, entry: &WALEntry) -> Result<(), RecoveryError> {
         // This would integrate with the actual storage operations
         match entry.operation_type {
-            Some(OperationType::Insert) | 
-            Some(OperationType::Update) |
-            Some(OperationType::Delete) => {
+            Some(OperationType::Insert)
+            | Some(OperationType::Update)
+            | Some(OperationType::Delete) => {
                 // Apply data modification
-                // Note: Actual implementation would parse entry.description 
+                // Note: Actual implementation would parse entry.description
                 // and apply to storage_manager
-                log::debug!("    Applying: {:?} - {}", entry.operation_type, entry.description);
+                log::debug!(
+                    "    Applying: {:?} - {}",
+                    entry.operation_type,
+                    entry.description
+                );
             }
-            
-            Some(OperationType::CreateTable) |
-            Some(OperationType::CreateGraph) |
-            Some(OperationType::DropTable) |
-            Some(OperationType::DropGraph) => {
+
+            Some(OperationType::CreateTable)
+            | Some(OperationType::CreateGraph)
+            | Some(OperationType::DropTable)
+            | Some(OperationType::DropGraph) => {
                 // Apply schema changes
                 log::debug!("    Applying schema change: {:?}", entry.operation_type);
             }
-            
+
             _ => {
                 // Skip non-modifying operations
             }
         }
-        
+
         Ok(())
     }
 
@@ -278,22 +288,22 @@ impl RecoveryManager {
                 // Compensate with delete
                 log::debug!("    Undoing insert: {}", entry.description);
             }
-            
+
             Some(OperationType::Delete) => {
                 // Compensate with insert (if we have before-image)
                 log::debug!("    Undoing delete: {}", entry.description);
             }
-            
+
             Some(OperationType::Update) => {
                 // Compensate with reverse update (if we have before-image)
                 log::debug!("    Undoing update: {}", entry.description);
             }
-            
+
             _ => {
                 // Some operations may not need compensation
             }
         }
-        
+
         Ok(())
     }
 
@@ -305,7 +315,10 @@ impl RecoveryManager {
 
     /// Get the recovery state of a transaction
     #[allow(dead_code)] // ROADMAP v0.3.0 - ARIES-style crash recovery (see ROADMAP.md §3)
-    pub fn get_transaction_state(&self, txn_id: &TransactionId) -> Option<&TransactionRecoveryState> {
+    pub fn get_transaction_state(
+        &self,
+        txn_id: &TransactionId,
+    ) -> Option<&TransactionRecoveryState> {
         self.recovered_transactions.get(txn_id)
     }
 }
@@ -341,9 +354,11 @@ impl RecoveryReport {
 #[derive(Debug)]
 pub enum RecoveryError {
     WALReadError(String),
-    #[allow(dead_code)] // ROADMAP v0.3.0 - ARIES-style crash recovery error handling (see ROADMAP.md §3)
+    #[allow(dead_code)]
+    // ROADMAP v0.3.0 - ARIES-style crash recovery error handling (see ROADMAP.md §3)
     OperationReplayError(String),
-    #[allow(dead_code)] // ROADMAP v0.3.0 - ARIES-style crash recovery error handling (see ROADMAP.md §3)
+    #[allow(dead_code)]
+    // ROADMAP v0.3.0 - ARIES-style crash recovery error handling (see ROADMAP.md §3)
     StorageError(String),
 }
 
@@ -351,7 +366,9 @@ impl std::fmt::Display for RecoveryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RecoveryError::WALReadError(msg) => write!(f, "WAL Read Error: {}", msg),
-            RecoveryError::OperationReplayError(msg) => write!(f, "Operation Replay Error: {}", msg),
+            RecoveryError::OperationReplayError(msg) => {
+                write!(f, "Operation Replay Error: {}", msg)
+            }
             RecoveryError::StorageError(msg) => write!(f, "Storage Error: {}", msg),
         }
     }
@@ -378,7 +395,7 @@ mod tests {
 
         // Create manager with explicit path
         let mut manager = RecoveryManager::new(temp_dir.path().to_path_buf());
-        
+
         let report = manager.recover().unwrap();
         assert_eq!(report.total_wal_entries, 0);
         assert_eq!(report.committed_transactions.len(), 0);

@@ -3,9 +3,9 @@
 //
 //! Error types for the indexing system
 
-use thiserror::Error;
-use crate::storage::StorageError;
 use crate::storage::persistent::types::StorageDriverError;
+use crate::storage::StorageError;
+use thiserror::Error;
 
 /// Errors that can occur during index operations
 #[derive(Error, Debug)]
@@ -81,11 +81,17 @@ impl IndexError {
 
     /// Create a serialization error
     pub fn serialization<S: Into<String>>(msg: S) -> Self {
-        Self::IoError(std::io::Error::new(std::io::ErrorKind::InvalidData, msg.into()))
+        Self::IoError(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            msg.into(),
+        ))
     }
 
     /// Create a deserialization error
     pub fn deserialization<S: Into<String>>(msg: S) -> Self {
-        Self::IoError(std::io::Error::new(std::io::ErrorKind::InvalidData, msg.into()))
+        Self::IoError(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            msg.into(),
+        ))
     }
 }

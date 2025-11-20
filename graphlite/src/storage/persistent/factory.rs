@@ -7,25 +7,25 @@
 //! It handles the instantiation and setup of different storage driver types.
 
 use super::traits::{StorageDriver, StorageTree};
-use super::types::{StorageType, StorageResult, StorageDriverError};
+use super::types::{StorageDriverError, StorageResult, StorageType};
 use std::path::Path;
 
 /// Factory function to create a storage driver based on configuration
-/// 
+///
 /// This is the main entry point for creating storage drivers. It takes a storage type
 /// and path, then returns the appropriate driver implementation as a trait object.
-/// 
+///
 /// # Arguments
 /// * `storage_type` - The type of storage driver to create (RocksDB, Sled, etc.)
 /// * `path` - The filesystem path where the database should be stored
-/// 
+///
 /// # Returns
 /// A boxed trait object that implements StorageDriver
-/// 
+///
 /// # Examples
 /// ```ignore
 /// use crate::storage::drivers::{create_storage_driver, StorageType};
-/// 
+///
 /// let driver = create_storage_driver(StorageType::Sled, "./data")?;
 /// let tree = driver.open_tree("my_tree")?;
 /// ```
@@ -39,11 +39,9 @@ pub fn create_storage_driver<P: AsRef<Path>>(
             let driver = SledDriver::open(path)?;
             Ok(Box::new(driver) as Box<dyn StorageDriver<Tree = Box<dyn StorageTree>>>)
         }
-        StorageType::RocksDB => {
-            Err(StorageDriverError::BackendSpecific(
-                "RocksDB storage backend not yet implemented".to_string()
-            ))
-        }
+        StorageType::RocksDB => Err(StorageDriverError::BackendSpecific(
+            "RocksDB storage backend not yet implemented".to_string(),
+        )),
         StorageType::Memory => {
             use crate::storage::persistent::memory::MemoryStorageDriver;
             let driver = MemoryStorageDriver::open(path)?;
@@ -51,7 +49,6 @@ pub fn create_storage_driver<P: AsRef<Path>>(
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -64,5 +61,4 @@ mod tests {
         let driver = create_storage_driver(StorageType::Sled, temp_dir.path()).unwrap();
         assert_eq!(driver.storage_type(), StorageType::Sled);
     }
-
 }

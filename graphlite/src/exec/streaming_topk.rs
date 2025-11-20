@@ -6,8 +6,8 @@
 //! Maintains only top-K results using a min-heap instead of sorting entire result set.
 
 use crate::exec::result::Row;
-use std::collections::BinaryHeap;
 use std::cmp::Ordering;
+use std::collections::BinaryHeap;
 
 /// Streaming top-K results using min-heap
 ///
@@ -82,7 +82,10 @@ impl Ord for ScoredRow {
     fn cmp(&self, other: &Self) -> Ordering {
         // Reverse ordering for min-heap
         // (BinaryHeap is max-heap by default, we want min-heap)
-        other.score.partial_cmp(&self.score).unwrap_or(Ordering::Equal)
+        other
+            .score
+            .partial_cmp(&self.score)
+            .unwrap_or(Ordering::Equal)
     }
 }
 
@@ -202,9 +205,7 @@ impl StreamingTopK {
         let mut results: Vec<ScoredRow> = self.heap.into_iter().collect();
 
         // Sort descending by score
-        results.sort_by(|a, b| {
-            b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal)
-        });
+        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
 
         // Extract rows
         results.into_iter().map(|sr| sr.row).collect()
@@ -215,9 +216,7 @@ impl StreamingTopK {
     pub fn results(&self) -> Vec<Row> {
         let mut results: Vec<ScoredRow> = self.heap.iter().cloned().collect();
 
-        results.sort_by(|a, b| {
-            b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal)
-        });
+        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
 
         results.into_iter().map(|sr| sr.row).collect()
     }
@@ -300,7 +299,8 @@ mod tests {
         assert_eq!(results.len(), 3);
 
         // Should keep top 3: 20.0, 15.0, 10.0
-        let scores: Vec<f64> = results.iter()
+        let scores: Vec<f64> = results
+            .iter()
             .map(|r| r.get_text_score().unwrap())
             .collect();
 
@@ -410,7 +410,8 @@ mod tests {
         assert_eq!(results.len(), 3);
 
         // Should keep 3 rows with score 10.0
-        let scores: Vec<f64> = results.iter()
+        let scores: Vec<f64> = results
+            .iter()
             .map(|r| r.get_text_score().unwrap())
             .collect();
 

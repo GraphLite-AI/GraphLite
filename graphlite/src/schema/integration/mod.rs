@@ -3,9 +3,9 @@
 //
 // Schema integration module for runtime validation
 
-pub mod runtime_validator;
 pub mod index_validator;
 pub mod ingestion_validator;
+pub mod runtime_validator;
 
 // pub use runtime_validator::RuntimeValidator;
 // pub use index_validator::IndexSchemaValidator;

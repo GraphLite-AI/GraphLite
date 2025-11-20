@@ -48,29 +48,19 @@ impl TypeInferenceEngine {
             GqlType::BigInt,
             true, // variadic
         );
-        self.register_function(
-            "SUM",
-            vec![GqlType::Integer],
-            GqlType::BigInt,
-            false,
-        );
-        self.register_function(
-            "AVG",
-            vec![GqlType::Integer],
-            GqlType::Double,
-            false,
-        );
+        self.register_function("SUM", vec![GqlType::Integer], GqlType::BigInt, false);
+        self.register_function("AVG", vec![GqlType::Integer], GqlType::Double, false);
         self.register_function(
             "MIN",
-            vec![], // Will be inferred from arguments
+            vec![],           // Will be inferred from arguments
             GqlType::Integer, // Placeholder
-            true, // variadic
+            true,             // variadic
         );
         self.register_function(
             "MAX",
-            vec![], // Will be inferred from arguments  
+            vec![],           // Will be inferred from arguments
             GqlType::Integer, // Placeholder
-            true, // variadic
+            true,             // variadic
         );
 
         // String functions
@@ -104,22 +94,23 @@ impl TypeInferenceEngine {
         );
 
         // Temporal functions
-        self.register_function(
-            "CURRENT_DATE",
-            vec![],
-            GqlType::Date,
-            false,
-        );
+        self.register_function("CURRENT_DATE", vec![], GqlType::Date, false);
         self.register_function(
             "CURRENT_TIME",
             vec![],
-            GqlType::Time { precision: None, with_timezone: true },
+            GqlType::Time {
+                precision: None,
+                with_timezone: true,
+            },
             false,
         );
         self.register_function(
             "CURRENT_TIMESTAMP",
             vec![],
-            GqlType::Timestamp { precision: None, with_timezone: true },
+            GqlType::Timestamp {
+                precision: None,
+                with_timezone: true,
+            },
             false,
         );
 
@@ -208,10 +199,16 @@ impl TypeInferenceEngine {
             return GqlType::Date;
         }
         if literal.starts_with("TIME ") {
-            return GqlType::Time { precision: None, with_timezone: false };
+            return GqlType::Time {
+                precision: None,
+                with_timezone: false,
+            };
         }
         if literal.starts_with("TIMESTAMP ") {
-            return GqlType::Timestamp { precision: None, with_timezone: false };
+            return GqlType::Timestamp {
+                precision: None,
+                with_timezone: false,
+            };
         }
         if literal.starts_with("DURATION ") {
             return GqlType::Duration { precision: None };
@@ -231,9 +228,7 @@ impl TypeInferenceEngine {
     ) -> TypeResult<GqlType> {
         match op {
             // Arithmetic operators
-            "+" | "-" | "*" | "/" | "%" => {
-                self.infer_arithmetic_op_type(op, left_type, right_type)
-            }
+            "+" | "-" | "*" | "/" | "%" => self.infer_arithmetic_op_type(op, left_type, right_type),
 
             // Comparison operators
             "=" | "<>" | "!=" | "<" | ">" | "<=" | ">=" => {
@@ -276,7 +271,7 @@ impl TypeInferenceEngine {
                 Ok(left.clone()) // Result is same temporal type
             }
             (GqlType::Duration { .. }, right) if right.is_temporal() && op == "+" => {
-                Ok(right.clone()) // Result is same temporal type  
+                Ok(right.clone()) // Result is same temporal type
             }
 
             // Temporal - Temporal = Duration
@@ -330,7 +325,9 @@ impl TypeInferenceEngine {
         right_type: &GqlType,
     ) -> TypeResult<GqlType> {
         match (left_type, right_type) {
-            (GqlType::String { .. }, GqlType::String { .. }) => Ok(GqlType::String { max_length: None }),
+            (GqlType::String { .. }, GqlType::String { .. }) => {
+                Ok(GqlType::String { max_length: None })
+            }
             _ => Err(TypeError::TypeMismatch {
                 expected: "STRING".to_string(),
                 actual: format!("{} and {}", left_type, right_type),
@@ -339,11 +336,7 @@ impl TypeInferenceEngine {
     }
 
     /// Infer type of IN operation
-    fn infer_in_op_type(
-        &self,
-        left_type: &GqlType,
-        right_type: &GqlType,
-    ) -> TypeResult<GqlType> {
+    fn infer_in_op_type(&self, left_type: &GqlType, right_type: &GqlType) -> TypeResult<GqlType> {
         match right_type {
             GqlType::List { element_type, .. } => {
                 if self.are_comparable(left_type, element_type) {
@@ -370,7 +363,7 @@ impl TypeInferenceEngine {
         arg_types: &[GqlType],
     ) -> TypeResult<GqlType> {
         let name = function_name.to_uppercase();
-        
+
         if let Some(signature) = self.function_signatures.get(&name) {
             // Check argument count
             if !signature.variadic && arg_types.len() != signature.param_types.len() {
@@ -383,7 +376,8 @@ impl TypeInferenceEngine {
             }
 
             // For aggregate functions with polymorphic return type, infer from input
-            if signature.return_type == GqlType::Double { // Use Double as polymorphic marker
+            if signature.return_type == GqlType::Double {
+                // Use Double as polymorphic marker
                 if name == "MIN" || name == "MAX" {
                     if !arg_types.is_empty() {
                         return Ok(arg_types[0].clone());
@@ -429,9 +423,15 @@ impl TypeInferenceEngine {
             _ if left == right => left.clone(),
 
             // Promote to wider integer type
-            (GqlType::SmallInt, GqlType::Integer) | (GqlType::Integer, GqlType::SmallInt) => GqlType::Integer,
-            (GqlType::SmallInt, GqlType::BigInt) | (GqlType::BigInt, GqlType::SmallInt) => GqlType::BigInt,
-            (GqlType::Integer, GqlType::BigInt) | (GqlType::BigInt, GqlType::Integer) => GqlType::BigInt,
+            (GqlType::SmallInt, GqlType::Integer) | (GqlType::Integer, GqlType::SmallInt) => {
+                GqlType::Integer
+            }
+            (GqlType::SmallInt, GqlType::BigInt) | (GqlType::BigInt, GqlType::SmallInt) => {
+                GqlType::BigInt
+            }
+            (GqlType::Integer, GqlType::BigInt) | (GqlType::BigInt, GqlType::Integer) => {
+                GqlType::BigInt
+            }
 
             // Promote to Int128/Int256
             (_, GqlType::Int256) | (GqlType::Int256, _) => GqlType::Int256,
@@ -443,18 +443,25 @@ impl TypeInferenceEngine {
             (_, GqlType::Real) | (GqlType::Real, _) => GqlType::Real,
 
             // Promote to decimal
-            (GqlType::Decimal { precision: p1, scale: s1 }, GqlType::Decimal { precision: p2, scale: s2 }) => {
+            (
                 GqlType::Decimal {
-                    precision: match (p1, p2) {
-                        (Some(x), Some(y)) => Some((*x).max(*y)),
-                        _ => None,
-                    },
-                    scale: match (s1, s2) {
-                        (Some(x), Some(y)) => Some((*x).max(*y)),
-                        _ => None,
-                    },
-                }
-            }
+                    precision: p1,
+                    scale: s1,
+                },
+                GqlType::Decimal {
+                    precision: p2,
+                    scale: s2,
+                },
+            ) => GqlType::Decimal {
+                precision: match (p1, p2) {
+                    (Some(x), Some(y)) => Some((*x).max(*y)),
+                    _ => None,
+                },
+                scale: match (s1, s2) {
+                    (Some(x), Some(y)) => Some((*x).max(*y)),
+                    _ => None,
+                },
+            },
 
             // Default to double for mixed types
             _ => GqlType::Double,
@@ -478,7 +485,7 @@ impl TypeInferenceEngine {
     pub fn pop_scope(&mut self, scope: HashMap<String, GqlType>) {
         self.variable_types = scope;
     }
-    
+
     /// Infer type for unary operations
     #[allow(dead_code)] // ROADMAP v0.5.0 - Type inference for static analysis (see ROADMAP.md §7)
     pub fn infer_unary_operation_type(
@@ -487,7 +494,7 @@ impl TypeInferenceEngine {
         operator: &crate::ast::ast::Operator,
     ) -> TypeResult<GqlType> {
         use crate::ast::ast::Operator;
-        
+
         match operator {
             Operator::Not => {
                 // NOT requires boolean operand and returns boolean
@@ -546,14 +553,8 @@ mod tests {
             engine.infer_literal_type("'hello'"),
             GqlType::String { max_length: None }
         );
-        assert_eq!(
-            engine.infer_literal_type("42"),
-            GqlType::Integer
-        );
-        assert_eq!(
-            engine.infer_literal_type("3.14"),
-            GqlType::Double
-        );
+        assert_eq!(engine.infer_literal_type("42"), GqlType::Integer);
+        assert_eq!(engine.infer_literal_type("3.14"), GqlType::Double);
         assert_eq!(
             engine.infer_literal_type("DATE '2024-01-01'"),
             GqlType::Date
@@ -567,10 +568,14 @@ mod tests {
         let int_type = GqlType::Integer;
         let float_type = GqlType::Double;
 
-        let result = engine.infer_binary_op_type("+", &int_type, &int_type).unwrap();
+        let result = engine
+            .infer_binary_op_type("+", &int_type, &int_type)
+            .unwrap();
         assert_eq!(result, GqlType::Integer);
 
-        let result = engine.infer_binary_op_type("+", &int_type, &float_type).unwrap();
+        let result = engine
+            .infer_binary_op_type("+", &int_type, &float_type)
+            .unwrap();
         assert_eq!(result, GqlType::Double);
     }
 
@@ -581,10 +586,14 @@ mod tests {
         let int_type = GqlType::Integer;
         let string_type = GqlType::String { max_length: None };
 
-        let result = engine.infer_binary_op_type("=", &int_type, &int_type).unwrap();
+        let result = engine
+            .infer_binary_op_type("=", &int_type, &int_type)
+            .unwrap();
         assert_eq!(result, GqlType::Boolean);
 
-        let result = engine.infer_binary_op_type("<", &string_type, &string_type).unwrap();
+        let result = engine
+            .infer_binary_op_type("<", &string_type, &string_type)
+            .unwrap();
         assert_eq!(result, GqlType::Boolean);
     }
 
@@ -595,7 +604,9 @@ mod tests {
         let result = engine.infer_function_type("COUNT", &[]).unwrap();
         assert_eq!(result, GqlType::BigInt);
 
-        let result = engine.infer_function_type("UPPER", &[GqlType::String { max_length: None }]).unwrap();
+        let result = engine
+            .infer_function_type("UPPER", &[GqlType::String { max_length: None }])
+            .unwrap();
         assert_eq!(result, GqlType::String { max_length: None });
 
         let result = engine.infer_function_type("CURRENT_DATE", &[]).unwrap();

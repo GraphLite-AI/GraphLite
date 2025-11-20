@@ -7,11 +7,11 @@
 //! The trait provides a generic interface for catalog operations, storage integration,
 //! and metadata access.
 
-use std::sync::Arc;
-use crate::storage::StorageManager;
 use super::error::CatalogResult;
 use super::operations::{CatalogOperation, CatalogResponse};
-use serde::{Serialize, Deserialize};
+use crate::storage::StorageManager;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 /// Schema information for a catalog
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,7 +44,7 @@ pub trait CatalogProvider: Send + Sync {
     /// * `Ok(())` on successful initialization
     /// * `Err(CatalogError)` if initialization fails
     fn init(&mut self, storage: Arc<StorageManager>) -> CatalogResult<()>;
-    
+
     /// Handle catalog operations
     ///
     /// This is the main entry point for all catalog operations. The catalog
@@ -79,15 +79,16 @@ pub trait CatalogProvider: Send + Sync {
                 // For now, return a temporary error encouraging migration
                 Err(CatalogError::NotSupported(
                     "Read-only queries not yet implemented for this catalog. \
-                     Consider implementing execute_read_only() for better concurrency.".to_string()
+                     Consider implementing execute_read_only() for better concurrency."
+                        .to_string(),
                 ))
             }
             _ => Err(CatalogError::NotSupported(
-                "Only query operations are supported in read-only mode".to_string()
-            ))
+                "Only query operations are supported in read-only mode".to_string(),
+            )),
         }
     }
-    
+
     /// Persist catalog state to storage
     ///
     /// Serialize the catalog's current state to bytes for persistence.
@@ -97,7 +98,7 @@ pub trait CatalogProvider: Send + Sync {
     /// * `Ok(Vec<u8>)` with the serialized catalog state
     /// * `Err(CatalogError)` if serialization fails
     fn save(&self) -> CatalogResult<Vec<u8>>;
-    
+
     /// Load catalog state from storage
     ///
     /// Deserialize catalog state from bytes loaded from storage.
@@ -110,7 +111,7 @@ pub trait CatalogProvider: Send + Sync {
     /// * `Ok(())` on successful deserialization
     /// * `Err(CatalogError)` if deserialization fails
     fn load(&mut self, data: &[u8]) -> CatalogResult<()>;
-    
+
     /// Get catalog schema and metadata
     ///
     /// Returns information about this catalog's capabilities, supported
@@ -119,7 +120,7 @@ pub trait CatalogProvider: Send + Sync {
     /// # Returns
     /// * `CatalogSchema` describing this catalog's capabilities
     fn schema(&self) -> CatalogSchema;
-    
+
     /// Get list of supported operations
     ///
     /// Returns a list of operation names that this catalog supports.

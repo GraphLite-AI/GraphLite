@@ -6,11 +6,11 @@
 //! This module defines the types, enums, and error handling used throughout
 //! the storage driver system.
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 /// Storage driver type configuration
-/// 
+///
 /// Specifies which underlying storage technology to use.
 /// Each type has different performance characteristics and use cases.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -18,11 +18,11 @@ pub enum StorageType {
     /// RocksDB - High-performance persistent key-value store
     /// Best for: High write throughput, large datasets, production use
     RocksDB,
-    
+
     /// Sled - Pure Rust embedded database
     /// Best for: Development, testing, pure Rust environments
     Sled,
-    
+
     /// Memory - In-memory storage for testing
     /// Best for: Unit testing, development
     Memory,
@@ -37,13 +37,16 @@ impl Default for StorageType {
 
 impl std::str::FromStr for StorageType {
     type Err = String;
-    
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "rocksdb" => Ok(StorageType::RocksDB),
             "sled" => Ok(StorageType::Sled),
             "memory" => Ok(StorageType::Memory),
-            _ => Err(format!("Unknown storage type: {}. Valid options: rocksdb, sled, memory", s))
+            _ => Err(format!(
+                "Unknown storage type: {}. Valid options: rocksdb, sled, memory",
+                s
+            )),
         }
     }
 }
@@ -60,26 +63,26 @@ impl std::fmt::Display for StorageType {
 }
 
 /// Error type for storage driver operations
-/// 
+///
 /// Comprehensive error type covering all possible failure modes in storage operations.
 /// Designed to be easily converted from underlying storage engine errors.
 #[derive(Debug)]
 pub enum StorageDriverError {
     /// I/O related errors (file system, network, etc.)
     IoError(std::io::Error),
-    
+
     /// Data serialization failed
     SerializationError(String),
-    
+
     /// Data deserialization failed  
     _DeserializationError(String),
-    
+
     /// Requested key was not found
     _NotFound(String),
-    
+
     /// Invalid key format or content
     _InvalidKey(String),
-    
+
     /// Driver-specific error (RocksDB, Sled, etc.)
     BackendSpecific(String),
 }
@@ -89,7 +92,9 @@ impl std::fmt::Display for StorageDriverError {
         match self {
             StorageDriverError::IoError(e) => write!(f, "I/O error: {}", e),
             StorageDriverError::SerializationError(e) => write!(f, "Serialization error: {}", e),
-            StorageDriverError::_DeserializationError(e) => write!(f, "Deserialization error: {}", e),
+            StorageDriverError::_DeserializationError(e) => {
+                write!(f, "Deserialization error: {}", e)
+            }
             StorageDriverError::_NotFound(key) => write!(f, "Key not found: {}", key),
             StorageDriverError::_InvalidKey(key) => write!(f, "Invalid key: {}", key),
             StorageDriverError::BackendSpecific(e) => write!(f, "Storage driver error: {}", e),
@@ -126,7 +131,7 @@ impl From<serde_json::Error> for StorageDriverError {
 }
 
 /// Result type for storage driver operations
-/// 
+///
 /// Standard Result type used throughout the storage driver system.
 /// Provides consistent error handling across all drivers.
 pub type StorageResult<T> = Result<T, StorageDriverError>;

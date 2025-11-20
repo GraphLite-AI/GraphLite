@@ -7,7 +7,7 @@
 //! and the responses they can return. These types provide a unified interface for
 //! all catalog interactions, regardless of the specific catalog implementation.
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
 
@@ -22,12 +22,12 @@ pub enum EntityType {
     Index,
     User,
     Role,
-    Ace,            // Access Control Entry
+    Ace, // Access Control Entry
     Collection,
     Metric,
     DefaultSchema,
-    Store,          // RDF stores and vector stores
-    Procedure,      // User-defined procedures
+    Store,     // RDF stores and vector stores
+    Procedure, // User-defined procedures
 }
 
 impl fmt::Display for EntityType {
@@ -103,8 +103,8 @@ pub enum QueryType {
     ByStatus,
     BySchema,
     // Version-specific operations
-    GetVersion,         // Get specific version of a schema
-    ListVersions,       // List all versions of a schema
+    GetVersion,   // Get specific version of a schema
+    ListVersions, // List all versions of a schema
 }
 
 impl fmt::Display for QueryType {
@@ -184,12 +184,12 @@ pub enum CatalogOperation {
     /// * `entity_type` - Type of entity to create
     /// * `name` - Name of the entity to create
     /// * `params` - Additional parameters for entity creation
-    Create { 
+    Create {
         entity_type: EntityType,
-        name: String, 
-        params: Value 
+        name: String,
+        params: Value,
     },
-    
+
     /// Drop (delete) an entity from the catalog
     ///
     /// # Fields
@@ -199,7 +199,7 @@ pub enum CatalogOperation {
     Drop {
         entity_type: EntityType,
         name: String,
-        cascade: bool
+        cascade: bool,
     },
 
     /// Register a data source schema in the catalog
@@ -207,31 +207,25 @@ pub enum CatalogOperation {
     /// # Fields
     /// * `name` - Name of the schema to register
     /// * `params` - Registration parameters (source, validation, etc.)
-    Register {
-        name: String,
-        params: Value
-    },
+    Register { name: String, params: Value },
 
     /// Unregister a data source schema from the catalog
     ///
     /// # Fields
     /// * `name` - Name of the schema to unregister
     /// * `cascade` - Whether to cascade the unregistration to dependent entities
-    Unregister {
-        name: String,
-        cascade: bool
-    },
-    
+    Unregister { name: String, cascade: bool },
+
     /// Query the catalog for information
     ///
     /// # Fields
     /// * `query_type` - Type of query to perform
     /// * `params` - Query parameters and filters
-    Query { 
+    Query {
         query_type: QueryType,
-        params: Value 
+        params: Value,
     },
-    
+
     /// Update an existing entity in the catalog
     ///
     /// # Fields
@@ -241,9 +235,9 @@ pub enum CatalogOperation {
     Update {
         entity_type: EntityType,
         name: String,
-        updates: Value
+        updates: Value,
     },
-    
+
     /// List entities of a specific type
     ///
     /// # Fields
@@ -251,22 +245,20 @@ pub enum CatalogOperation {
     /// * `filters` - Optional filters to apply to the listing
     List {
         entity_type: EntityType,
-        filters: Option<Value>
+        filters: Option<Value>,
     },
-    
+
     /// Serialize the catalog state
     ///
     /// This operation requests the catalog to serialize its current state
     /// for persistence or transfer purposes.
     Serialize,
-    
+
     /// Deserialize catalog state from data
     ///
     /// # Fields
     /// * `data` - Serialized catalog state to restore
-    Deserialize { 
-        data: Vec<u8> 
-    },
+    Deserialize { data: Vec<u8> },
 }
 
 /// Generic catalog responses
@@ -280,34 +272,26 @@ pub enum CatalogResponse {
     ///
     /// # Fields
     /// * `data` - Optional data returned by the operation
-    Success { 
-        data: Option<Value> 
-    },
-    
+    Success { data: Option<Value> },
+
     /// Operation failed with an error
     ///
     /// # Fields
     /// * `message` - Error message describing what went wrong
-    Error { 
-        message: String 
-    },
-    
+    Error { message: String },
+
     /// List operation response
     ///
     /// # Fields
     /// * `items` - List of items returned by the operation
-    List { 
-        items: Vec<Value> 
-    },
-    
+    List { items: Vec<Value> },
+
     /// Query operation response
     ///
     /// # Fields
     /// * `results` - Query results as a structured value
-    Query { 
-        results: Value 
-    },
-    
+    Query { results: Value },
+
     /// Operation is not supported by this catalog
     ///
     /// Returned when a catalog doesn't implement support for
@@ -320,42 +304,44 @@ impl CatalogResponse {
     pub fn success() -> Self {
         Self::Success { data: None }
     }
-    
+
     /// Create a successful response with data
     pub fn success_with_data(data: Value) -> Self {
         Self::Success { data: Some(data) }
     }
-    
+
     /// Create an error response
     pub fn error<S: Into<String>>(message: S) -> Self {
-        Self::Error { message: message.into() }
+        Self::Error {
+            message: message.into(),
+        }
     }
-    
+
     /// Create a list response
     pub fn list(items: Vec<Value>) -> Self {
         Self::List { items }
     }
-    
+
     /// Create a query response
     pub fn query(results: Value) -> Self {
         Self::Query { results }
     }
-    
+
     /// Check if the response indicates success
     pub fn is_success(&self) -> bool {
         matches!(self, Self::Success { .. })
     }
-    
+
     /// Check if the response indicates an error
     pub fn is_error(&self) -> bool {
         matches!(self, Self::Error { .. })
     }
-    
+
     /// Check if the operation was not supported
     pub fn is_not_supported(&self) -> bool {
         matches!(self, Self::NotSupported)
     }
-    
+
     /// Extract data from a successful response
     pub fn data(&self) -> Option<&Value> {
         match self {
@@ -363,7 +349,7 @@ impl CatalogResponse {
             _ => None,
         }
     }
-    
+
     /// Extract error message from an error response
     pub fn error_message(&self) -> Option<&str> {
         match self {
@@ -371,7 +357,7 @@ impl CatalogResponse {
             _ => None,
         }
     }
-    
+
     /// Extract items from a list response
     pub fn items(&self) -> Option<&[Value]> {
         match self {
@@ -379,7 +365,7 @@ impl CatalogResponse {
             _ => None,
         }
     }
-    
+
     /// Extract results from a query response
     pub fn results(&self) -> Option<&Value> {
         match self {

@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //! Transaction state management
-//! 
+//!
 //! This module defines the transaction state and lifecycle management.
 
-use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Unique identifier for a transaction
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -26,7 +26,7 @@ impl TransactionId {
     pub fn id(&self) -> u64 {
         self.0
     }
-    
+
     /// Create TransactionId from u64 (used by WAL deserialization)
     pub fn from_u64(id: u64) -> Self {
         TransactionId(id)
@@ -157,9 +157,9 @@ impl TransactionState {
 
     /// Create a new transaction with session context
     pub fn new_with_session(
-        isolation_level: TxnIsolationLevel, 
+        isolation_level: TxnIsolationLevel,
         access_mode: AccessMode,
-        session_id: String
+        session_id: String,
     ) -> Self {
         Self {
             id: TransactionId::new(),
@@ -177,12 +177,17 @@ impl TransactionState {
     /// Add an operation to this transaction
     pub fn add_operation(&mut self, operation_type: OperationType, description: String) {
         // Increment sequence number for data modification operations
-        if matches!(operation_type, OperationType::Insert | OperationType::Update | 
-                                   OperationType::Set | OperationType::Delete | 
-                                   OperationType::Remove) {
+        if matches!(
+            operation_type,
+            OperationType::Insert
+                | OperationType::Update
+                | OperationType::Set
+                | OperationType::Delete
+                | OperationType::Remove
+        ) {
             self.sequence_number += 1;
         }
-        
+
         self.operations.push(TransactionOperation {
             operation_type,
             timestamp: SystemTime::now(),

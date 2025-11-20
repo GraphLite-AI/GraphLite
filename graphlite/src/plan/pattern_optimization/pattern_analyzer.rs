@@ -2,17 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //! Pattern Analyzer
-//! 
+//!
 //! Analyzes MATCH patterns to determine connectivity and optimal execution strategies.
 
-use std::collections::{HashMap, HashSet};
+use petgraph::algo::{connected_components, is_cyclic_directed};
 use petgraph::graph::{Graph, NodeIndex, UnGraph};
-use petgraph::algo::{is_cyclic_directed, connected_components};
 use petgraph::visit::EdgeRef;
+use std::collections::{HashMap, HashSet};
 
-use crate::ast::ast::{PathPattern, PatternElement, Edge};
+use crate::ast::ast::{Edge, PathPattern, PatternElement};
 use crate::plan::pattern_optimization::pattern_analysis::{
-    PatternConnectivity, LinearPath, TraversalStep
+    LinearPath, PatternConnectivity, TraversalStep,
 };
 
 /// Analyzer for determining pattern connectivity and execution strategies
@@ -30,17 +30,13 @@ pub struct PatternAnalyzer {
 impl PatternAnalyzer {
     /// Create a new pattern analyzer
     pub fn new() -> Self {
-        PatternAnalyzer {
-            debug_mode: false,
-        }
+        PatternAnalyzer { debug_mode: false }
     }
 
     /// Create a new pattern analyzer with debug mode
     #[allow(dead_code)] // ROADMAP v0.4.0 - Debug mode for pattern analysis troubleshooting
     pub fn new_debug() -> Self {
-        PatternAnalyzer {
-            debug_mode: true,
-        }
+        PatternAnalyzer { debug_mode: true }
     }
 
     /// Analyze a set of patterns to determine their connectivity
@@ -51,10 +47,13 @@ impl PatternAnalyzer {
 
         let shared_vars = self.find_shared_variables(&patterns);
         let connectivity_graph = self.build_connectivity_graph(&patterns, &shared_vars);
-        
+
         if self.debug_mode {
-            log::debug!("Found {} shared variables: {:?}", 
-                shared_vars.len(), shared_vars.keys().collect::<Vec<_>>());
+            log::debug!(
+                "Found {} shared variables: {:?}",
+                shared_vars.len(),
+                shared_vars.keys().collect::<Vec<_>>()
+            );
         }
 
         PatternConnectivity {
@@ -67,19 +66,22 @@ impl PatternAnalyzer {
     /// Find variables that appear in multiple patterns
     fn find_shared_variables(&self, patterns: &[PathPattern]) -> HashMap<String, Vec<usize>> {
         let mut var_usage: HashMap<String, Vec<usize>> = HashMap::new();
-        
+
         for (pattern_idx, pattern) in patterns.iter().enumerate() {
             let vars = self.extract_pattern_variables(pattern);
-            
+
             if self.debug_mode {
                 log::debug!("Pattern {}: variables {:?}", pattern_idx, vars);
             }
-            
+
             for var in vars {
-                var_usage.entry(var).or_insert_with(Vec::new).push(pattern_idx);
+                var_usage
+                    .entry(var)
+                    .or_insert_with(Vec::new)
+                    .push(pattern_idx);
             }
         }
-        
+
         // Only keep variables that appear in multiple patterns
         var_usage.retain(|_, indices| indices.len() > 1);
         var_usage
@@ -88,7 +90,7 @@ impl PatternAnalyzer {
     /// Extract all variable names from a pattern
     fn extract_pattern_variables(&self, pattern: &PathPattern) -> HashSet<String> {
         let mut variables = HashSet::new();
-        
+
         for element in &pattern.elements {
             match element {
                 PatternElement::Node(node) => {
@@ -103,7 +105,7 @@ impl PatternAnalyzer {
                 }
             }
         }
-        
+
         variables
     }
 
@@ -111,40 +113,44 @@ impl PatternAnalyzer {
     fn build_connectivity_graph(
         &self,
         patterns: &[PathPattern],
-        shared_vars: &HashMap<String, Vec<usize>>
+        shared_vars: &HashMap<String, Vec<usize>>,
     ) -> Graph<usize, String> {
         let mut graph = Graph::new();
         let mut node_indices: HashMap<usize, NodeIndex> = HashMap::new();
-        
+
         // Add a node for each pattern
         for (pattern_idx, _) in patterns.iter().enumerate() {
             let node_index = graph.add_node(pattern_idx);
             node_indices.insert(pattern_idx, node_index);
         }
-        
+
         // Add edges for shared variables
         for (var_name, pattern_indices) in shared_vars {
             // Connect all patterns that share this variable
             for i in 0..pattern_indices.len() {
-                for j in i+1..pattern_indices.len() {
+                for j in i + 1..pattern_indices.len() {
                     let from_pattern = pattern_indices[i];
                     let to_pattern = pattern_indices[j];
-                    
+
                     if let (Some(&from_node), Some(&to_node)) = (
                         node_indices.get(&from_pattern),
-                        node_indices.get(&to_pattern)
+                        node_indices.get(&to_pattern),
                     ) {
                         graph.add_edge(from_node, to_node, var_name.clone());
-                        
+
                         if self.debug_mode {
-                            log::debug!("Connected patterns {} and {} via variable '{}'", 
-                                from_pattern, to_pattern, var_name);
+                            log::debug!(
+                                "Connected patterns {} and {} via variable '{}'",
+                                from_pattern,
+                                to_pattern,
+                                var_name
+                            );
                         }
                     }
                 }
             }
         }
-        
+
         graph
     }
 
@@ -155,12 +161,15 @@ impl PatternAnalyzer {
         }
 
         if self.debug_mode {
-            log::debug!("Checking for linear path in {} patterns", connectivity.patterns.len());
+            log::debug!(
+                "Checking for linear path in {} patterns",
+                connectivity.patterns.len()
+            );
         }
 
         // Convert directed graph to undirected for path analysis
         let undirected = self.to_undirected_graph(&connectivity.connectivity_graph);
-        
+
         // Check if it's a path (no cycles, exactly 2 endpoints)
         if !self.is_simple_path(&undirected) {
             if self.debug_mode {
@@ -173,7 +182,10 @@ impl PatternAnalyzer {
         let endpoints = self.find_path_endpoints(&undirected);
         if endpoints.len() != 2 {
             if self.debug_mode {
-                log::debug!("Path should have exactly 2 endpoints, found {}", endpoints.len());
+                log::debug!(
+                    "Path should have exactly 2 endpoints, found {}",
+                    endpoints.len()
+                );
             }
             return None;
         }
@@ -187,14 +199,14 @@ impl PatternAnalyzer {
     fn to_undirected_graph(&self, directed: &Graph<usize, String>) -> UnGraph<usize, String> {
         let mut undirected = UnGraph::new_undirected();
         let mut node_map = HashMap::new();
-        
+
         // Add all nodes
         for node_idx in directed.node_indices() {
             let pattern_idx = directed[node_idx];
             let new_node = undirected.add_node(pattern_idx);
             node_map.insert(node_idx, new_node);
         }
-        
+
         // Add all edges (undirected)
         for edge_idx in directed.edge_indices() {
             if let Some((from, to)) = directed.edge_endpoints(edge_idx) {
@@ -204,7 +216,7 @@ impl PatternAnalyzer {
                 }
             }
         }
-        
+
         undirected
     }
 
@@ -213,19 +225,21 @@ impl PatternAnalyzer {
         if graph.node_count() < 2 {
             return false;
         }
-        
+
         // Count nodes with degree > 2 (branching points)
-        let branching_nodes = graph.node_indices()
+        let branching_nodes = graph
+            .node_indices()
             .filter(|&node| graph.edges(node).count() > 2)
             .count();
-        
+
         // Should have no branching nodes for a simple path
         branching_nodes == 0
     }
 
     /// Find the endpoints (nodes with degree 1) of a path graph
     fn find_path_endpoints(&self, graph: &UnGraph<usize, String>) -> Vec<NodeIndex> {
-        graph.node_indices()
+        graph
+            .node_indices()
             .filter(|&node| graph.edges(node).count() == 1)
             .collect()
     }
@@ -234,27 +248,28 @@ impl PatternAnalyzer {
     fn build_linear_path_from_start(
         &self,
         connectivity: &PatternConnectivity,
-        start_pattern_idx: usize
+        start_pattern_idx: usize,
     ) -> Option<LinearPath> {
         let mut steps = Vec::new();
         let mut visited = HashSet::new();
         let mut current_idx = start_pattern_idx;
-        
+
         visited.insert(current_idx);
 
         // Traverse the connected patterns to build steps
-        while let Some(next_idx) = self.find_next_connected_pattern(connectivity, current_idx, &visited) {
+        while let Some(next_idx) =
+            self.find_next_connected_pattern(connectivity, current_idx, &visited)
+        {
             // Find the shared variable between current and next pattern
-            let shared_var = self.find_shared_variable_between_patterns(
-                connectivity, current_idx, next_idx
-            )?;
+            let shared_var =
+                self.find_shared_variable_between_patterns(connectivity, current_idx, next_idx)?;
 
             // Create traversal step
             let step = self.create_traversal_step(
                 &connectivity.patterns[current_idx],
                 &connectivity.patterns[next_idx],
                 &shared_var,
-                next_idx
+                next_idx,
             )?;
 
             steps.push(step);
@@ -275,23 +290,24 @@ impl PatternAnalyzer {
         &self,
         connectivity: &PatternConnectivity,
         current_idx: usize,
-        visited: &HashSet<usize>
+        visited: &HashSet<usize>,
     ) -> Option<usize> {
         // Find current pattern's node in the graph
-        let current_node = connectivity.connectivity_graph
+        let current_node = connectivity
+            .connectivity_graph
             .node_indices()
             .find(|&node| connectivity.connectivity_graph[node] == current_idx)?;
-        
+
         // Find connected patterns that haven't been visited
         for edge in connectivity.connectivity_graph.edges(current_node) {
             let target_node = edge.target();
             let target_pattern_idx = connectivity.connectivity_graph[target_node];
-            
+
             if !visited.contains(&target_pattern_idx) {
                 return Some(target_pattern_idx);
             }
         }
-        
+
         None
     }
 
@@ -300,7 +316,7 @@ impl PatternAnalyzer {
         &self,
         connectivity: &PatternConnectivity,
         pattern1_idx: usize,
-        pattern2_idx: usize
+        pattern2_idx: usize,
     ) -> Option<String> {
         for (var_name, pattern_indices) in &connectivity.shared_variables {
             if pattern_indices.contains(&pattern1_idx) && pattern_indices.contains(&pattern2_idx) {
@@ -316,15 +332,15 @@ impl PatternAnalyzer {
         from_pattern: &PathPattern,
         to_pattern: &PathPattern,
         shared_var: &str,
-        to_pattern_idx: usize
+        to_pattern_idx: usize,
     ) -> Option<TraversalStep> {
         // Extract the relationship from the patterns
-        let relationship = self.find_connecting_relationship(from_pattern, to_pattern, shared_var)?;
-        
+        let relationship =
+            self.find_connecting_relationship(from_pattern, to_pattern, shared_var)?;
+
         // Determine from and to variables
-        let (from_var, to_var) = self.determine_traversal_direction(
-            from_pattern, to_pattern, shared_var
-        )?;
+        let (from_var, to_var) =
+            self.determine_traversal_direction(from_pattern, to_pattern, shared_var)?;
 
         Some(TraversalStep {
             from_var,
@@ -340,7 +356,7 @@ impl PatternAnalyzer {
         &self,
         from_pattern: &PathPattern,
         to_pattern: &PathPattern,
-        _shared_var: &str
+        _shared_var: &str,
     ) -> Option<Edge> {
         // Look for an edge in either pattern that could represent the connection
         for element in &from_pattern.elements {
@@ -348,13 +364,13 @@ impl PatternAnalyzer {
                 return Some(edge.clone());
             }
         }
-        
+
         for element in &to_pattern.elements {
             if let PatternElement::Edge(edge) = element {
                 return Some(edge.clone());
             }
         }
-        
+
         None
     }
 
@@ -363,22 +379,18 @@ impl PatternAnalyzer {
         &self,
         from_pattern: &PathPattern,
         to_pattern: &PathPattern,
-        shared_var: &str
+        shared_var: &str,
     ) -> Option<(String, String)> {
         // Extract variables from both patterns
         let from_vars = self.extract_pattern_variables(from_pattern);
         let to_vars = self.extract_pattern_variables(to_pattern);
-        
+
         // Find a variable in from_pattern that's not the shared variable
-        let from_var = from_vars.iter()
-            .find(|&var| var != shared_var)
-            .cloned()?;
-            
+        let from_var = from_vars.iter().find(|&var| var != shared_var).cloned()?;
+
         // Find a variable in to_pattern that's not the shared variable
-        let to_var = to_vars.iter()
-            .find(|&var| var != shared_var)
-            .cloned()?;
-        
+        let to_var = to_vars.iter().find(|&var| var != shared_var).cloned()?;
+
         Some((from_var, to_var))
     }
 
@@ -400,7 +412,8 @@ impl PatternAnalyzer {
         }
 
         // Also check graph structure - look for a node with high degree
-        let max_degree = connectivity.connectivity_graph
+        let max_degree = connectivity
+            .connectivity_graph
             .node_indices()
             .map(|node| connectivity.connectivity_graph.edges(node).count())
             .max()
@@ -432,12 +445,16 @@ impl Default for PatternAnalyzer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::ast::{Node, Location, EdgeDirection};
+    use crate::ast::ast::{EdgeDirection, Location, Node};
 
     fn create_test_node(id: &str, label: &str) -> PatternElement {
         PatternElement::Node(Node {
             identifier: Some(id.to_string()),
-            labels: if label.is_empty() { vec![] } else { vec![label.to_string()] },
+            labels: if label.is_empty() {
+                vec![]
+            } else {
+                vec![label.to_string()]
+            },
             properties: None,
             location: Location::default(),
         })
@@ -473,7 +490,7 @@ mod tests {
 
         let analyzer = PatternAnalyzer::new();
         let vars = analyzer.extract_pattern_variables(&pattern);
-        
+
         assert!(vars.contains("a"));
         assert!(vars.contains("b"));
         assert!(vars.contains("r"));
@@ -497,7 +514,7 @@ mod tests {
 
         let analyzer = PatternAnalyzer::new();
         let shared = analyzer.find_shared_variables(&patterns);
-        
+
         assert!(shared.contains_key("b"));
         assert_eq!(shared.get("b").unwrap(), &vec![0, 1]);
         assert_eq!(shared.len(), 1);
@@ -521,7 +538,7 @@ mod tests {
         let analyzer = PatternAnalyzer::new_debug();
         let connectivity = analyzer.analyze_patterns(patterns);
         let path = analyzer.detect_linear_path(&connectivity);
-        
+
         assert!(path.is_some(), "Should detect linear path");
         let path = path.unwrap();
         assert_eq!(path.length(), 1);
@@ -571,7 +588,7 @@ mod tests {
 
         let analyzer = PatternAnalyzer::new();
         let connectivity = analyzer.analyze_patterns(patterns);
-        
+
         assert!(!connectivity.has_shared_variables());
         assert!(analyzer.detect_linear_path(&connectivity).is_none());
         assert!(!analyzer.is_star_pattern(&connectivity));

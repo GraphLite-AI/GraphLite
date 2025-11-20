@@ -7,10 +7,10 @@
 //! into optimized execution plans. It includes logical plan generation,
 //! physical plan optimization, and cost estimation.
 
-pub mod logical;
-pub mod physical;
 pub mod cost;
-pub mod optimizer;
-pub mod trace;
-pub mod pattern_optimization;
 pub mod insert_planner;
+pub mod logical;
+pub mod optimizer;
+pub mod pattern_optimization;
+pub mod physical;
+pub mod trace;

@@ -4,12 +4,12 @@
 //! architectural boundaries. All database operations go through the CLI interface
 //! rather than directly instantiating internal components.
 
-use std::process::Command;
-use std::path::PathBuf;
-use tempfile::TempDir;
-use serde_json::Value as JsonValue;
 use graphlite::Value;
+use serde_json::Value as JsonValue;
 use std::collections::HashMap;
+use std::path::PathBuf;
+use std::process::Command;
+use tempfile::TempDir;
 
 /// CLI-based test fixture - all operations via command-line interface
 pub struct CliFixture {
@@ -29,17 +29,32 @@ impl CliFixture {
 
         // Initialize database via CLI: cargo run --bin graphlite -- install
         let output = Command::new("cargo")
-            .args(&["run", "--quiet", "--package", "graphlite-cli", "--bin", "graphlite", "--", "install"])
-            .arg("--path").arg(&db_path)
-            .arg("--admin-user").arg(&admin_user)
-            .arg("--admin-password").arg(&admin_password)
+            .args(&[
+                "run",
+                "--quiet",
+                "--package",
+                "graphlite-cli",
+                "--bin",
+                "graphlite",
+                "--",
+                "install",
+            ])
+            .arg("--path")
+            .arg(&db_path)
+            .arg("--admin-user")
+            .arg(&admin_user)
+            .arg("--admin-password")
+            .arg(&admin_password)
             .arg("--yes")
-            .env("RUST_LOG", "error")  // Suppress INFO logs in CLI output
+            .env("RUST_LOG", "error") // Suppress INFO logs in CLI output
             .output()?;
 
         if !output.status.success() {
-            return Err(format!("Install failed: {}",
-                String::from_utf8_lossy(&output.stderr)).into());
+            return Err(format!(
+                "Install failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )
+            .into());
         }
 
         Ok(Self {
@@ -53,13 +68,26 @@ impl CliFixture {
     /// Execute query via CLI and expect success
     pub fn assert_query_succeeds(&self, query: &str) -> CliQueryResult {
         let output = Command::new("cargo")
-            .args(&["run", "--quiet", "--package", "graphlite-cli", "--bin", "graphlite", "--", "query"])
-            .arg("--path").arg(&self.db_path)
-            .arg("--user").arg(&self.admin_user)
-            .arg("--password").arg(&self.admin_password)
-            .arg("--format").arg("json")
+            .args(&[
+                "run",
+                "--quiet",
+                "--package",
+                "graphlite-cli",
+                "--bin",
+                "graphlite",
+                "--",
+                "query",
+            ])
+            .arg("--path")
+            .arg(&self.db_path)
+            .arg("--user")
+            .arg(&self.admin_user)
+            .arg("--password")
+            .arg(&self.admin_password)
+            .arg("--format")
+            .arg("json")
             .arg(query)
-            .env("RUST_LOG", "error")  // Suppress INFO logs in CLI output
+            .env("RUST_LOG", "error") // Suppress INFO logs in CLI output
             .output()
             .expect("Failed to execute query");
 
@@ -70,25 +98,46 @@ impl CliFixture {
 
         // Parse JSON output
         let stdout = String::from_utf8_lossy(&output.stdout);
-        CliQueryResult::from_json(&stdout)
-            .unwrap_or_else(|e| panic!("Failed to parse JSON output: {}\nOutput was:\n{}", e, stdout))
+        CliQueryResult::from_json(&stdout).unwrap_or_else(|e| {
+            panic!(
+                "Failed to parse JSON output: {}\nOutput was:\n{}",
+                e, stdout
+            )
+        })
     }
 
     /// Execute query via CLI and expect failure
     pub fn assert_query_fails(&self, query: &str) -> String {
         let output = Command::new("cargo")
-            .args(&["run", "--quiet", "--package", "graphlite-cli", "--bin", "graphlite", "--", "query"])
-            .arg("--path").arg(&self.db_path)
-            .arg("--user").arg(&self.admin_user)
-            .arg("--password").arg(&self.admin_password)
-            .arg("--format").arg("json")
+            .args(&[
+                "run",
+                "--quiet",
+                "--package",
+                "graphlite-cli",
+                "--bin",
+                "graphlite",
+                "--",
+                "query",
+            ])
+            .arg("--path")
+            .arg(&self.db_path)
+            .arg("--user")
+            .arg(&self.admin_user)
+            .arg("--password")
+            .arg(&self.admin_password)
+            .arg("--format")
+            .arg("json")
             .arg(query)
-            .env("RUST_LOG", "error")  // Suppress INFO logs in CLI output
+            .env("RUST_LOG", "error") // Suppress INFO logs in CLI output
             .output()
             .expect("Failed to execute query");
 
         // Query should fail
-        assert!(!output.status.success(), "Expected query to fail but it succeeded: {}", query);
+        assert!(
+            !output.status.success(),
+            "Expected query to fail but it succeeded: {}",
+            query
+        );
 
         String::from_utf8_lossy(&output.stderr).to_string()
     }
@@ -113,19 +162,17 @@ impl CliQueryResult {
     /// Parse query result from JSON output
     fn from_json(json_str: &str) -> Result<Self, Box<dyn std::error::Error>> {
         // Find where JSON starts (skip any log lines before it)
-        let json_start = json_str
-            .find('{')
-            .ok_or("No JSON found in output")?;
+        let json_start = json_str.find('{').ok_or("No JSON found in output")?;
 
         let json_portion = &json_str[json_start..];
         let parsed: JsonValue = serde_json::from_str(json_portion)?;
 
         // Extract rows from JSON
         let empty_vec = vec![];
-        let rows = parsed["rows"].as_array()
-            .unwrap_or(&empty_vec);
+        let rows = parsed["rows"].as_array().unwrap_or(&empty_vec);
 
-        let converted_rows: Vec<Row> = rows.iter()
+        let converted_rows: Vec<Row> = rows
+            .iter()
             .map(|row| {
                 let mut values = HashMap::new();
                 if let Some(obj) = row.as_object() {
@@ -137,7 +184,9 @@ impl CliQueryResult {
             })
             .collect();
 
-        Ok(CliQueryResult { rows: converted_rows })
+        Ok(CliQueryResult {
+            rows: converted_rows,
+        })
     }
 
     /// Get the number of rows

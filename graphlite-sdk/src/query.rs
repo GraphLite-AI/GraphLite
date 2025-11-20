@@ -280,7 +280,7 @@ impl<'session> QueryBuilder<'session> {
             query.push_str(return_clause);
         } else if !self.match_patterns.is_empty() {
             return Err(Error::InvalidOperation(
-                "MATCH query requires a RETURN clause".to_string()
+                "MATCH query requires a RETURN clause".to_string(),
             ));
         }
 
@@ -355,7 +355,6 @@ impl<'session> Session {
 
 #[cfg(test)]
 mod tests {
-    
 
     // Note: These are unit tests that test query building logic
     // Integration tests would require a real database

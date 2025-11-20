@@ -3,14 +3,13 @@
 //
 //! Index Catalog Provider - Stub implementation
 
-use std::sync::Arc;
-use crate::catalog::traits::{CatalogProvider, CatalogSchema};
-use crate::catalog::operations::{CatalogOperation, CatalogResponse};
 use crate::catalog::error::{CatalogError, CatalogResult};
+use crate::catalog::operations::{CatalogOperation, CatalogResponse};
+use crate::catalog::traits::{CatalogProvider, CatalogSchema};
 use crate::storage::StorageManager;
+use std::sync::Arc;
 
-pub struct IndexCatalog {
-}
+pub struct IndexCatalog {}
 
 impl IndexCatalog {
     pub fn new() -> Box<Self> {
@@ -24,7 +23,9 @@ impl CatalogProvider for IndexCatalog {
     }
 
     fn execute(&mut self, _op: CatalogOperation) -> CatalogResult<CatalogResponse> {
-        Err(CatalogError::NotSupported("Index catalog not yet implemented".to_string()))
+        Err(CatalogError::NotSupported(
+            "Index catalog not yet implemented".to_string(),
+        ))
     }
 
     fn save(&self) -> CatalogResult<Vec<u8>> {

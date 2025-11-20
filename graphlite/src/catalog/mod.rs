@@ -9,13 +9,12 @@
 //! with the existing storage system.
 
 // Core catalog system exports
-pub mod traits;
-pub mod operations;
 pub mod error;
-pub mod registry;
 pub mod manager;
+pub mod operations;
 pub mod providers;
+pub mod registry;
+pub mod traits;
 // pub mod metadata; // Removed - not part of ISO GQL
 pub mod storage;
 pub mod system_procedures;
-

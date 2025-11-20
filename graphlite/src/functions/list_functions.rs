@@ -42,9 +42,9 @@ impl Function for ListContainsFunction {
 
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         if context.arguments.len() != 2 {
-            return Err(FunctionError::InvalidArgumentCount { 
-                expected: 2, 
-                actual: context.arguments.len()
+            return Err(FunctionError::InvalidArgumentCount {
+                expected: 2,
+                actual: context.arguments.len(),
             });
         }
 
@@ -52,9 +52,10 @@ impl Function for ListContainsFunction {
         let element_arg = &context.arguments[1];
 
         // Extract list values
-        let list_values = list_arg.as_list()
-            .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                message: "First argument must be a list".to_string() 
+        let list_values = list_arg
+            .as_list()
+            .ok_or_else(|| FunctionError::InvalidArgumentType {
+                message: "First argument must be a list".to_string(),
             })?;
 
         // Check if any element in the list matches the search element
@@ -93,9 +94,9 @@ impl Function for ListSliceFunction {
 
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         if context.arguments.len() != 3 {
-            return Err(FunctionError::InvalidArgumentCount { 
-                expected: 3, 
-                actual: context.arguments.len()
+            return Err(FunctionError::InvalidArgumentCount {
+                expected: 3,
+                actual: context.arguments.len(),
             });
         }
 
@@ -104,28 +105,32 @@ impl Function for ListSliceFunction {
         let end_arg = &context.arguments[2];
 
         // Extract list values
-        let list_values = list_arg.as_list()
-            .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                message: "First argument must be a list".to_string() 
+        let list_values = list_arg
+            .as_list()
+            .ok_or_else(|| FunctionError::InvalidArgumentType {
+                message: "First argument must be a list".to_string(),
             })?;
 
         // Extract start index
-        let start_idx = start_arg.as_integer()
-            .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                message: "Start index must be an integer".to_string() 
-            })? as usize;
+        let start_idx =
+            start_arg
+                .as_integer()
+                .ok_or_else(|| FunctionError::InvalidArgumentType {
+                    message: "Start index must be an integer".to_string(),
+                })? as usize;
 
         // Extract end index
-        let end_idx = end_arg.as_integer()
-            .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                message: "End index must be an integer".to_string() 
+        let end_idx = end_arg
+            .as_integer()
+            .ok_or_else(|| FunctionError::InvalidArgumentType {
+                message: "End index must be an integer".to_string(),
             })? as usize;
 
         // Validate indices
         if start_idx >= list_values.len() {
             return Ok(Value::List(Vec::new()));
         }
-        
+
         let actual_end = end_idx.min(list_values.len());
         if start_idx >= actual_end {
             return Ok(Value::List(Vec::new()));
@@ -166,9 +171,9 @@ impl Function for ListAppendFunction {
 
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         if context.arguments.len() != 2 {
-            return Err(FunctionError::InvalidArgumentCount { 
-                expected: 2, 
-                actual: context.arguments.len()
+            return Err(FunctionError::InvalidArgumentCount {
+                expected: 2,
+                actual: context.arguments.len(),
             });
         }
 
@@ -176,9 +181,10 @@ impl Function for ListAppendFunction {
         let element_arg = &context.arguments[1];
 
         // Extract list values
-        let mut list_values = list_arg.as_list()
-            .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                message: "First argument must be a list".to_string() 
+        let mut list_values = list_arg
+            .as_list()
+            .ok_or_else(|| FunctionError::InvalidArgumentType {
+                message: "First argument must be a list".to_string(),
             })?
             .clone();
 
@@ -227,9 +233,9 @@ impl Function for ListPrependFunction {
 
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         if context.arguments.len() != 2 {
-            return Err(FunctionError::InvalidArgumentCount { 
-                expected: 2, 
-                actual: context.arguments.len()
+            return Err(FunctionError::InvalidArgumentCount {
+                expected: 2,
+                actual: context.arguments.len(),
             });
         }
 
@@ -237,9 +243,10 @@ impl Function for ListPrependFunction {
         let element_arg = &context.arguments[1];
 
         // Extract list values
-        let list_values = list_arg.as_list()
-            .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                message: "First argument must be a list".to_string() 
+        let list_values = list_arg
+            .as_list()
+            .ok_or_else(|| FunctionError::InvalidArgumentType {
+                message: "First argument must be a list".to_string(),
             })?;
 
         let mut result = Vec::new();
@@ -292,18 +299,19 @@ impl Function for ListLengthFunction {
 
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         if context.arguments.len() != 1 {
-            return Err(FunctionError::InvalidArgumentCount { 
-                expected: 1, 
-                actual: context.arguments.len()
+            return Err(FunctionError::InvalidArgumentCount {
+                expected: 1,
+                actual: context.arguments.len(),
             });
         }
 
         let list_arg = &context.arguments[0];
 
         // Extract list values
-        let list_values = list_arg.as_list()
-            .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                message: "Argument must be a list".to_string() 
+        let list_values = list_arg
+            .as_list()
+            .ok_or_else(|| FunctionError::InvalidArgumentType {
+                message: "Argument must be a list".to_string(),
             })?;
 
         Ok(Value::Number(list_values.len() as f64))
@@ -339,18 +347,19 @@ impl Function for ListReverseFunction {
 
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         if context.arguments.len() != 1 {
-            return Err(FunctionError::InvalidArgumentCount { 
-                expected: 1, 
-                actual: context.arguments.len()
+            return Err(FunctionError::InvalidArgumentCount {
+                expected: 1,
+                actual: context.arguments.len(),
             });
         }
 
         let list_arg = &context.arguments[0];
 
         // Extract list values
-        let list_values = list_arg.as_list()
-            .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                message: "Argument must be a list".to_string() 
+        let list_values = list_arg
+            .as_list()
+            .ok_or_else(|| FunctionError::InvalidArgumentType {
+                message: "Argument must be a list".to_string(),
             })?;
 
         let mut reversed = list_values.clone();
@@ -372,15 +381,23 @@ mod tests {
     #[test]
     fn test_list_contains() {
         let func = ListContainsFunction::new();
-        
+
         // Test contains existing element
-        let list = Value::List(vec![Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]);
+        let list = Value::List(vec![
+            Value::Number(1.0),
+            Value::Number(2.0),
+            Value::Number(3.0),
+        ]);
         let context = create_context(vec![list, Value::Number(2.0)]);
         let result = func.execute(&context).unwrap();
         assert_eq!(result, Value::Boolean(true));
-        
+
         // Test does not contain element
-        let list = Value::List(vec![Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]);
+        let list = Value::List(vec![
+            Value::Number(1.0),
+            Value::Number(2.0),
+            Value::Number(3.0),
+        ]);
         let context = create_context(vec![list, Value::Number(4.0)]);
         let result = func.execute(&context).unwrap();
         assert_eq!(result, Value::Boolean(false));
@@ -389,21 +406,25 @@ mod tests {
     #[test]
     fn test_list_slice() {
         let func = ListSliceFunction::new();
-        
+
         let list = Value::List(vec![
-            Value::Number(1.0), 
-            Value::Number(2.0), 
-            Value::Number(3.0), 
-            Value::Number(4.0), 
-            Value::Number(5.0)
+            Value::Number(1.0),
+            Value::Number(2.0),
+            Value::Number(3.0),
+            Value::Number(4.0),
+            Value::Number(5.0),
         ]);
-        
+
         // Test normal slice
         let context = create_context(vec![list.clone(), Value::Number(1.0), Value::Number(4.0)]);
         let result = func.execute(&context).unwrap();
-        let expected = Value::List(vec![Value::Number(2.0), Value::Number(3.0), Value::Number(4.0)]);
+        let expected = Value::List(vec![
+            Value::Number(2.0),
+            Value::Number(3.0),
+            Value::Number(4.0),
+        ]);
         assert_eq!(result, expected);
-        
+
         // Test slice beyond bounds
         let context = create_context(vec![list.clone(), Value::Number(3.0), Value::Number(10.0)]);
         let result = func.execute(&context).unwrap();
@@ -414,47 +435,67 @@ mod tests {
     #[test]
     fn test_list_append() {
         let func = ListAppendFunction::new();
-        
+
         let list = Value::List(vec![Value::Number(1.0), Value::Number(2.0)]);
         let context = create_context(vec![list, Value::Number(3.0)]);
         let result = func.execute(&context).unwrap();
-        
-        let expected = Value::List(vec![Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]);
+
+        let expected = Value::List(vec![
+            Value::Number(1.0),
+            Value::Number(2.0),
+            Value::Number(3.0),
+        ]);
         assert_eq!(result, expected);
     }
 
     #[test]
     fn test_list_prepend() {
         let func = ListPrependFunction::new();
-        
+
         let list = Value::List(vec![Value::Number(2.0), Value::Number(3.0)]);
         let context = create_context(vec![list, Value::Number(1.0)]);
         let result = func.execute(&context).unwrap();
-        
-        let expected = Value::List(vec![Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]);
+
+        let expected = Value::List(vec![
+            Value::Number(1.0),
+            Value::Number(2.0),
+            Value::Number(3.0),
+        ]);
         assert_eq!(result, expected);
     }
 
     #[test]
     fn test_list_length() {
         let func = ListLengthFunction::new();
-        
-        let list = Value::List(vec![Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]);
+
+        let list = Value::List(vec![
+            Value::Number(1.0),
+            Value::Number(2.0),
+            Value::Number(3.0),
+        ]);
         let context = create_context(vec![list]);
         let result = func.execute(&context).unwrap();
-        
+
         assert_eq!(result, Value::Number(3.0));
     }
 
     #[test]
     fn test_list_reverse() {
         let func = ListReverseFunction::new();
-        
-        let list = Value::List(vec![Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]);
+
+        let list = Value::List(vec![
+            Value::Number(1.0),
+            Value::Number(2.0),
+            Value::Number(3.0),
+        ]);
         let context = create_context(vec![list]);
         let result = func.execute(&context).unwrap();
-        
-        let expected = Value::List(vec![Value::Number(3.0), Value::Number(2.0), Value::Number(1.0)]);
+
+        let expected = Value::List(vec![
+            Value::Number(3.0),
+            Value::Number(2.0),
+            Value::Number(1.0),
+        ]);
         assert_eq!(result, expected);
     }
 }

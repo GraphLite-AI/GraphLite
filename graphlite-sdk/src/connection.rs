@@ -58,9 +58,7 @@ impl GraphLite {
     pub fn open<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
         let coordinator = QueryCoordinator::from_path(path)
             .map_err(|e| Error::Connection(format!("Failed to open database: {}", e)))?;
-        Ok(GraphLite {
-            coordinator,
-        })
+        Ok(GraphLite { coordinator })
     }
 
     /// Create a new session for the given user
@@ -86,7 +84,8 @@ impl GraphLite {
     /// # Ok::<(), graphlite_sdk::Error>(())
     /// ```
     pub fn session(&self, username: &str) -> Result<Session> {
-        let session_id = self.coordinator
+        let session_id = self
+            .coordinator
             .create_simple_session(username)
             .map_err(|e| Error::Session(format!("Failed to create session: {}", e)))?;
 
@@ -245,7 +244,6 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_connection_types_compile() {

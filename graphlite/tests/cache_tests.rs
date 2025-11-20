@@ -1,14 +1,14 @@
 //! Tests for cache clearing system procedures and data persistence
-//! 
+//!
 //! Tests cache clearing (gql.clear_cache) and cache statistics (gql.cache_stats)
 //! Also tests data persistence across cache clears and sessions
 
 #[path = "testutils/mod.rs"]
 mod testutils;
 
-use testutils::test_fixture::TestFixture;
 use graphlite::Value;
 use std::sync::OnceLock;
+use testutils::test_fixture::TestFixture;
 
 static SHARED_FIXTURE: OnceLock<TestFixture> = OnceLock::new();
 
@@ -23,9 +23,9 @@ fn get_shared_fixture() -> &'static TestFixture {
 #[test]
 fn test_cache_clearing_procedure() {
     log::debug!("🧪 Testing cache clearing procedure");
-    
+
     let fixture = get_shared_fixture();
-    
+
     // Create test graph - use a completely separate schema to avoid conflicts
     let unique_id = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -33,40 +33,48 @@ fn test_cache_clearing_procedure() {
         .as_nanos();
     let test_schema = format!("cache_test_schema_{}", unique_id);
     let test_graph = format!("{}/cache_test_graph", test_schema);
-    
-    fixture.query(&format!("CREATE SCHEMA IF NOT EXISTS {}", test_schema)).unwrap();
-    fixture.query(&format!("SESSION SET SCHEMA {}", test_schema)).unwrap();
-    fixture.query(&format!("CREATE GRAPH {}", test_graph)).unwrap();
-    fixture.query(&format!("SESSION SET GRAPH {}", test_graph)).unwrap();
-    
+
+    fixture
+        .query(&format!("CREATE SCHEMA IF NOT EXISTS {}", test_schema))
+        .unwrap();
+    fixture
+        .query(&format!("SESSION SET SCHEMA {}", test_schema))
+        .unwrap();
+    fixture
+        .query(&format!("CREATE GRAPH {}", test_graph))
+        .unwrap();
+    fixture
+        .query(&format!("SESSION SET GRAPH {}", test_graph))
+        .unwrap();
+
     log::debug!("  📊 Setting up test data...");
-    
+
     // Insert test data
-    fixture.assert_query_succeeds(
-        "INSERT (:TestNode {id: 1, name: 'cache_test_node1'})"
-    );
-    fixture.assert_query_succeeds(
-        "INSERT (:TestNode {id: 2, name: 'cache_test_node2'})"
-    );
+    fixture.assert_query_succeeds("INSERT (:TestNode {id: 1, name: 'cache_test_node1'})");
+    fixture.assert_query_succeeds("INSERT (:TestNode {id: 2, name: 'cache_test_node2'})");
     fixture.assert_query_succeeds(
         "MATCH (n1:TestNode {id: 1}), (n2:TestNode {id: 2}) INSERT (n1)-[:TEST_EDGE {type: 'cache_test'}]->(n2)"
     );
-    
+
     // Query data to ensure it gets cached
     log::debug!("  📋 Querying data to populate cache...");
+    fixture.assert_query_succeeds("MATCH (n:TestNode) RETURN n.id, n.name ORDER BY n.id");
     fixture.assert_query_succeeds(
-        "MATCH (n:TestNode) RETURN n.id, n.name ORDER BY n.id"
+        "MATCH (n1:TestNode)-[r:TEST_EDGE]->(n2:TestNode) RETURN n1.name, n2.name",
     );
-    fixture.assert_query_succeeds(
-        "MATCH (n1:TestNode)-[r:TEST_EDGE]->(n2:TestNode) RETURN n1.name, n2.name"
-    );
-    
+
     // Check cache stats before clearing
     log::debug!("  📈 Checking cache stats before clearing...");
     let cache_stats_before = fixture.query("CALL gql.cache_stats()").unwrap();
-    log::debug!("    Cache stats before: {} rows", cache_stats_before.rows.len());
-    assert!(!cache_stats_before.rows.is_empty(), "Should have cache stats");
-    
+    log::debug!(
+        "    Cache stats before: {} rows",
+        cache_stats_before.rows.len()
+    );
+    assert!(
+        !cache_stats_before.rows.is_empty(),
+        "Should have cache stats"
+    );
+
     // Find storage cache entry
     let mut storage_cache_found = false;
     for row in &cache_stats_before.rows {
@@ -75,229 +83,302 @@ fn test_cache_clearing_procedure() {
                 storage_cache_found = true;
                 if let Some(Value::Number(entries)) = row.values.get("entries") {
                     log::debug!("    Storage cache entries before clear: {}", entries);
-                    assert!(*entries >= 0.0, "Storage cache should have non-negative entries");
+                    assert!(
+                        *entries >= 0.0,
+                        "Storage cache should have non-negative entries"
+                    );
                 }
             }
         }
     }
     assert!(storage_cache_found, "Should find storage_cache in stats");
-    
+
     // Clear all caches
     log::debug!("  🧹 Clearing caches...");
     let clear_result = fixture.query("CALL gql.clear_cache()").unwrap();
     log::debug!("    Clear result: {} rows", clear_result.rows.len());
     assert!(!clear_result.rows.is_empty(), "Should have clear result");
-    
+
     // Verify clear result
     let clear_row = &clear_result.rows[0];
     if let Some(Value::String(status)) = clear_row.values.get("status") {
         log::debug!("    Clear status: {}", status);
-        assert!(status == "success" || status == "partial", "Clear should succeed");
+        assert!(
+            status == "success" || status == "partial",
+            "Clear should succeed"
+        );
     }
-    
+
     if let Some(Value::String(cleared_caches)) = clear_row.values.get("cleared_caches") {
         log::debug!("    Cleared caches: {}", cleared_caches);
-        assert!(cleared_caches.contains("storage_cache"), "Should clear storage_cache");
+        assert!(
+            cleared_caches.contains("storage_cache"),
+            "Should clear storage_cache"
+        );
     }
-    
+
     // Query data again after clearing cache - this should still work (from storage)
     log::debug!("  🔄 Verifying data persistence after cache clear...");
-    let result_after_clear = fixture.query(
-        "MATCH (n:TestNode) RETURN n.id, n.name ORDER BY n.id"
-    ).unwrap();
-    
-    assert_eq!(result_after_clear.rows.len(), 2, "Should still find 2 nodes after cache clear");
-    
+    let result_after_clear = fixture
+        .query("MATCH (n:TestNode) RETURN n.id, n.name ORDER BY n.id")
+        .unwrap();
+
+    assert_eq!(
+        result_after_clear.rows.len(),
+        2,
+        "Should still find 2 nodes after cache clear"
+    );
+
     // Verify the data is correct
     let first_node = &result_after_clear.rows[0];
-    if let (Some(Value::Number(id)), Some(Value::String(name))) = 
-        (first_node.values.get("n.id"), first_node.values.get("n.name")) {
+    if let (Some(Value::Number(id)), Some(Value::String(name))) = (
+        first_node.values.get("n.id"),
+        first_node.values.get("n.name"),
+    ) {
         assert_eq!(*id, 1.0);
         assert_eq!(name, "cache_test_node1");
     } else {
-        panic!("First node should have id=1 and name='cache_test_node1', got: {:?}", first_node.values);
+        panic!(
+            "First node should have id=1 and name='cache_test_node1', got: {:?}",
+            first_node.values
+        );
     }
-    
+
     // Query relationships after cache clear
-    let rel_result_after_clear = fixture.query(
-        "MATCH (n1:TestNode)-[r:TEST_EDGE]->(n2:TestNode) RETURN n1.name, n2.name"
-    ).unwrap();
-    
-    assert_eq!(rel_result_after_clear.rows.len(), 1, "Should still find 1 relationship after cache clear");
-    
+    let rel_result_after_clear = fixture
+        .query("MATCH (n1:TestNode)-[r:TEST_EDGE]->(n2:TestNode) RETURN n1.name, n2.name")
+        .unwrap();
+
+    assert_eq!(
+        rel_result_after_clear.rows.len(),
+        1,
+        "Should still find 1 relationship after cache clear"
+    );
+
     // Check cache stats after clearing and re-querying
     log::debug!("  📈 Checking cache stats after clearing and re-querying...");
     let cache_stats_after = fixture.query("CALL gql.cache_stats()").unwrap();
-    assert!(!cache_stats_after.rows.is_empty(), "Should have cache stats after clear");
-    
+    assert!(
+        !cache_stats_after.rows.is_empty(),
+        "Should have cache stats after clear"
+    );
+
     log::debug!("  ✅ Cache clearing procedure test passed!");
 }
 
-#[test] 
+#[test]
 fn test_data_persistence_across_sessions() {
     log::debug!("🔄 Testing data persistence across sessions");
-    
+
     // Session 1: Create data
     log::debug!("  📝 Session 1: Creating data...");
     let fixture1 = get_shared_fixture();
-    
+
     let unique_id = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    
-    // Create graph and data in session 1 - use separate schema 
+
+    // Create graph and data in session 1 - use separate schema
     let test_schema = format!("persistence_test_schema_{}", unique_id);
     let test_graph = format!("{}/persistence_test_graph", test_schema);
-    
-    fixture1.query(&format!("CREATE SCHEMA IF NOT EXISTS {}", test_schema)).unwrap();
-    fixture1.query(&format!("SESSION SET SCHEMA {}", test_schema)).unwrap();
-    fixture1.query(&format!("CREATE GRAPH {}", test_graph)).unwrap();
-    fixture1.query(&format!("SESSION SET GRAPH {}", test_graph)).unwrap();
-    
+
+    fixture1
+        .query(&format!("CREATE SCHEMA IF NOT EXISTS {}", test_schema))
+        .unwrap();
+    fixture1
+        .query(&format!("SESSION SET SCHEMA {}", test_schema))
+        .unwrap();
+    fixture1
+        .query(&format!("CREATE GRAPH {}", test_graph))
+        .unwrap();
+    fixture1
+        .query(&format!("SESSION SET GRAPH {}", test_graph))
+        .unwrap();
+
     // Insert test data step by step
-    fixture1.assert_query_succeeds(
-        "INSERT (:Person {id: 1, name: 'Alice', age: 30})"
-    );
-    fixture1.assert_query_succeeds(
-        "INSERT (:Person {id: 2, name: 'Bob', age: 25})"
-    );
-    fixture1.assert_query_succeeds(
-        "INSERT (:Company {name: 'TechCorp', industry: 'Technology'})"
-    );
+    fixture1.assert_query_succeeds("INSERT (:Person {id: 1, name: 'Alice', age: 30})");
+    fixture1.assert_query_succeeds("INSERT (:Person {id: 2, name: 'Bob', age: 25})");
+    fixture1.assert_query_succeeds("INSERT (:Company {name: 'TechCorp', industry: 'Technology'})");
     fixture1.assert_query_succeeds(
         "MATCH (person1:Person {name: 'Alice'}), (company:Company {name: 'TechCorp'}) 
-         INSERT (person1)-[:WORKS_FOR {position: 'Engineer', salary: 85000}]->(company)"
+         INSERT (person1)-[:WORKS_FOR {position: 'Engineer', salary: 85000}]->(company)",
     );
     fixture1.assert_query_succeeds(
         "MATCH (person2:Person {name: 'Bob'}), (company:Company {name: 'TechCorp'}) 
-         INSERT (person2)-[:WORKS_FOR {position: 'Designer', salary: 70000}]->(company)"
+         INSERT (person2)-[:WORKS_FOR {position: 'Designer', salary: 70000}]->(company)",
     );
-    
+
     // Verify data exists in session 1
-    let session1_result = fixture1.query(
-        "MATCH (p:Person) RETURN p.id, p.name, p.age ORDER BY p.id"
-    ).unwrap();
-    assert_eq!(session1_result.rows.len(), 2, "Session 1 should have 2 people");
-    
+    let session1_result = fixture1
+        .query("MATCH (p:Person) RETURN p.id, p.name, p.age ORDER BY p.id")
+        .unwrap();
+    assert_eq!(
+        session1_result.rows.len(),
+        2,
+        "Session 1 should have 2 people"
+    );
+
     // Clear cache in session 1
     log::debug!("  🧹 Session 1: Clearing cache...");
     fixture1.query("CALL gql.clear_cache()").unwrap();
-    
+
     // Verify data still exists in session 1 after cache clear
-    let session1_after_clear = fixture1.query(
-        "MATCH (p:Person) RETURN p.id, p.name ORDER BY p.id"
-    ).unwrap();
-    assert_eq!(session1_after_clear.rows.len(), 2, "Session 1 should still have 2 people after cache clear");
-    
+    let session1_after_clear = fixture1
+        .query("MATCH (p:Person) RETURN p.id, p.name ORDER BY p.id")
+        .unwrap();
+    assert_eq!(
+        session1_after_clear.rows.len(),
+        2,
+        "Session 1 should still have 2 people after cache clear"
+    );
+
     log::debug!("  📊 Session 1 complete - data persisted through cache clear");
-    
+
     // Session 2: Access same data (simulating new session)
     log::debug!("  🔄 Session 2: Accessing persisted data...");
     let fixture2 = get_shared_fixture();
-    
+
     // Set same graph in session 2 (data should be persisted)
-    fixture2.query(&format!("SESSION SET SCHEMA {}", test_schema)).unwrap();
-    fixture2.query(&format!("SESSION SET GRAPH {}", test_graph)).unwrap();
-    
+    fixture2
+        .query(&format!("SESSION SET SCHEMA {}", test_schema))
+        .unwrap();
+    fixture2
+        .query(&format!("SESSION SET GRAPH {}", test_graph))
+        .unwrap();
+
     // Query data in session 2 - should find persisted data
-    let session2_result = fixture2.query(
-        "MATCH (p:Person) RETURN p.id, p.name, p.age ORDER BY p.id"
-    ).unwrap();
-    
-    assert_eq!(session2_result.rows.len(), 2, "Session 2 should find 2 persisted people");
-    
+    let session2_result = fixture2
+        .query("MATCH (p:Person) RETURN p.id, p.name, p.age ORDER BY p.id")
+        .unwrap();
+
+    assert_eq!(
+        session2_result.rows.len(),
+        2,
+        "Session 2 should find 2 persisted people"
+    );
+
     // Verify the actual data values are correct
     let person1 = &session2_result.rows[0];
     let person2 = &session2_result.rows[1];
-    
-    if let (Some(Value::Number(id1)), Some(Value::String(name1))) = 
-        (person1.values.get("p.id"), person1.values.get("p.name")) {
+
+    if let (Some(Value::Number(id1)), Some(Value::String(name1))) =
+        (person1.values.get("p.id"), person1.values.get("p.name"))
+    {
         assert_eq!(*id1, 1.0);
         assert_eq!(name1, "Alice");
     } else {
-        panic!("Person 1 data not found correctly in session 2, got: {:?}", person1.values);
+        panic!(
+            "Person 1 data not found correctly in session 2, got: {:?}",
+            person1.values
+        );
     }
-    
-    if let (Some(Value::Number(id2)), Some(Value::String(name2))) = 
-        (person2.values.get("p.id"), person2.values.get("p.name")) {
+
+    if let (Some(Value::Number(id2)), Some(Value::String(name2))) =
+        (person2.values.get("p.id"), person2.values.get("p.name"))
+    {
         assert_eq!(*id2, 2.0);
         assert_eq!(name2, "Bob");
     } else {
-        panic!("Person 2 data not found correctly in session 2, got: {:?}", person2.values);
+        panic!(
+            "Person 2 data not found correctly in session 2, got: {:?}",
+            person2.values
+        );
     }
-    
+
     // Test relationships persist across sessions
-    let session2_rel_result = fixture2.query(
-        "MATCH (p:Person)-[w:WORKS_FOR]->(c:Company) 
+    let session2_rel_result = fixture2
+        .query(
+            "MATCH (p:Person)-[w:WORKS_FOR]->(c:Company) 
          RETURN p.name, w.position, w.salary, c.name 
-         ORDER BY p.name"
-    ).unwrap();
-    
-    assert_eq!(session2_rel_result.rows.len(), 2, "Session 2 should find 2 work relationships");
-    
+         ORDER BY p.name",
+        )
+        .unwrap();
+
+    assert_eq!(
+        session2_rel_result.rows.len(),
+        2,
+        "Session 2 should find 2 work relationships"
+    );
+
     // Verify relationship data
     let alice_work = &session2_rel_result.rows[0];
-    if let (Some(Value::String(name)), Some(Value::String(position))) = 
-        (alice_work.values.get("p.name"), alice_work.values.get("w.position")) {
+    if let (Some(Value::String(name)), Some(Value::String(position))) = (
+        alice_work.values.get("p.name"),
+        alice_work.values.get("w.position"),
+    ) {
         assert_eq!(name, "Alice");
         assert_eq!(position, "Engineer");
     }
-    
+
     // Clear cache in session 2
     log::debug!("  🧹 Session 2: Clearing cache...");
     fixture2.query("CALL gql.clear_cache()").unwrap();
-    
+
     // Add new data in session 2
     log::debug!("  ➕ Session 2: Adding new data...");
-    fixture2.assert_query_succeeds(
-        "INSERT (:Person {id: 3, name: 'Charlie', age: 28})"
-    );
+    fixture2.assert_query_succeeds("INSERT (:Person {id: 3, name: 'Charlie', age: 28})");
     fixture2.assert_query_succeeds(
         "MATCH (person3:Person {name: 'Charlie'}), (company:Company {name: 'TechCorp'})
-         INSERT (person3)-[:WORKS_FOR {position: 'Manager', salary: 95000}]->(company)"
+         INSERT (person3)-[:WORKS_FOR {position: 'Manager', salary: 95000}]->(company)",
     );
-    
+
     // Verify all 3 people exist in session 2
-    let session2_final = fixture2.query(
-        "MATCH (p:Person) RETURN p.id, p.name ORDER BY p.id"
-    ).unwrap();
-    assert_eq!(session2_final.rows.len(), 3, "Session 2 should now have 3 people total");
-    
+    let session2_final = fixture2
+        .query("MATCH (p:Person) RETURN p.id, p.name ORDER BY p.id")
+        .unwrap();
+    assert_eq!(
+        session2_final.rows.len(),
+        3,
+        "Session 2 should now have 3 people total"
+    );
+
     log::debug!("  ✅ Cross-session persistence test passed!");
-    
+
     // Session 3: Verify session 2's additions persisted
     log::debug!("  🔍 Session 3: Verifying session 2's additions persisted...");
     let fixture3 = get_shared_fixture();
-    
-    fixture3.query(&format!("SESSION SET SCHEMA {}", test_schema)).unwrap();
-    fixture3.query(&format!("SESSION SET GRAPH {}", test_graph)).unwrap();
-    
-    let session3_result = fixture3.query(
-        "MATCH (p:Person) RETURN p.id, p.name ORDER BY p.id"
-    ).unwrap();
-    
-    assert_eq!(session3_result.rows.len(), 3, "Session 3 should find all 3 people from previous sessions");
-    
+
+    fixture3
+        .query(&format!("SESSION SET SCHEMA {}", test_schema))
+        .unwrap();
+    fixture3
+        .query(&format!("SESSION SET GRAPH {}", test_graph))
+        .unwrap();
+
+    let session3_result = fixture3
+        .query("MATCH (p:Person) RETURN p.id, p.name ORDER BY p.id")
+        .unwrap();
+
+    assert_eq!(
+        session3_result.rows.len(),
+        3,
+        "Session 3 should find all 3 people from previous sessions"
+    );
+
     // Verify Charlie from session 2 is there
     let charlie = &session3_result.rows[2];
-    if let (Some(Value::Number(id)), Some(Value::String(name))) = 
-        (charlie.values.get("p.id"), charlie.values.get("p.name")) {
+    if let (Some(Value::Number(id)), Some(Value::String(name))) =
+        (charlie.values.get("p.id"), charlie.values.get("p.name"))
+    {
         assert_eq!(*id, 3.0);
         assert_eq!(name, "Charlie");
     } else {
-        panic!("Charlie (added in session 2) not found in session 3, got: {:?}", charlie.values);
+        panic!(
+            "Charlie (added in session 2) not found in session 3, got: {:?}",
+            charlie.values
+        );
     }
-    
+
     log::debug!("  ✅ Multi-session persistence test passed!");
 }
 
 #[test]
 fn test_cache_stats_procedure() {
     log::debug!("📊 Testing cache stats procedure");
-    
+
     let fixture = get_shared_fixture();
-    
+
     // Create test graph - use separate schema to avoid conflicts
     let unique_id = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -305,65 +386,93 @@ fn test_cache_stats_procedure() {
         .as_nanos();
     let test_schema = format!("cache_stats_schema_{}", unique_id);
     let test_graph = format!("{}/cache_stats_test", test_schema);
-    
-    fixture.query(&format!("CREATE SCHEMA IF NOT EXISTS {}", test_schema)).unwrap();
-    fixture.query(&format!("SESSION SET SCHEMA {}", test_schema)).unwrap();
-    fixture.query(&format!("CREATE GRAPH {}", test_graph)).unwrap();
-    fixture.query(&format!("SESSION SET GRAPH {}", test_graph)).unwrap();
-    
+
+    fixture
+        .query(&format!("CREATE SCHEMA IF NOT EXISTS {}", test_schema))
+        .unwrap();
+    fixture
+        .query(&format!("SESSION SET SCHEMA {}", test_schema))
+        .unwrap();
+    fixture
+        .query(&format!("CREATE GRAPH {}", test_graph))
+        .unwrap();
+    fixture
+        .query(&format!("SESSION SET GRAPH {}", test_graph))
+        .unwrap();
+
     // Insert some data
-    fixture.assert_query_succeeds(
-        "INSERT (:StatsTestNode {id: 1, data: 'test1'})"
-    );
-    fixture.assert_query_succeeds(
-        "INSERT (:StatsTestNode {id: 2, data: 'test2'})"
-    );
-    
+    fixture.assert_query_succeeds("INSERT (:StatsTestNode {id: 1, data: 'test1'})");
+    fixture.assert_query_succeeds("INSERT (:StatsTestNode {id: 2, data: 'test2'})");
+
     // Query to populate cache
     fixture.assert_query_succeeds("MATCH (n:StatsTestNode) RETURN n.id, n.data");
-    
+
     // Test cache stats procedure
     let stats_result = fixture.query("CALL gql.cache_stats()").unwrap();
-    
+
     log::debug!("  📈 Cache stats returned {} rows", stats_result.rows.len());
-    assert!(!stats_result.rows.is_empty(), "Cache stats should return at least one row");
-    
+    assert!(
+        !stats_result.rows.is_empty(),
+        "Cache stats should return at least one row"
+    );
+
     // Verify expected columns are present
-    assert!(stats_result.variables.contains(&"cache_type".to_string()), "Should have cache_type column");
-    assert!(stats_result.variables.contains(&"entries".to_string()), "Should have entries column");
-    
+    assert!(
+        stats_result.variables.contains(&"cache_type".to_string()),
+        "Should have cache_type column"
+    );
+    assert!(
+        stats_result.variables.contains(&"entries".to_string()),
+        "Should have entries column"
+    );
+
     // Look for storage cache row
     let mut found_storage_cache = false;
     for row in &stats_result.rows {
         if let Some(Value::String(cache_type)) = row.values.get("cache_type") {
             log::debug!("    Found cache type: {}", cache_type);
-            
+
             if cache_type == "storage_cache" {
                 found_storage_cache = true;
-                
+
                 // Verify storage cache has some entries (should have at least our test graph)
                 if let Some(Value::Number(entries)) = row.values.get("entries") {
                     log::debug!("      Storage cache entries: {}", entries);
-                    assert!(*entries >= 0.0, "Storage cache entries should be non-negative");
+                    assert!(
+                        *entries >= 0.0,
+                        "Storage cache entries should be non-negative"
+                    );
                 } else {
                     panic!("Storage cache should have entries field");
                 }
-                
+
                 // Check other fields exist (may be N/A for storage cache)
-                assert!(row.values.contains_key("hit_rate"), "Should have hit_rate field");
-                assert!(row.values.contains_key("memory_bytes"), "Should have memory_bytes field");
+                assert!(
+                    row.values.contains_key("hit_rate"),
+                    "Should have hit_rate field"
+                );
+                assert!(
+                    row.values.contains_key("memory_bytes"),
+                    "Should have memory_bytes field"
+                );
             }
         }
     }
-    
-    assert!(found_storage_cache, "Should find storage_cache in cache stats");
-    
+
+    assert!(
+        found_storage_cache,
+        "Should find storage_cache in cache stats"
+    );
+
     // Test stats consistency after cache operations
     fixture.query("CALL gql.clear_cache()").unwrap();
-    
+
     let stats_after_clear = fixture.query("CALL gql.cache_stats()").unwrap();
-    assert!(!stats_after_clear.rows.is_empty(), "Cache stats should work after clear");
-    
+    assert!(
+        !stats_after_clear.rows.is_empty(),
+        "Cache stats should work after clear"
+    );
+
     log::debug!("  ✅ Cache stats procedure test passed!");
 }
 
@@ -401,10 +510,14 @@ fn test_is_valid_procedure() {
             assert!(
                 !err_str.contains("not found") && !err_str.contains("not supported"),
                 "Procedure {} should be recognized as valid, but got error: {}",
-                proc_name, err_str
+                proc_name,
+                err_str
             );
             // It's OK if it fails for other reasons (like validation errors)
-            log::debug!("      ✓ {} recognized (may have validation errors, which is OK)", proc_name);
+            log::debug!(
+                "      ✓ {} recognized (may have validation errors, which is OK)",
+                proc_name
+            );
         } else {
             log::debug!("      ✓ {} executed successfully", proc_name);
         }
@@ -413,12 +526,15 @@ fn test_is_valid_procedure() {
     // Test invalid procedures - should get error (may be "not found" or other execution error)
     let invalid_procedures = vec![
         "gql.invalid_procedure",
-        "gql.drop_database",  // Dangerous operation not exposed
-        "gql.shutdown",       // System operation not exposed
+        "gql.drop_database", // Dangerous operation not exposed
+        "gql.shutdown",      // System operation not exposed
         "system.invalid",
     ];
 
-    log::debug!("  ❌ Testing {} invalid procedures (should fail)", invalid_procedures.len());
+    log::debug!(
+        "  ❌ Testing {} invalid procedures (should fail)",
+        invalid_procedures.len()
+    );
 
     for proc_name in &invalid_procedures {
         log::debug!("    Testing: {}", proc_name);
@@ -436,8 +552,11 @@ fn test_is_valid_procedure() {
 
         // Error may be "not found", "not supported", or other execution errors
         // The key is that it fails - we're verifying the procedure doesn't accidentally work
-        log::debug!("      ✓ {} correctly rejected with error: {}", proc_name,
-                 err_msg.lines().next().unwrap_or(&err_msg));
+        log::debug!(
+            "      ✓ {} correctly rejected with error: {}",
+            proc_name,
+            err_msg.lines().next().unwrap_or(&err_msg)
+        );
     }
 
     // Test system.* prefix mapping to gql.* (should work for valid procedures)
@@ -456,7 +575,13 @@ fn test_is_valid_procedure() {
     log::debug!("    ✓ system.cache_stats correctly mapped to gql.cache_stats");
 
     log::debug!("  ✅ System procedure validation test passed!");
-    log::debug!("     - {} valid procedures recognized", valid_procedures.len());
-    log::debug!("     - {} invalid procedures rejected", invalid_procedures.len());
+    log::debug!(
+        "     - {} valid procedures recognized",
+        valid_procedures.len()
+    );
+    log::debug!(
+        "     - {} invalid procedures rejected",
+        invalid_procedures.len()
+    );
     log::debug!("     - system.* prefix mapping works");
 }

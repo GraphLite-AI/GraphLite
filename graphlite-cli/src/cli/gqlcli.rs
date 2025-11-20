@@ -4,13 +4,13 @@
 //! CLI command handlers for GraphLite
 
 use colored::Colorize;
-use rustyline::{Editor, error::ReadlineError, Config, EditMode, CompletionType};
+use rustyline::{error::ReadlineError, CompletionType, Config, EditMode, Editor};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use graphlite::QueryCoordinator;
 use super::commands::OutputFormat;
 use super::output::ResultFormatter;
+use graphlite::QueryCoordinator;
 
 // Note: init_database_components has been removed.
 // All database initialization is now handled internally by QueryCoordinator::from_path()
@@ -30,7 +30,10 @@ pub fn handle_install(
     // Check if database already exists
     if path.exists() && !force {
         if !yes {
-            println!("{}", format!("Database already exists at {:?}", path).yellow());
+            println!(
+                "{}",
+                format!("Database already exists at {:?}", path).yellow()
+            );
             println!("Use --force to reinstall, or choose a different path.");
             return Err("Database already exists".into());
         }
@@ -65,7 +68,8 @@ pub fn handle_install(
     // Now we need to set the password for this user
     println!("  → Setting admin user password...");
 
-    coordinator.set_user_password(&admin_user, &password)
+    coordinator
+        .set_user_password(&admin_user, &password)
         .map_err(|e| format!("Failed to set admin password: {}", e))?;
 
     println!("    ✓ Password set for user '{}'", admin_user);
@@ -85,12 +89,25 @@ pub fn handle_install(
     let _ = coordinator.close_session(&session_id);
 
     // Print success message
-    println!("{}", format!("\n✓ GraphLite initialized at {:?}", path).green());
+    println!(
+        "{}",
+        format!("\n✓ GraphLite initialized at {:?}", path).green()
+    );
     println!("{}", "\nDatabase is ready to use!".bold().green());
     println!("{}", "\nStart the GQL console with:".yellow());
-    println!("{}", format!("  cargo run -- gql --path {:?} -u {}", path, admin_user).cyan());
+    println!(
+        "{}",
+        format!("  cargo run -- gql --path {:?} -u {}", path, admin_user).cyan()
+    );
     println!("{}", "\nOr execute queries directly:".yellow());
-    println!("{}", format!("  cargo run -- query --path {:?} -u {} \"MATCH (n) RETURN n\"", path, admin_user).cyan());
+    println!(
+        "{}",
+        format!(
+            "  cargo run -- query --path {:?} -u {} \"MATCH (n) RETURN n\"",
+            path, admin_user
+        )
+        .cyan()
+    );
 
     // Coordinator drops here, closing all connections
     // All data has been persisted to disk via Sled
@@ -106,7 +123,11 @@ pub fn handle_gql(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Check if database exists
     if !path.exists() {
-        return Err(format!("Database not found at {:?}. Run 'cargo run -- install' first.", path).into());
+        return Err(format!(
+            "Database not found at {:?}. Run 'cargo run -- install' first.",
+            path
+        )
+        .into());
     }
 
     // Prompt for credentials if not provided
@@ -250,7 +271,11 @@ pub fn handle_query(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Check if database exists
     if !path.exists() {
-        return Err(format!("Database not found at {:?}. Run 'cargo run -- install' first.", path).into());
+        return Err(format!(
+            "Database not found at {:?}. Run 'cargo run -- install' first.",
+            path
+        )
+        .into());
     }
 
     // Load database
@@ -266,7 +291,10 @@ pub fn handle_query(
 
     // Show AST if requested
     if ast {
-        println!("{}", "AST display feature not available in CLI-only mode".yellow());
+        println!(
+            "{}",
+            "AST display feature not available in CLI-only mode".yellow()
+        );
         println!("{}", "AST is an internal implementation detail".yellow());
         return Ok(());
     }
@@ -306,7 +334,8 @@ fn authenticate(
     username: &str,
     password: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    coordinator.authenticate_and_create_session(username, password)
+    coordinator
+        .authenticate_and_create_session(username, password)
         .map_err(|e| e.into())
 }
 

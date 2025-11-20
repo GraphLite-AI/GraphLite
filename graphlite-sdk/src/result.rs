@@ -170,7 +170,8 @@ impl TypedResult {
     /// # }
     /// ```
     pub fn first<T: DeserializeOwned>(&self) -> Result<T> {
-        let row = self.get_row(0)
+        let row = self
+            .get_row(0)
             .ok_or_else(|| Error::NotFound("No rows returned".to_string()))?;
 
         self.deserialize_row(row)
@@ -194,7 +195,8 @@ impl TypedResult {
     /// # }
     /// ```
     pub fn scalar<T: DeserializeOwned>(&self) -> Result<T> {
-        let row = self.get_row(0)
+        let row = self
+            .get_row(0)
             .ok_or_else(|| Error::NotFound("No rows returned".to_string()))?;
 
         let columns = &self.inner.variables;
@@ -202,7 +204,8 @@ impl TypedResult {
             return Err(Error::NotFound("No columns returned".to_string()));
         }
 
-        let value = row.get_value(&columns[0])
+        let value = row
+            .get_value(&columns[0])
             .ok_or_else(|| Error::NotFound("Column value not found".to_string()))?;
 
         value_to_type(value)
@@ -239,9 +242,7 @@ fn value_to_json(value: &Value) -> serde_json::Value {
         Value::Number(n) => serde_json::json!(n),
         Value::String(s) => serde_json::Value::String(s.clone()),
         Value::Array(arr) | Value::List(arr) => {
-            let items: Vec<serde_json::Value> = arr.iter()
-                .map(|v| value_to_json(v))
-                .collect();
+            let items: Vec<serde_json::Value> = arr.iter().map(|v| value_to_json(v)).collect();
             serde_json::Value::Array(items)
         }
         // For complex types like Node, Edge, Path, etc., use serde serialization

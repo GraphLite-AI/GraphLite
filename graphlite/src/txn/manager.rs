@@ -2,17 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //! Transaction manager implementation
-//! 
+//!
 //! This module provides the main transaction management functionality.
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use crate::exec::error::ExecutionError;
 use crate::session::SessionManager;
 
-use super::state::{TransactionState, TransactionId, TxnIsolationLevel, AccessMode, OperationType};
 use super::isolation::IsolationLevel;
+use super::state::{AccessMode, OperationType, TransactionId, TransactionState, TxnIsolationLevel};
 use super::wal::{PersistentWAL, WALEntry, WALEntryType};
 
 /// Transaction manager handles the lifecycle of all transactions
@@ -38,8 +38,9 @@ impl TransactionManager {
     /// # Returns
     /// A new TransactionManager instance with WAL initialized in the database directory
     pub fn new(db_path: std::path::PathBuf) -> Result<Self, ExecutionError> {
-        let wal = PersistentWAL::new(db_path)
-            .map_err(|e| ExecutionError::RuntimeError(format!("Failed to initialize WAL: {}", e)))?;
+        let wal = PersistentWAL::new(db_path).map_err(|e| {
+            ExecutionError::RuntimeError(format!("Failed to initialize WAL: {}", e))
+        })?;
 
         Ok(Self {
             active_transactions: Arc::new(RwLock::new(HashMap::new())),
@@ -68,9 +69,11 @@ impl TransactionManager {
     ) -> Result<TransactionId, ExecutionError> {
         // Determine transaction characteristics
         let (final_isolation_level, final_access_mode) = {
-            let next_characteristics = self.next_transaction_characteristics.lock()
+            let next_characteristics = self
+                .next_transaction_characteristics
+                .lock()
                 .map_err(|_| ExecutionError::RuntimeError("Failed to acquire lock".to_string()))?;
-            
+
             match (isolation_level, access_mode, next_characteristics.as_ref()) {
                 // Explicit characteristics provided
                 (Some(iso), Some(acc), _) => (iso, acc),
@@ -86,8 +89,11 @@ impl TransactionManager {
         };
 
         // Clear next characteristics after using them
-        *self.next_transaction_characteristics.lock()
-            .map_err(|_| ExecutionError::RuntimeError("Failed to acquire lock".to_string()))? = None;
+        *self
+            .next_transaction_characteristics
+            .lock()
+            .map_err(|_| ExecutionError::RuntimeError("Failed to acquire lock".to_string()))? =
+            None;
 
         // Convert to transaction module types
         let txn_isolation_level = match final_isolation_level {
@@ -109,11 +115,12 @@ impl TransactionManager {
         if let Some(ref session_id) = session_id {
             if let Some(ref session_manager) = self.session_manager {
                 if session_manager.get_session(session_id).is_none() {
-                    return Err(ExecutionError::RuntimeError(
-                        format!("Session {} not found", session_id)
-                    ));
+                    return Err(ExecutionError::RuntimeError(format!(
+                        "Session {} not found",
+                        session_id
+                    )));
                 }
-                
+
                 // Session activity is managed by the session itself
                 // No explicit update needed here
             }
@@ -126,39 +133,55 @@ impl TransactionManager {
             TransactionState::new(txn_isolation_level, final_access_mode)
         };
         let transaction_id = transaction.id;
-        
+
         // Write BEGIN entry to WAL with session context
         let begin_description = if let Some(ref session_id) = session_id {
-            format!("BEGIN TRANSACTION (Session: {}) - {} isolation level, {} access mode", 
+            format!(
+                "BEGIN TRANSACTION (Session: {}) - {} isolation level, {} access mode",
                 session_id,
                 final_isolation_level.as_str(),
-                if final_access_mode == AccessMode::ReadOnly { "READ ONLY" } else { "READ WRITE" })
+                if final_access_mode == AccessMode::ReadOnly {
+                    "READ ONLY"
+                } else {
+                    "READ WRITE"
+                }
+            )
         } else {
-            format!("BEGIN TRANSACTION - {} isolation level, {} access mode", 
+            format!(
+                "BEGIN TRANSACTION - {} isolation level, {} access mode",
                 final_isolation_level.as_str(),
-                if final_access_mode == AccessMode::ReadOnly { "READ ONLY" } else { "READ WRITE" })
+                if final_access_mode == AccessMode::ReadOnly {
+                    "READ ONLY"
+                } else {
+                    "READ WRITE"
+                }
+            )
         };
-        
+
         let wal_entry = WALEntry::new(
             WALEntryType::TransactionBegin,
             transaction_id,
             self.wal.next_global_sequence(),
-            0, // BEGIN is sequence 0
+            0,    // BEGIN is sequence 0
             None, // No operation type for BEGIN
             begin_description.clone(),
         );
-        
+
         if let Err(e) = self.wal.write_entry(wal_entry) {
-            return Err(ExecutionError::RuntimeError(format!("Failed to write BEGIN to WAL: {}", e)));
+            return Err(ExecutionError::RuntimeError(format!(
+                "Failed to write BEGIN to WAL: {}",
+                e
+            )));
         }
-        
+
         // Also log to in-memory transaction log
         transaction.add_operation(OperationType::Other, begin_description);
 
         // Add to active transactions
-        let mut active_txns = self.active_transactions.write()
-            .map_err(|_| ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string()))?;
-        
+        let mut active_txns = self.active_transactions.write().map_err(|_| {
+            ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string())
+        })?;
+
         active_txns.insert(transaction_id, Arc::new(Mutex::new(transaction)));
 
         Ok(transaction_id)
@@ -166,22 +189,28 @@ impl TransactionManager {
 
     /// Commit a transaction
     pub fn commit_transaction(&self, transaction_id: TransactionId) -> Result<(), ExecutionError> {
-        let active_txns = self.active_transactions.read()
-            .map_err(|_| ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string()))?;
+        let active_txns = self.active_transactions.read().map_err(|_| {
+            ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string())
+        })?;
 
         if let Some(txn_arc) = active_txns.get(&transaction_id) {
-            let mut transaction = txn_arc.lock()
-                .map_err(|_| ExecutionError::RuntimeError("Failed to acquire transaction lock".to_string()))?;
+            let mut transaction = txn_arc.lock().map_err(|_| {
+                ExecutionError::RuntimeError("Failed to acquire transaction lock".to_string())
+            })?;
 
             if !transaction.is_active() {
-                return Err(ExecutionError::RuntimeError(
-                    format!("Transaction {} is not active", transaction_id)
-                ));
+                return Err(ExecutionError::RuntimeError(format!(
+                    "Transaction {} is not active",
+                    transaction_id
+                )));
             }
 
             let final_sequence = transaction.get_sequence_number();
-            let commit_description = format!("COMMIT TRANSACTION - final sequence number: {}", final_sequence);
-            
+            let commit_description = format!(
+                "COMMIT TRANSACTION - final sequence number: {}",
+                final_sequence
+            );
+
             // Write COMMIT entry to WAL
             let wal_entry = WALEntry::new(
                 WALEntryType::TransactionCommit,
@@ -191,41 +220,54 @@ impl TransactionManager {
                 None,
                 commit_description.clone(),
             );
-            
+
             if let Err(e) = self.wal.write_entry(wal_entry) {
-                return Err(ExecutionError::RuntimeError(format!("Failed to write COMMIT to WAL: {}", e)));
+                return Err(ExecutionError::RuntimeError(format!(
+                    "Failed to write COMMIT to WAL: {}",
+                    e
+                )));
             }
-            
+
             // Also log to in-memory transaction log
             transaction.add_operation(OperationType::Other, commit_description);
             transaction.commit();
-            
+
             Ok(())
         } else {
-            Err(ExecutionError::RuntimeError(
-                format!("Transaction {} not found", transaction_id)
-            ))
+            Err(ExecutionError::RuntimeError(format!(
+                "Transaction {} not found",
+                transaction_id
+            )))
         }
     }
 
     /// Rollback a transaction
-    pub fn rollback_transaction(&self, transaction_id: TransactionId) -> Result<(), ExecutionError> {
-        let active_txns = self.active_transactions.read()
-            .map_err(|_| ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string()))?;
+    pub fn rollback_transaction(
+        &self,
+        transaction_id: TransactionId,
+    ) -> Result<(), ExecutionError> {
+        let active_txns = self.active_transactions.read().map_err(|_| {
+            ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string())
+        })?;
 
         if let Some(txn_arc) = active_txns.get(&transaction_id) {
-            let mut transaction = txn_arc.lock()
-                .map_err(|_| ExecutionError::RuntimeError("Failed to acquire transaction lock".to_string()))?;
+            let mut transaction = txn_arc.lock().map_err(|_| {
+                ExecutionError::RuntimeError("Failed to acquire transaction lock".to_string())
+            })?;
 
             if !transaction.is_active() {
-                return Err(ExecutionError::RuntimeError(
-                    format!("Transaction {} is not active", transaction_id)
-                ));
+                return Err(ExecutionError::RuntimeError(format!(
+                    "Transaction {} is not active",
+                    transaction_id
+                )));
             }
 
             let final_sequence = transaction.get_sequence_number();
-            let rollback_description = format!("ROLLBACK TRANSACTION - final sequence number: {}", final_sequence);
-            
+            let rollback_description = format!(
+                "ROLLBACK TRANSACTION - final sequence number: {}",
+                final_sequence
+            );
+
             // Write ROLLBACK entry to WAL
             let wal_entry = WALEntry::new(
                 WALEntryType::TransactionRollback,
@@ -235,20 +277,24 @@ impl TransactionManager {
                 None,
                 rollback_description.clone(),
             );
-            
+
             if let Err(e) = self.wal.write_entry(wal_entry) {
-                return Err(ExecutionError::RuntimeError(format!("Failed to write ROLLBACK to WAL: {}", e)));
+                return Err(ExecutionError::RuntimeError(format!(
+                    "Failed to write ROLLBACK to WAL: {}",
+                    e
+                )));
             }
-            
+
             // Also log to in-memory transaction log
             transaction.add_operation(OperationType::Other, rollback_description);
             transaction.rollback();
-            
+
             Ok(())
         } else {
-            Err(ExecutionError::RuntimeError(
-                format!("Transaction {} not found", transaction_id)
-            ))
+            Err(ExecutionError::RuntimeError(format!(
+                "Transaction {} not found",
+                transaction_id
+            )))
         }
     }
 
@@ -258,16 +304,22 @@ impl TransactionManager {
         isolation_level: Option<IsolationLevel>,
         access_mode: Option<AccessMode>,
     ) -> Result<(), ExecutionError> {
-        let mut next_characteristics = self.next_transaction_characteristics.lock()
+        let mut next_characteristics = self
+            .next_transaction_characteristics
+            .lock()
             .map_err(|_| ExecutionError::RuntimeError("Failed to acquire lock".to_string()))?;
 
         // Only update provided characteristics, keep existing ones for unspecified
         let current = next_characteristics.as_ref();
         let final_isolation_level = isolation_level.unwrap_or_else(|| {
-            current.map(|(iso, _)| *iso).unwrap_or(self.default_isolation_level)
+            current
+                .map(|(iso, _)| *iso)
+                .unwrap_or(self.default_isolation_level)
         });
         let final_access_mode = access_mode.unwrap_or_else(|| {
-            current.map(|(_, acc)| *acc).unwrap_or(AccessMode::ReadWrite)
+            current
+                .map(|(_, acc)| *acc)
+                .unwrap_or(AccessMode::ReadWrite)
         });
 
         *next_characteristics = Some((final_isolation_level, final_access_mode));
@@ -275,50 +327,58 @@ impl TransactionManager {
     }
 
     /// Get transaction state
-    pub fn get_transaction(&self, transaction_id: TransactionId) -> Result<Option<Arc<Mutex<TransactionState>>>, ExecutionError> {
-        let active_txns = self.active_transactions.read()
-            .map_err(|_| ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string()))?;
-        
+    pub fn get_transaction(
+        &self,
+        transaction_id: TransactionId,
+    ) -> Result<Option<Arc<Mutex<TransactionState>>>, ExecutionError> {
+        let active_txns = self.active_transactions.read().map_err(|_| {
+            ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string())
+        })?;
+
         Ok(active_txns.get(&transaction_id).cloned())
     }
 
     /// Get all active transaction IDs
     pub fn get_active_transaction_ids(&self) -> Result<Vec<TransactionId>, ExecutionError> {
-        let active_txns = self.active_transactions.read()
-            .map_err(|_| ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string()))?;
-        
+        let active_txns = self.active_transactions.read().map_err(|_| {
+            ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string())
+        })?;
+
         let mut active_ids = Vec::new();
         for (id, txn_arc) in active_txns.iter() {
-            let transaction = txn_arc.lock()
-                .map_err(|_| ExecutionError::RuntimeError("Failed to acquire transaction lock".to_string()))?;
+            let transaction = txn_arc.lock().map_err(|_| {
+                ExecutionError::RuntimeError("Failed to acquire transaction lock".to_string())
+            })?;
             if transaction.is_active() {
                 active_ids.push(*id);
             }
         }
-        
+
         Ok(active_ids)
     }
 
     /// Clean up completed transactions (should be called periodically)
     pub fn cleanup_completed_transactions(&self) -> Result<usize, ExecutionError> {
-        let mut active_txns = self.active_transactions.write()
-            .map_err(|_| ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string()))?;
+        let mut active_txns = self.active_transactions.write().map_err(|_| {
+            ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string())
+        })?;
 
         let mut to_remove = Vec::new();
-        
+
         for (id, txn_arc) in active_txns.iter() {
-            let transaction = txn_arc.lock()
-                .map_err(|_| ExecutionError::RuntimeError("Failed to acquire transaction lock".to_string()))?;
+            let transaction = txn_arc.lock().map_err(|_| {
+                ExecutionError::RuntimeError("Failed to acquire transaction lock".to_string())
+            })?;
             if !transaction.is_active() {
                 to_remove.push(*id);
             }
         }
-        
+
         let removed_count = to_remove.len();
         for id in to_remove {
             active_txns.remove(&id);
         }
-        
+
         Ok(removed_count)
     }
 
@@ -329,17 +389,20 @@ impl TransactionManager {
         operation_type: OperationType,
         description: String,
     ) -> Result<(), ExecutionError> {
-        let active_txns = self.active_transactions.read()
-            .map_err(|_| ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string()))?;
+        let active_txns = self.active_transactions.read().map_err(|_| {
+            ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string())
+        })?;
 
         if let Some(txn_arc) = active_txns.get(&transaction_id) {
-            let mut transaction = txn_arc.lock()
-                .map_err(|_| ExecutionError::RuntimeError("Failed to acquire transaction lock".to_string()))?;
+            let mut transaction = txn_arc.lock().map_err(|_| {
+                ExecutionError::RuntimeError("Failed to acquire transaction lock".to_string())
+            })?;
 
             if !transaction.is_active() {
-                return Err(ExecutionError::RuntimeError(
-                    format!("Transaction {} is not active", transaction_id)
-                ));
+                return Err(ExecutionError::RuntimeError(format!(
+                    "Transaction {} is not active",
+                    transaction_id
+                )));
             }
 
             // Add to in-memory log first to get the sequence number
@@ -357,28 +420,37 @@ impl TransactionManager {
             );
 
             if let Err(e) = self.wal.write_entry(wal_entry) {
-                return Err(ExecutionError::RuntimeError(format!("Failed to write operation to WAL: {}", e)));
+                return Err(ExecutionError::RuntimeError(format!(
+                    "Failed to write operation to WAL: {}",
+                    e
+                )));
             }
 
             Ok(())
         } else {
-            Err(ExecutionError::RuntimeError(
-                format!("Transaction {} not found", transaction_id)
-            ))
+            Err(ExecutionError::RuntimeError(format!(
+                "Transaction {} not found",
+                transaction_id
+            )))
         }
     }
 
     /// Get all active transactions for a session
-    pub fn get_session_transactions(&self, session_id: &str) -> Result<Vec<TransactionId>, ExecutionError> {
-        let active_txns = self.active_transactions.read()
-            .map_err(|_| ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string()))?;
-        
+    pub fn get_session_transactions(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<TransactionId>, ExecutionError> {
+        let active_txns = self.active_transactions.read().map_err(|_| {
+            ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string())
+        })?;
+
         let mut session_txns = Vec::new();
-        
+
         for (id, txn_arc) in active_txns.iter() {
-            let transaction = txn_arc.lock()
-                .map_err(|_| ExecutionError::RuntimeError("Failed to acquire transaction lock".to_string()))?;
-            
+            let transaction = txn_arc.lock().map_err(|_| {
+                ExecutionError::RuntimeError("Failed to acquire transaction lock".to_string())
+            })?;
+
             if transaction.is_active() {
                 if let Some(ref txn_session_id) = transaction.session_id {
                     if txn_session_id == session_id {
@@ -387,18 +459,23 @@ impl TransactionManager {
                 }
             }
         }
-        
+
         Ok(session_txns)
     }
 
     /// Get current graph for a transaction based on its session
-    pub fn get_transaction_current_graph(&self, transaction_id: TransactionId) -> Result<Option<String>, ExecutionError> {
-        let active_txns = self.active_transactions.read()
-            .map_err(|_| ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string()))?;
+    pub fn get_transaction_current_graph(
+        &self,
+        transaction_id: TransactionId,
+    ) -> Result<Option<String>, ExecutionError> {
+        let active_txns = self.active_transactions.read().map_err(|_| {
+            ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string())
+        })?;
 
         if let Some(txn_arc) = active_txns.get(&transaction_id) {
-            let transaction = txn_arc.lock()
-                .map_err(|_| ExecutionError::RuntimeError("Failed to acquire transaction lock".to_string()))?;
+            let transaction = txn_arc.lock().map_err(|_| {
+                ExecutionError::RuntimeError("Failed to acquire transaction lock".to_string())
+            })?;
 
             if let Some(ref session_id) = transaction.session_id {
                 if let Some(ref session_manager) = self.session_manager {
@@ -410,23 +487,25 @@ impl TransactionManager {
                 }
             }
         }
-        
+
         Ok(None)
     }
 
     /// Get transaction statistics
     pub fn get_statistics(&self) -> Result<TransactionStatistics, ExecutionError> {
-        let active_txns = self.active_transactions.read()
-            .map_err(|_| ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string()))?;
+        let active_txns = self.active_transactions.read().map_err(|_| {
+            ExecutionError::RuntimeError("Failed to acquire transactions lock".to_string())
+        })?;
 
         let mut stats = TransactionStatistics::default();
-        
+
         for txn_arc in active_txns.values() {
-            let transaction = txn_arc.lock()
-                .map_err(|_| ExecutionError::RuntimeError("Failed to acquire transaction lock".to_string()))?;
-            
+            let transaction = txn_arc.lock().map_err(|_| {
+                ExecutionError::RuntimeError("Failed to acquire transaction lock".to_string())
+            })?;
+
             stats.total_transactions += 1;
-            
+
             match &transaction.status {
                 super::state::TransactionStatus::Active => stats.active_transactions += 1,
                 super::state::TransactionStatus::Committed => stats.committed_transactions += 1,
@@ -435,7 +514,7 @@ impl TransactionManager {
                 _ => {}
             }
         }
-        
+
         Ok(stats)
     }
 }

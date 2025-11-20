@@ -55,8 +55,13 @@ pub struct SelectStatement {
 /// Select items: either * wildcard or explicit list of return items
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SelectItems {
-    Wildcard { location: Location },
-    Explicit { items: Vec<ReturnItem>, location: Location },
+    Wildcard {
+        location: Location,
+    },
+    Explicit {
+        items: Vec<ReturnItem>,
+        location: Location,
+    },
 }
 
 /// FROM clause with graph expression and optional match statement
@@ -86,7 +91,7 @@ pub struct CallStatement {
     pub procedure_name: String,
     pub arguments: Vec<Expression>,
     pub yield_clause: Option<YieldClause>,
-    pub where_clause: Option<WhereClause>,  // GraphLite extension (not in ISO GQL call-statement)
+    pub where_clause: Option<WhereClause>, // GraphLite extension (not in ISO GQL call-statement)
     pub location: Location,
 }
 
@@ -157,7 +162,10 @@ pub struct MutationPipeline {
 pub enum FinalMutation {
     Remove(Vec<RemoveItem>),
     Set(Vec<SetItem>),
-    Delete { expressions: Vec<Expression>, detach: bool },
+    Delete {
+        expressions: Vec<Expression>,
+        detach: bool,
+    },
 }
 
 /// A segment of a WITH-based query: MATCH [WHERE] [WITH] [WHERE] [ORDER BY] [LIMIT]
@@ -287,17 +295,17 @@ impl PathType {
     pub fn allows_repeated_vertices(&self) -> bool {
         matches!(self, PathType::Walk | PathType::Trail)
     }
-    
+
     /// Check if this path type allows repeated edges
     pub fn allows_repeated_edges(&self) -> bool {
         matches!(self, PathType::Walk)
     }
-    
+
     /// Get the string representation for queries
     pub fn as_str(&self) -> &'static str {
         match self {
             PathType::Walk => "WALK",
-            PathType::Trail => "TRAIL", 
+            PathType::Trail => "TRAIL",
             PathType::SimplePath => "SIMPLE PATH",
             PathType::AcyclicPath => "ACYCLIC PATH",
         }
@@ -307,7 +315,7 @@ impl PathType {
 /// Path pattern: [identifier =] [path_type] node (edge node)* with optional path type constraint
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PathPattern {
-    pub assignment: Option<String>, // Optional path variable assignment
+    pub assignment: Option<String>,  // Optional path variable assignment
     pub path_type: Option<PathType>, // None means default (WALK)
     pub elements: Vec<PatternElement>,
     pub location: Location,
@@ -343,10 +351,10 @@ pub struct Edge {
 /// Edge direction
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EdgeDirection {
-    Outgoing,    // ->
-    Incoming,    // <-
-    Both,        // <->
-    Undirected,  // -
+    Outgoing,   // ->
+    Incoming,   // <-
+    Both,       // <->
+    Undirected, // -
 }
 
 /// Path quantifier for specifying repetition patterns
@@ -389,7 +397,7 @@ pub struct WhereClause {
 /// DISTINCT/ALL qualifier for RETURN clause
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DistinctQualifier {
-    None,     // No qualifier specified  
+    None,     // No qualifier specified
     Distinct, // DISTINCT specified
     All,      // ALL specified
 }
@@ -571,7 +579,7 @@ pub enum Operator {
     Slash,
     Percent,
     Caret,
-    
+
     // Comparison
     Equal,
     NotEqual,
@@ -580,13 +588,13 @@ pub enum Operator {
     GreaterThan,
     GreaterEqual,
     Regex,
-    
+
     // Logical
     And,
     Or,
     Not,
     Xor,
-    
+
     // String
     In,
     NotIn,
@@ -595,10 +603,10 @@ pub enum Operator {
     Ends,
     Exists,
     Like,
-    Matches,      // Pattern matching operator
-    FuzzyEqual,   // Fuzzy/approximate equality (~=)
+    Matches,    // Pattern matching operator
+    FuzzyEqual, // Fuzzy/approximate equality (~=)
     Concat,
-    
+
     // Temporal
     Within,
 }
@@ -729,11 +737,11 @@ impl CatalogPath {
     pub fn new(segments: Vec<String>, location: Location) -> Self {
         Self { segments, location }
     }
-    
+
     pub fn to_string(&self) -> String {
         format!("/{}", self.segments.join("/"))
     }
-    
+
     /// Get the last segment as the name
     pub fn name(&self) -> Option<&String> {
         self.segments.last()
@@ -741,7 +749,7 @@ impl CatalogPath {
 }
 
 /// Graph type specification
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]  
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct GraphTypeSpec {
     pub vertex_types: Vec<VertexTypeSpec>,
     pub edge_types: Vec<EdgeTypeSpec>,
@@ -767,7 +775,6 @@ pub struct EdgeTypeSpec {
     pub destination_vertex: Option<String>,
     pub location: Location,
 }
-
 
 /// Label expression for type matching
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -810,32 +817,66 @@ pub struct PropertyTypeDecl {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum TypeSpec {
     Boolean,
-    String { max_length: Option<usize> },
-    Bytes { max_length: Option<usize> },
-    Decimal { precision: Option<u8>, scale: Option<u8> },
+    String {
+        max_length: Option<usize>,
+    },
+    Bytes {
+        max_length: Option<usize>,
+    },
+    Decimal {
+        precision: Option<u8>,
+        scale: Option<u8>,
+    },
     Integer,
     BigInt,
     SmallInt,
     Int128,
     Int256,
-    Float { precision: Option<u8> },
-    Float32,  // Dedicated f32 type for vectors
+    Float {
+        precision: Option<u8>,
+    },
+    Float32, // Dedicated f32 type for vectors
     Real,
     Double,
-    Vector { dimension: Option<usize> }, // Vector type for embeddings/vectors
+    Vector {
+        dimension: Option<usize>,
+    }, // Vector type for embeddings/vectors
     Date,
-    Time { precision: Option<u8>, with_timezone: bool },
-    Timestamp { precision: Option<u8>, with_timezone: bool },
-    ZonedTime { precision: Option<u8> },
-    ZonedDateTime { precision: Option<u8> },
-    LocalTime { precision: Option<u8> },
-    LocalDateTime { precision: Option<u8> },
-    Duration { precision: Option<u8> },
-    Reference { target_type: Option<Box<TypeSpec>> },
+    Time {
+        precision: Option<u8>,
+        with_timezone: bool,
+    },
+    Timestamp {
+        precision: Option<u8>,
+        with_timezone: bool,
+    },
+    ZonedTime {
+        precision: Option<u8>,
+    },
+    ZonedDateTime {
+        precision: Option<u8>,
+    },
+    LocalTime {
+        precision: Option<u8>,
+    },
+    LocalDateTime {
+        precision: Option<u8>,
+    },
+    Duration {
+        precision: Option<u8>,
+    },
+    Reference {
+        target_type: Option<Box<TypeSpec>>,
+    },
     Path,
-    List { element_type: Box<TypeSpec>, max_length: Option<usize> },
+    List {
+        element_type: Box<TypeSpec>,
+        max_length: Option<usize>,
+    },
     Record,
-    Graph { graph_type_spec: Option<Box<GraphTypeSpec>> },
+    Graph {
+        graph_type_spec: Option<Box<GraphTypeSpec>>,
+    },
     BindingTable,
 }
 
@@ -968,29 +1009,29 @@ pub struct SessionSetStatement {
 /// SESSION SET clauses
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SessionSetClause {
-    Schema { 
-        schema_reference: CatalogPath 
+    Schema {
+        schema_reference: CatalogPath,
     },
-    Graph { 
-        graph_expression: GraphExpression 
+    Graph {
+        graph_expression: GraphExpression,
     },
-    TimeZone { 
-        time_zone: String 
+    TimeZone {
+        time_zone: String,
     },
-    GraphParameter { 
-        parameter: String, 
+    GraphParameter {
+        parameter: String,
         graph_initializer: GraphExpression,
-        if_not_exists: bool 
+        if_not_exists: bool,
     },
-    BindingTableParameter { 
-        parameter: String, 
+    BindingTableParameter {
+        parameter: String,
         binding_table_initializer: Box<Query>,
-        if_not_exists: bool 
+        if_not_exists: bool,
     },
-    ValueParameter { 
-        parameter: String, 
+    ValueParameter {
+        parameter: String,
         value_initializer: Expression,
-        if_not_exists: bool 
+        if_not_exists: bool,
     },
 }
 
@@ -1078,7 +1119,11 @@ pub struct AtLocationStatement {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GraphExpression {
     Reference(CatalogPath),
-    Union { left: Box<GraphExpression>, right: Box<GraphExpression>, all: bool },
+    Union {
+        left: Box<GraphExpression>,
+        right: Box<GraphExpression>,
+        all: bool,
+    },
     /// NON-STANDARD EXTENSION: Marker to use current session graph (for FROM MATCH syntax)
     CurrentGraph,
 }
@@ -1291,7 +1336,6 @@ pub struct QuantifiedComparisonExpression {
     pub location: Location,
 }
 
-
 impl std::fmt::Display for TypeSpec {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -1326,7 +1370,10 @@ impl std::fmt::Display for TypeSpec {
                 None => write!(f, "VECTOR"),
             },
             TypeSpec::Date => write!(f, "DATE"),
-            TypeSpec::Time { precision, with_timezone } => {
+            TypeSpec::Time {
+                precision,
+                with_timezone,
+            } => {
                 let base = match precision {
                     Some(p) => format!("TIME({})", p),
                     None => "TIME".to_string(),
@@ -1336,8 +1383,11 @@ impl std::fmt::Display for TypeSpec {
                 } else {
                     write!(f, "{}", base)
                 }
-            },
-            TypeSpec::Timestamp { precision, with_timezone } => {
+            }
+            TypeSpec::Timestamp {
+                precision,
+                with_timezone,
+            } => {
                 let base = match precision {
                     Some(p) => format!("TIMESTAMP({})", p),
                     None => "TIMESTAMP".to_string(),
@@ -1347,7 +1397,7 @@ impl std::fmt::Display for TypeSpec {
                 } else {
                     write!(f, "{}", base)
                 }
-            },
+            }
             TypeSpec::ZonedTime { precision } => match precision {
                 Some(p) => write!(f, "TIME({}) WITH TIME ZONE", p),
                 None => write!(f, "TIME WITH TIME ZONE"),
@@ -1373,7 +1423,10 @@ impl std::fmt::Display for TypeSpec {
                 None => write!(f, "REF"),
             },
             TypeSpec::Path => write!(f, "PATH"),
-            TypeSpec::List { element_type, max_length } => match max_length {
+            TypeSpec::List {
+                element_type,
+                max_length,
+            } => match max_length {
                 Some(len) => write!(f, "{}[{}]", element_type, len),
                 None => write!(f, "{}[]", element_type),
             },
@@ -1390,10 +1443,10 @@ impl TypeSpec {
         match self {
             TypeSpec::Reference { target_type } => target_type.is_none(),
             TypeSpec::List { .. } => false, // Lists themselves are not nullable by default
-            _ => false, // Most types are not nullable by default
+            _ => false,                     // Most types are not nullable by default
         }
     }
-    
+
     /// Check if this type is a scalar type
     pub fn is_scalar(&self) -> bool {
         matches!(
@@ -1420,12 +1473,12 @@ impl TypeSpec {
                 | TypeSpec::Duration { .. }
         )
     }
-    
+
     /// Check if this type is a collection type
     pub fn is_collection(&self) -> bool {
         matches!(self, TypeSpec::List { .. })
     }
-    
+
     /// Check if this type is a temporal type
     pub fn is_temporal(&self) -> bool {
         matches!(
@@ -1439,7 +1492,7 @@ impl TypeSpec {
                 | TypeSpec::LocalDateTime { .. }
         )
     }
-    
+
     /// Check if this type is a numeric type
     pub fn is_numeric(&self) -> bool {
         matches!(
@@ -1455,7 +1508,7 @@ impl TypeSpec {
                 | TypeSpec::Double
         )
     }
-    
+
     /// Check if this is an exact numeric type (integer or decimal)
     pub fn is_exact_numeric(&self) -> bool {
         matches!(
@@ -1468,7 +1521,7 @@ impl TypeSpec {
                 | TypeSpec::Decimal { .. }
         )
     }
-    
+
     /// Check if this is an approximate numeric type (float, real, double)
     pub fn is_approximate_numeric(&self) -> bool {
         matches!(
@@ -1476,7 +1529,7 @@ impl TypeSpec {
             TypeSpec::Float { .. } | TypeSpec::Real | TypeSpec::Double
         )
     }
-    
+
     /// Get the element type if this is a collection
     pub fn element_type(&self) -> Option<&TypeSpec> {
         match self {
@@ -1484,7 +1537,7 @@ impl TypeSpec {
             _ => None,
         }
     }
-    
+
     /// Check if a temporal type has timezone information
     pub fn has_timezone(&self) -> bool {
         match self {
@@ -1496,7 +1549,7 @@ impl TypeSpec {
             _ => false,
         }
     }
-    
+
     /// Check if a temporal type has time component
     pub fn has_time_component(&self) -> bool {
         match self {
@@ -1510,7 +1563,7 @@ impl TypeSpec {
             _ => false,
         }
     }
-    
+
     /// Check if a temporal type has date component
     pub fn has_date_component(&self) -> bool {
         match self {
@@ -1518,9 +1571,9 @@ impl TypeSpec {
             | TypeSpec::Timestamp { .. }
             | TypeSpec::ZonedDateTime { .. }
             | TypeSpec::LocalDateTime { .. } => true,
-            TypeSpec::Time { .. }
-            | TypeSpec::ZonedTime { .. }
-            | TypeSpec::LocalTime { .. } => false,
+            TypeSpec::Time { .. } | TypeSpec::ZonedTime { .. } | TypeSpec::LocalTime { .. } => {
+                false
+            }
             _ => false,
         }
     }
@@ -1532,8 +1585,8 @@ pub struct IsPredicateExpression {
     pub subject: Box<Expression>,
     pub predicate_type: IsPredicateType,
     pub negated: bool,
-    pub target: Option<Box<Expression>>,     // For SOURCE OF, DESTINATION OF
-    pub type_spec: Option<TypeSpec>,         // For IS TYPED
+    pub target: Option<Box<Expression>>, // For SOURCE OF, DESTINATION OF
+    pub type_spec: Option<TypeSpec>,     // For IS TYPED
     pub location: Location,
 }
 

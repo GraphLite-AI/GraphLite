@@ -6,16 +6,15 @@
 //! This module provides a consolidated session management model that combines
 //! authentication, authorization, and database session state management.
 
+use crate::session::transaction_state::SessionTransactionState;
+use crate::storage::{GraphCache, StorageManager, Value};
+use crate::txn::TransactionManager;
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::session::transaction_state::SessionTransactionState;
-use crate::txn::TransactionManager;
-use crate::storage::{Value, GraphCache, StorageManager};
 
 /// Stub for session permission cache
 #[derive(Clone, Default)]
-pub struct SessionPermissionCache {
-}
+pub struct SessionPermissionCache {}
 
 impl SessionPermissionCache {
     pub fn new() -> Self {
@@ -50,7 +49,7 @@ pub struct UserSession {
     pub username: String,
     /// User roles for authorization
     pub roles: Vec<String>,
-    
+
     // === Database Session Context ===
     /// Current graph being used (equivalent to current database/schema)
     pub current_graph: Option<String>,
@@ -58,7 +57,7 @@ pub struct UserSession {
     pub current_schema: Option<String>,
     /// Current timezone setting
     pub current_timezone: Option<String>,
-    
+
     // === Session State ===
     /// Session parameters (SET commands, user variables)
     pub parameters: HashMap<String, Value>,
@@ -66,7 +65,7 @@ pub struct UserSession {
     pub permissions: SessionPermissionCache,
     /// Transaction state for this session (shared reference)
     pub transaction_state: Arc<SessionTransactionState>,
-    
+
     // === Session Lifecycle ===
     /// When the session was created
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -105,9 +104,8 @@ impl UserSession {
         }
     }
 
-
     // === Graph Context Management ===
-    
+
     /// Set the current graph for this session
     pub fn set_current_graph(&mut self, graph_path: Option<String>) {
         self.current_graph = graph_path;
@@ -148,7 +146,7 @@ impl UserSession {
     }
 
     // === Session Parameter Management ===
-    
+
     /// Set a session parameter
     pub fn set_parameter(&mut self, key: String, value: Value) {
         self.parameters.insert(key, value);
@@ -177,7 +175,10 @@ impl UserSession {
     /// Set the schema enforcement mode for this session
     /// Valid values: "strict", "advisory", "disabled"
     pub fn set_schema_enforcement_mode(&mut self, mode: &str) {
-        self.set_parameter("schema_enforcement_mode".to_string(), Value::String(mode.to_string()));
+        self.set_parameter(
+            "schema_enforcement_mode".to_string(),
+            Value::String(mode.to_string()),
+        );
     }
 
     /// Get the current schema enforcement mode
@@ -193,7 +194,10 @@ impl UserSession {
 
     /// Set whether to validate on write operations
     pub fn set_validate_on_write(&mut self, enabled: bool) {
-        self.set_parameter("schema_validate_on_write".to_string(), Value::Boolean(enabled));
+        self.set_parameter(
+            "schema_validate_on_write".to_string(),
+            Value::Boolean(enabled),
+        );
     }
 
     /// Get whether to validate on write operations (default: true)
@@ -208,7 +212,10 @@ impl UserSession {
 
     /// Set whether to allow unknown properties not defined in schema
     pub fn set_allow_unknown_properties(&mut self, allow: bool) {
-        self.set_parameter("schema_allow_unknown_properties".to_string(), Value::Boolean(allow));
+        self.set_parameter(
+            "schema_allow_unknown_properties".to_string(),
+            Value::Boolean(allow),
+        );
     }
 
     /// Get whether to allow unknown properties (default: false in strict mode, true otherwise)
@@ -222,7 +229,7 @@ impl UserSession {
     }
 
     // === Session Lifecycle Management ===
-    
+
     /// Update the last activity timestamp
     pub fn update_activity(&mut self) {
         self.last_activity = chrono::Utc::now();
@@ -275,7 +282,7 @@ impl UserSession {
     }
 
     // === Authorization ===
-    
+
     /// Check if user has a specific role
     pub fn has_role(&self, role_name: &str) -> bool {
         self.roles.contains(&role_name.to_string())
@@ -322,11 +329,13 @@ pub struct Session {
     pub storage: Arc<StorageManager>,
 
     /// Current graph name
-    #[allow(dead_code)] // FALSE POSITIVE - Used in set_current_graph() (line 346), get_current_graph() (line 365), get_current_graph_mut() (line 356). Compiler cannot detect field usage across module boundaries when accessed through public API methods.
+    #[allow(dead_code)]
+    // FALSE POSITIVE - Used in set_current_graph() (line 346), get_current_graph() (line 365), get_current_graph_mut() (line 356). Compiler cannot detect field usage across module boundaries when accessed through public API methods.
     pub current_graph: Option<String>,
 
     /// Graph caches by name
-    #[allow(dead_code)] // FALSE POSITIVE - Used in set_current_graph() (line 350), get_current_graph() (line 366), get_current_graph_mut() (line 357). Compiler cannot detect field usage across module boundaries when accessed through public API methods.
+    #[allow(dead_code)]
+    // FALSE POSITIVE - Used in set_current_graph() (line 350), get_current_graph() (line 366), get_current_graph_mut() (line 357). Compiler cannot detect field usage across module boundaries when accessed through public API methods.
     pub graphs: HashMap<String, GraphCache>,
 }
 
@@ -388,6 +397,8 @@ impl Session {
     /// Create or get a graph by name
     #[allow(dead_code)] // ROADMAP v0.2.0 - Session management for multi-user support (see ROADMAP.md §2)
     pub fn get_or_create_graph(&mut self, name: &str) -> &mut GraphCache {
-        self.graphs.entry(name.to_string()).or_insert_with(GraphCache::new)
+        self.graphs
+            .entry(name.to_string())
+            .or_insert_with(GraphCache::new)
     }
 }

@@ -6,13 +6,13 @@
 //! This module generates optimized physical plans for comma-separated patterns,
 //! integrating with existing physical operators (HashJoin, NestedLoopJoin, PathTraversal).
 
-use crate::ast::ast::{PathPattern, Expression, PathType, Variable};
-use crate::plan::physical::PhysicalNode;
+use crate::ast::ast::{Expression, PathPattern, PathType, Variable};
 use crate::plan::logical::{JoinType, PathElement};
 use crate::plan::pattern_optimization::{
-    pattern_analysis::{PatternPlanStrategy, LinearPath, JoinStep, TraversalStep},
     logical_integration::PatternOptimizationResult,
+    pattern_analysis::{JoinStep, LinearPath, PatternPlanStrategy, TraversalStep},
 };
+use crate::plan::physical::PhysicalNode;
 
 /// Physical plan generator for optimized pattern execution
 ///
@@ -83,9 +83,11 @@ impl PhysicalPatternPlanGenerator {
             PatternPlanStrategy::PathTraversal(linear_path) => {
                 self.generate_path_traversal_plan(linear_path, base_input)
             }
-            PatternPlanStrategy::HashJoin { patterns, join_order, .. } => {
-                self.generate_hash_join_plan(patterns, join_order, base_input)
-            }
+            PatternPlanStrategy::HashJoin {
+                patterns,
+                join_order,
+                ..
+            } => self.generate_hash_join_plan(patterns, join_order, base_input),
             PatternPlanStrategy::NestedLoopJoin { patterns, .. } => {
                 self.generate_nested_loop_plan(patterns, base_input)
             }
@@ -103,7 +105,7 @@ impl PhysicalPatternPlanGenerator {
     ) -> Result<PhysicalNode, String> {
         // This is the core implementation that fixes the comma-separated pattern bug
         // Instead of creating a Cartesian product, we create a connected path traversal
-        
+
         let mut current_plan = base_input;
         let estimated_rows = current_plan.get_row_count();
         let base_cost = self.get_node_cost(&current_plan);
@@ -111,7 +113,7 @@ impl PhysicalPatternPlanGenerator {
         // Convert the linear path into a series of connected path traversal operations
         for (i, step) in linear_path.steps.iter().enumerate() {
             let path_elements = self.create_path_elements_from_step(step)?;
-            
+
             // Create path traversal node that connects patterns through shared variables
             let traversal_node = PhysicalNode::PathTraversal {
                 path_type: self.determine_path_type(step),
@@ -147,9 +149,11 @@ impl PhysicalPatternPlanGenerator {
         // Execute joins in the specified order
         for (i, join_step) in join_order.iter().enumerate() {
             // Create build and probe sides from the patterns
-            let build_pattern = patterns.get(join_step.left_pattern_idx)
+            let build_pattern = patterns
+                .get(join_step.left_pattern_idx)
                 .ok_or("Invalid left pattern index")?;
-            let probe_pattern = patterns.get(join_step.right_pattern_idx)
+            let probe_pattern = patterns
+                .get(join_step.right_pattern_idx)
                 .ok_or("Invalid right pattern index")?;
 
             // Generate sub-plans for build and probe sides
@@ -225,7 +229,7 @@ impl PhysicalPatternPlanGenerator {
     ) -> Result<PhysicalNode, String> {
         // For Cartesian product, we use nested loop joins without join conditions
         // This maintains the original behavior but makes it explicit
-        
+
         if patterns.len() < 2 {
             return Ok(base_input);
         }
@@ -258,7 +262,10 @@ impl PhysicalPatternPlanGenerator {
     }
 
     /// Helper: Create path elements from a traversal step
-    fn create_path_elements_from_step(&self, step: &TraversalStep) -> Result<Vec<PathElement>, String> {
+    fn create_path_elements_from_step(
+        &self,
+        step: &TraversalStep,
+    ) -> Result<Vec<PathElement>, String> {
         // Convert the relationship pattern into path elements
         let path_element = PathElement {
             edge_variable: Some(step.from_var.clone()),
@@ -310,11 +317,18 @@ impl PhysicalPatternPlanGenerator {
     }
 
     /// Helper: Convert join type from pattern analysis to physical
-    fn convert_join_type(&self, join_type: &crate::plan::pattern_optimization::pattern_analysis::JoinType) -> JoinType {
+    fn convert_join_type(
+        &self,
+        join_type: &crate::plan::pattern_optimization::pattern_analysis::JoinType,
+    ) -> JoinType {
         match join_type {
             crate::plan::pattern_optimization::pattern_analysis::JoinType::Hash => JoinType::Inner,
-            crate::plan::pattern_optimization::pattern_analysis::JoinType::NestedLoop => JoinType::Inner,
-            crate::plan::pattern_optimization::pattern_analysis::JoinType::IndexLookup => JoinType::Inner,
+            crate::plan::pattern_optimization::pattern_analysis::JoinType::NestedLoop => {
+                JoinType::Inner
+            }
+            crate::plan::pattern_optimization::pattern_analysis::JoinType::IndexLookup => {
+                JoinType::Inner
+            }
         }
     }
 
@@ -398,7 +412,7 @@ pub fn estimate_optimization_improvement(
             _ => 100.0,
         }
     };
-    
+
     let original_cost = get_cost(original_plan);
     let optimized_cost = get_cost(optimized_plan);
     let original_rows = original_plan.get_row_count();
@@ -451,8 +465,8 @@ pub struct OptimizationImprovement {
 impl OptimizationImprovement {
     /// Check if the optimization provides significant improvement
     pub fn is_significant_improvement(&self, threshold: f64) -> bool {
-        self.cost_reduction_percentage >= threshold || 
-        self.cardinality_reduction_percentage >= threshold
+        self.cost_reduction_percentage >= threshold
+            || self.cardinality_reduction_percentage >= threshold
     }
 
     /// Get a human-readable description of the improvement
@@ -472,7 +486,6 @@ impl OptimizationImprovement {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn test_physical_generator_creation() {
@@ -489,7 +502,7 @@ mod tests {
             max_traversal_depth: 3,
             enable_parallel_joins: true,
         };
-        
+
         let generator = PhysicalPatternPlanGenerator::with_config(config.clone());
         assert!(!generator.config.enable_aggressive_optimization);
         assert!(!generator.config.prefer_indexed_access);
@@ -517,7 +530,7 @@ mod tests {
         };
 
         let improvement = estimate_optimization_improvement(&original_plan, &optimized_plan);
-        
+
         assert!((improvement.cost_reduction_percentage - 90.0).abs() < 0.1);
         assert!((improvement.cardinality_reduction_percentage - 90.0).abs() < 0.1);
         assert!(improvement.is_significant_improvement(50.0));

@@ -1,47 +1,48 @@
 //! ISO GQL Aggregation and Grouping Compliance Tests
-//! 
+//!
 //! Tests for GROUP BY, HAVING, aggregate functions, and window functions
 //! according to ISO GQL standard
 
 #[path = "testutils/mod.rs"]
 mod testutils;
 
-use testutils::test_fixture::{TestFixture, TestSuite, TestCase, FixtureType};
-use graphlite::Value;  // Use public API export
+use graphlite::Value; // Use public API export
 use std::collections::HashMap;
-
-
-
+use testutils::test_fixture::{FixtureType, TestCase, TestFixture, TestSuite};
 
 #[test]
 fn test_basic_aggregation_functions() {
     let fixture = TestFixture::new().expect("Failed to create test fixture");
     // Setup fresh graph for this test to avoid interference
-    fixture.setup_graph("test_basic_aggregation_functions").expect("Failed to setup graph");
+    fixture
+        .setup_graph("test_basic_aggregation_functions")
+        .expect("Failed to setup graph");
     // Re-insert fraud data since we have a fresh graph
-    fixture.insert_fraud_data().expect("Failed to insert fraud data");
+    fixture
+        .insert_fraud_data()
+        .expect("Failed to insert fraud data");
 
     // Test COUNT
     fixture.assert_first_value(
         "MATCH (a:Account) RETURN count(a) as account_count",
         "account_count",
-        Value::Number(50.0)
+        Value::Number(50.0),
     );
-    
+
     fixture.assert_first_value(
         "MATCH ()-[t:Transaction]->() RETURN count(t) as transaction_count",
         "transaction_count",
-        Value::Number(100.0) // Updated based on actual data generation
+        Value::Number(100.0), // Updated based on actual data generation
     );
-    
+
     // Test COUNT DISTINCT
     let result = fixture.assert_query_succeeds(
-        "MATCH (a:Account) RETURN count(DISTINCT a.account_type) as distinct_types"
+        "MATCH (a:Account) RETURN count(DISTINCT a.account_type) as distinct_types",
     );
     assert!(!result.rows.is_empty());
-    
+
     // Test SUM and AVG for transactions
-    // From sample_data_generator.rs: 
+    // From sample_data_generator.rs:
     // - 10% are high-value (50k-100k range)
     // - 90% are regular (100-10000 range)
     // We can at least verify ranges
@@ -49,37 +50,41 @@ fn test_basic_aggregation_functions() {
         "MATCH ()-[t:Transaction]->() 
          RETURN sum(t.amount) as total_amount,
                 avg(t.amount) as avg_amount,
-                count(t) as transaction_count"
+                count(t) as transaction_count",
     );
     assert!(!result.rows.is_empty());
-    
+
     let total = match result.rows[0].values.get("total_amount").unwrap() {
         Value::Number(n) => *n,
         _ => panic!("Expected number for total_amount"),
     };
-    
+
     let avg = match result.rows[0].values.get("avg_amount").unwrap() {
         Value::Number(n) => *n,
         _ => panic!("Expected number for avg_amount"),
     };
-    
+
     // Verify reasonable ranges based on data generation logic (50 accounts, 100 transactions)
     // Based on actual test output: total=6375, avg=63.75
-    assert!(total > 5_000.0, "Total transaction amount should be > 5K, got: {}", total);
+    assert!(
+        total > 5_000.0,
+        "Total transaction amount should be > 5K, got: {}",
+        total
+    );
     assert!(total < 10_000.0, "Total transaction amount should be < 10K");
     assert!(avg > 50.0, "Average transaction should be > 50");
     assert!(avg < 100.0, "Average transaction should be < 100");
-    
-    // Test MIN and MAX with actual expected values  
+
+    // Test MIN and MAX with actual expected values
     // Based on test output: min_balance = 101.0
     // Need to determine max_balance dynamically since the generation formula changed
     let balance_result = fixture.assert_query_succeeds(
         "MATCH (a:Account) 
          RETURN min(a.balance) as min_balance,
-                max(a.balance) as max_balance"
+                max(a.balance) as max_balance",
     );
     assert!(!balance_result.rows.is_empty());
-    
+
     let min_balance = match balance_result.rows[0].values.get("min_balance").unwrap() {
         Value::Number(n) => *n,
         _ => panic!("Expected number for min_balance"),
@@ -88,64 +93,80 @@ fn test_basic_aggregation_functions() {
         Value::Number(n) => *n,
         _ => panic!("Expected number for max_balance"),
     };
-    
+
     // Verify reasonable ranges
     assert!(min_balance > 50.0, "Min balance should be > 50");
-    assert!(max_balance > min_balance, "Max balance should be > min balance");
-    
-    // Test AVG calculation - verify it's reasonable
-    let avg_result = fixture.assert_query_succeeds(
-        "MATCH (a:Account) RETURN avg(a.balance) as avg_balance"
+    assert!(
+        max_balance > min_balance,
+        "Max balance should be > min balance"
     );
+
+    // Test AVG calculation - verify it's reasonable
+    let avg_result =
+        fixture.assert_query_succeeds("MATCH (a:Account) RETURN avg(a.balance) as avg_balance");
     assert!(!avg_result.rows.is_empty());
-    
+
     let avg_balance = match avg_result.rows[0].values.get("avg_balance").unwrap() {
         Value::Number(n) => *n,
         _ => panic!("Expected number for avg_balance"),
     };
-    
-    assert!(avg_balance > min_balance, "Avg balance should be > min balance");
-    assert!(avg_balance < max_balance, "Avg balance should be < max balance");
+
+    assert!(
+        avg_balance > min_balance,
+        "Avg balance should be > min balance"
+    );
+    assert!(
+        avg_balance < max_balance,
+        "Avg balance should be < max balance"
+    );
 }
 
 #[test]
 fn test_group_by_operations() {
     let fixture = TestFixture::new().expect("Failed to create test fixture");
     // Setup fresh graph for this test to avoid interference
-    fixture.setup_graph("test_group_by_operations").expect("Failed to setup graph");
+    fixture
+        .setup_graph("test_group_by_operations")
+        .expect("Failed to setup graph");
     // Re-insert fraud data since we have a fresh graph
-    fixture.insert_fraud_data().expect("Failed to insert fraud data");
+    fixture
+        .insert_fraud_data()
+        .expect("Failed to insert fraud data");
 
     // Test basic GROUP BY
-    // From sample_data_generator: account_type cycles through ["checking", "savings", "business", "investment"]  
+    // From sample_data_generator: account_type cycles through ["checking", "savings", "business", "investment"]
     // With 50 accounts, we should have 12-13 of each type
     let result = fixture.assert_query_succeeds(
         "MATCH (a:Account) 
          RETURN a.account_type, count(a) as count 
          GROUP BY a.account_type 
-         ORDER BY count DESC"
+         ORDER BY count DESC",
     );
-    
+
     assert_eq!(result.rows.len(), 4, "Should have exactly 4 account types");
-    
+
     // Each type should have 12-13 accounts (50 / 4 ≈ 12.5)
     for row in &result.rows {
         let count = match row.values.get("count").unwrap() {
             Value::Number(n) => *n as usize,
             _ => panic!("Expected number for count"),
         };
-        assert!(count >= 12 && count <= 13, "Each account type should have 12-13 accounts, got: {}", count);
+        assert!(
+            count >= 12 && count <= 13,
+            "Each account type should have 12-13 accounts, got: {}",
+            count
+        );
     }
-    
+
     // Test GROUP BY with multiple columns
     let result = fixture.assert_query_succeeds(
         "MATCH (a:Account) 
          RETURN a.account_type, a.account_status, count(a) as count
          GROUP BY a.account_type, a.account_status
-         ORDER BY a.account_type, a.account_status"
+         ORDER BY a.account_type, a.account_status",
     );
     assert!(!result.rows.is_empty());
-    
+
     // Test GROUP BY with aggregation on relationships
     let result = fixture.assert_query_succeeds(
         "MATCH (m:Merchant)<-[t:Transaction]-() 
@@ -156,10 +177,10 @@ fn test_group_by_operations() {
                 min(t.amount) as min_transaction,
                 max(t.amount) as max_transaction
          GROUP BY m.category 
-         ORDER BY total_volume DESC"
+         ORDER BY total_volume DESC",
     );
     assert!(!result.rows.is_empty());
-    
+
     // Test GROUP BY with complex expressions
     let result = fixture.assert_query_succeeds(
         "MATCH ()-[t:Transaction]->() 
@@ -172,10 +193,10 @@ fn test_group_by_operations() {
                 count(t) as transaction_count,
                 sum(t.amount) as total_amount
          GROUP BY amount_category
-         ORDER BY total_amount DESC"
+         ORDER BY total_amount DESC",
     );
     assert!(!result.rows.is_empty());
-    
+
     // Test nested aggregations
     let result = fixture.assert_query_succeeds(
         "MATCH (a:Account)-[t:Transaction]->()
@@ -188,7 +209,7 @@ fn test_group_by_operations() {
                 count(a) as account_count,
                 avg(total_spent) as avg_total_spent
          GROUP BY activity_level
-         ORDER BY avg_total_spent DESC"
+         ORDER BY avg_total_spent DESC",
     );
     assert!(!result.rows.is_empty());
 }
@@ -197,9 +218,13 @@ fn test_group_by_operations() {
 fn test_having_clause_operations() {
     let fixture = TestFixture::new().expect("Failed to create test fixture");
     // Setup fresh graph for this test to avoid interference
-    fixture.setup_graph("test_having_clause_operations").expect("Failed to setup graph");
+    fixture
+        .setup_graph("test_having_clause_operations")
+        .expect("Failed to setup graph");
     // Re-insert fraud data since we have a fresh graph
-    fixture.insert_fraud_data().expect("Failed to insert fraud data");
+    fixture
+        .insert_fraud_data()
+        .expect("Failed to insert fraud data");
 
     // Test HAVING with simple conditions
     let result = fixture.assert_query_succeeds(
@@ -207,10 +232,10 @@ fn test_having_clause_operations() {
          RETURN a.account_type, count(a) as count 
          GROUP BY a.account_type 
          HAVING count(a) > 10 
-         ORDER BY count DESC"
+         ORDER BY count DESC",
     );
     assert!(!result.rows.is_empty());
-    
+
     // Test HAVING with multiple conditions
     let _ = fixture.assert_query_succeeds(
         "MATCH (m:Merchant)<-[t:Transaction]-() 
@@ -220,10 +245,10 @@ fn test_having_clause_operations() {
          GROUP BY m.name 
          HAVING count(t) > 20 AND sum(t.amount) > 50000
          ORDER BY total_volume DESC
-         LIMIT 10"
+         LIMIT 10",
     );
     // May have 0 results if no merchant meets criteria, which is valid
-    
+
     // Test HAVING with aggregation functions
     let _ = fixture.assert_query_succeeds(
         "MATCH (a:Account)-[t:Transaction]->() 
@@ -234,10 +259,10 @@ fn test_having_clause_operations() {
          GROUP BY a.account_number 
          HAVING avg(t.amount) > 5000 AND count(t) > 3
          ORDER BY total_spent DESC
-         LIMIT 20"
+         LIMIT 20",
     );
     // Results depend on data distribution
-    
+
     // Test HAVING with complex expressions
     let result = fixture.assert_query_succeeds(
         "MATCH ()-[t:Transaction]->(m:Merchant) 
@@ -247,7 +272,7 @@ fn test_having_clause_operations() {
                 sum(t.amount) as total_volume
          GROUP BY m.category 
          HAVING sum(t.amount) / count(t) > 50  -- avg > 50, adjusted for smaller dataset
-         ORDER BY total_volume DESC"
+         ORDER BY total_volume DESC",
     );
     assert!(!result.rows.is_empty());
 }
@@ -256,19 +281,23 @@ fn test_having_clause_operations() {
 fn test_collect_and_list_aggregations() {
     let fixture = TestFixture::new().expect("Failed to create test fixture");
     // Setup fresh graph for this test to avoid interference
-    fixture.setup_graph("test_collect_and_list_aggregations").expect("Failed to setup graph");
+    fixture
+        .setup_graph("test_collect_and_list_aggregations")
+        .expect("Failed to setup graph");
     // Re-insert fraud data since we have a fresh graph
-    fixture.insert_fraud_data().expect("Failed to insert fraud data");
+    fixture
+        .insert_fraud_data()
+        .expect("Failed to insert fraud data");
 
     // Test COLLECT function
     let result = fixture.assert_query_succeeds(
         "MATCH (a:Account) 
          RETURN a.account_type, collect(a.account_number) as account_numbers 
          GROUP BY a.account_type 
-         LIMIT 2"
+         LIMIT 2",
     );
     assert!(result.rows.len() <= 2);
-    
+
     // Test COLLECT with DISTINCT
     let result = fixture.assert_query_succeeds(
         "MATCH (a:Account)-[t:Transaction]->(m:Merchant) 
@@ -277,10 +306,10 @@ fn test_collect_and_list_aggregations() {
                 count(DISTINCT m.category) as category_count
          GROUP BY a.account_number 
          ORDER BY category_count DESC 
-         LIMIT 10"
+         LIMIT 10",
     );
     assert!(result.rows.len() <= 10);
-    
+
     // Test collecting relationship properties
     let result = fixture.assert_query_succeeds(
         "MATCH (m:Merchant)<-[t:Transaction]-(a:Account) 
@@ -288,7 +317,7 @@ fn test_collect_and_list_aggregations() {
                 collect(t.amount) as transaction_amounts,
                 collect(a.account_number) as customer_accounts
          GROUP BY m.name 
-         LIMIT 5"
+         LIMIT 5",
     );
     assert!(result.rows.len() <= 5);
 }
@@ -297,9 +326,13 @@ fn test_collect_and_list_aggregations() {
 fn test_statistical_aggregations() {
     let fixture = TestFixture::new().expect("Failed to create test fixture");
     // Setup fresh graph for this test to avoid interference
-    fixture.setup_graph("test_statistical_aggregations").expect("Failed to setup graph");
+    fixture
+        .setup_graph("test_statistical_aggregations")
+        .expect("Failed to setup graph");
     // Re-insert fraud data since we have a fresh graph
-    fixture.insert_fraud_data().expect("Failed to insert fraud data");
+    fixture
+        .insert_fraud_data()
+        .expect("Failed to insert fraud data");
 
     // Test statistical functions
     let result = fixture.assert_query_succeeds(
@@ -312,7 +345,7 @@ fn test_statistical_aggregations() {
                 sum(t.amount * t.amount) / count(t) - (avg(t.amount) * avg(t.amount)) as variance_approx"
     );
     assert!(!result.rows.is_empty());
-    
+
     // Test percentile-like operations (using ORDER BY and LIMIT)
     // Test basic statistical operations with ISO GQL compliant syntax
     // (Array indexing with amounts[index] is not part of ISO GQL standard)
@@ -321,17 +354,17 @@ fn test_statistical_aggregations() {
          RETURN count(t.amount) as total_count,
                 min(t.amount) as min_amount,
                 max(t.amount) as max_amount,
-                avg(t.amount) as avg_amount"
+                avg(t.amount) as avg_amount",
     );
     assert!(!result.rows.is_empty());
-    
+
     // Test mode calculation (most frequent value)
     let result = fixture.assert_query_succeeds(
         "MATCH (a:Account) 
          RETURN a.account_type, count(a) as frequency 
          GROUP BY a.account_type 
          ORDER BY frequency DESC 
-         LIMIT 1"
+         LIMIT 1",
     );
     assert_eq!(result.rows.len(), 1);
 }
@@ -340,9 +373,13 @@ fn test_statistical_aggregations() {
 fn test_window_function_like_operations() {
     let fixture = TestFixture::new().expect("Failed to create test fixture");
     // Setup fresh graph for this test to avoid interference
-    fixture.setup_graph("test_window_function_like_operations").expect("Failed to setup graph");
+    fixture
+        .setup_graph("test_window_function_like_operations")
+        .expect("Failed to setup graph");
     // Re-insert fraud data since we have a fresh graph
-    fixture.insert_fraud_data().expect("Failed to insert fraud data");
+    fixture
+        .insert_fraud_data()
+        .expect("Failed to insert fraud data");
 
     // Test ranking with ORDER BY (simulating window functions)
     // Test ordering and limiting without non-compliant window functions
@@ -351,10 +388,10 @@ fn test_window_function_like_operations() {
         "MATCH (a:Account) 
          RETURN a.account_number, a.balance 
          ORDER BY a.balance DESC 
-         LIMIT 10"
+         LIMIT 10",
     );
     assert!(result.rows.len() <= 10);
-    
+
     // Test aggregations that simulate window function behavior using GROUP BY
     // Since running totals require window functions not in ISO GQL,
     // we test account-level aggregations instead
@@ -366,25 +403,25 @@ fn test_window_function_like_operations() {
                 avg(t.amount) as avg_transaction_amount
          GROUP BY a.account_number
          ORDER BY total_spent DESC
-         LIMIT 20"
+         LIMIT 20",
     );
     assert!(!result.rows.is_empty());
-    
+
     // Test percentile-like operations using ORDER BY and LIMIT
     // (True percentile functions are not in ISO GQL standard)
     let top_result = fixture.assert_query_succeeds(
         "MATCH ()-[t:Transaction]->() 
          RETURN t.amount
          ORDER BY t.amount DESC
-         LIMIT 5"
+         LIMIT 5",
     );
     assert!(!top_result.rows.is_empty());
-    
+
     let bottom_result = fixture.assert_query_succeeds(
         "MATCH ()-[t:Transaction]->() 
          RETURN t.amount
          ORDER BY t.amount ASC
-         LIMIT 5"
+         LIMIT 5",
     );
     assert!(!bottom_result.rows.is_empty());
 }
@@ -448,20 +485,29 @@ fn test_aggregation_data_driven_cases() {
             },
         ],
     };
-    
-    let results = test_suite.run().expect("Failed to run aggregation test suite");
+
+    let results = test_suite
+        .run()
+        .expect("Failed to run aggregation test suite");
     results.print_summary();
-    
-    assert!(results.passed >= 5, "Should have at least 5 passing aggregation tests");
+
+    assert!(
+        results.passed >= 5,
+        "Should have at least 5 passing aggregation tests"
+    );
 }
 
 #[test]
 fn test_complex_aggregation_scenarios() {
     let fixture = TestFixture::new().expect("Failed to create test fixture");
     // Setup fresh graph for this test to avoid interference
-    fixture.setup_graph("test_complex_aggregation_scenarios").expect("Failed to setup graph");
+    fixture
+        .setup_graph("test_complex_aggregation_scenarios")
+        .expect("Failed to setup graph");
     // Re-insert fraud data since we have a fresh graph
-    fixture.insert_fraud_data().expect("Failed to insert fraud data");
+    fixture
+        .insert_fraud_data()
+        .expect("Failed to insert fraud data");
 
     // Test complex aggregation with DISTINCT and multiple functions (ISO GQL compliant)
     let result = fixture.assert_query_succeeds(
@@ -470,18 +516,21 @@ fn test_complex_aggregation_scenarios() {
                 count(DISTINCT m.category) as unique_categories,
                 count(t) as total_transactions,
                 sum(t.amount) as total_volume,
-                avg(t.amount) as avg_transaction_amount"
+                avg(t.amount) as avg_transaction_amount",
     );
     assert!(!result.rows.is_empty());
-    
+
     // Verify we get reasonable aggregation results
     let unique_accounts = match result.rows[0].values.get("unique_accounts").unwrap() {
         Value::Number(n) => *n as usize,
         _ => panic!("Expected number for unique_accounts"),
     };
-    assert!(unique_accounts > 0, "Should have at least some unique accounts");
-    
-    // Test cohort analysis using compliant CASE in RETURN clause  
+    assert!(
+        unique_accounts > 0,
+        "Should have at least some unique accounts"
+    );
+
+    // Test cohort analysis using compliant CASE in RETURN clause
     let result = fixture.assert_query_succeeds(
         "MATCH (a:Account)-[t:Transaction]->()
          RETURN CASE 
@@ -497,10 +546,10 @@ fn test_complex_aggregation_scenarios() {
                     WHEN a.balance < 100000 THEN 'medium' 
                     ELSE 'high'
                 END
-         ORDER BY balance_tier"
+         ORDER BY balance_tier",
     );
     assert!(!result.rows.is_empty());
-    
+
     // Test grouping by computed expressions (simplified for compliance)
     let _ = fixture.assert_query_succeeds(
         "MATCH (a:Account)-[t:Transaction]->()
@@ -510,10 +559,10 @@ fn test_complex_aggregation_scenarios() {
                 avg(t.amount) as avg_amount
          GROUP BY a.account_type
          ORDER BY a.account_type
-         LIMIT 10"
+         LIMIT 10",
     );
     // May have limited results based on timestamp format
-    
+
     // Test comprehensive aggregation with DISTINCT functions
     let _ = fixture.assert_query_succeeds(
         "MATCH (a:Account)-[t:Transaction]->(m:Merchant)
@@ -523,7 +572,7 @@ fn test_complex_aggregation_scenarios() {
                 sum(t.amount) as total_volume,
                 count(DISTINCT m) as unique_merchants,
                 count(DISTINCT m.category) as unique_categories,
-                avg(t.amount) as avg_transaction_amount"
+                avg(t.amount) as avg_transaction_amount",
     );
     // May have empty results if no high-balance accounts exist, which is valid
 }
@@ -532,13 +581,17 @@ fn test_complex_aggregation_scenarios() {
 fn test_aggregation_performance() {
     let fixture = TestFixture::new().expect("Failed to create test fixture");
     // Setup fresh graph for this test to avoid interference
-    fixture.setup_graph("test_aggregation_performance").expect("Failed to setup graph");
+    fixture
+        .setup_graph("test_aggregation_performance")
+        .expect("Failed to setup graph");
     // Re-insert fraud data since we have a fresh graph
-    fixture.insert_fraud_data().expect("Failed to insert fraud data");
+    fixture
+        .insert_fraud_data()
+        .expect("Failed to insert fraud data");
 
     // Test performance of complex aggregations
     let start = std::time::Instant::now();
-    
+
     let result = fixture.assert_query_succeeds(
         "MATCH (a:Account)-[t:Transaction]->(m:Merchant)
          RETURN a.account_type,
@@ -551,16 +604,19 @@ fn test_aggregation_performance() {
                 count(DISTINCT a) as unique_accounts,
                 count(DISTINCT m) as unique_merchants
          GROUP BY a.account_type, m.category
-         ORDER BY total_amount DESC"
+         ORDER BY total_amount DESC",
     );
-    
+
     let duration = start.elapsed();
-    assert!(duration.as_secs() < 15, "Complex aggregation should complete within 15 seconds");
+    assert!(
+        duration.as_secs() < 15,
+        "Complex aggregation should complete within 15 seconds"
+    );
     assert!(!result.rows.is_empty());
-    
+
     // Test large GROUP BY performance
     let start = std::time::Instant::now();
-    
+
     fixture.assert_query_succeeds(
         "MATCH (a:Account)
          RETURN a.account_number,
@@ -568,66 +624,66 @@ fn test_aggregation_performance() {
                 a.risk_score,
                 a.account_status
          GROUP BY a.account_number, a.balance, a.risk_score, a.account_status
-         ORDER BY a.balance DESC"
+         ORDER BY a.balance DESC",
     );
-    
+
     let duration = start.elapsed();
-    assert!(duration.as_secs() < 10, "Large GROUP BY should complete within 10 seconds");
+    assert!(
+        duration.as_secs() < 10,
+        "Large GROUP BY should complete within 10 seconds"
+    );
 }
 
 #[test]
 fn test_aggregation_edge_cases() {
     let fixture = TestFixture::new().expect("Failed to create test fixture");
     // Setup fresh graph for this test to avoid interference
-    fixture.setup_graph("test_aggregation_edge_cases").expect("Failed to setup graph");
+    fixture
+        .setup_graph("test_aggregation_edge_cases")
+        .expect("Failed to setup graph");
     // Re-insert simple data since we have a fresh graph
-    fixture.insert_simple_data().expect("Failed to insert simple data");
+    fixture
+        .insert_simple_data()
+        .expect("Failed to insert simple data");
 
     // Test aggregation on empty results
     fixture.assert_first_value(
         "MATCH (n:NonExistent) RETURN count(n) as count",
         "count",
-        Value::Number(0.0)
+        Value::Number(0.0),
     );
-    
-    let result = fixture.assert_query_succeeds(
-        "MATCH (n:NonExistent) RETURN sum(n.value) as sum"
-    );
-    assert!(matches!(result.rows[0].values.get("sum"), Some(Value::Null)));
-    
+
+    let result = fixture.assert_query_succeeds("MATCH (n:NonExistent) RETURN sum(n.value) as sum");
+    assert!(matches!(
+        result.rows[0].values.get("sum"),
+        Some(Value::Null)
+    ));
+
     // Test aggregation with null values
     fixture.assert_query_succeeds(
         "INSERT (test:AggTest {value: 10}), (test2:AggTest {value: null}), (test3:AggTest {value: 20})"
     );
-    
+
     let result = fixture.assert_query_succeeds(
         "MATCH (t:AggTest) 
          RETURN count(t) as total_nodes,
                 count(t.value) as non_null_values,
                 sum(t.value) as sum_values,
-                avg(t.value) as avg_values"
-    );
-    
-    assert_eq!(result.rows.len(), 1);
-    // count(t) should be 3, count(t.value) should be 2 (nulls excluded)
-    
-    // Test aggregation with very large numbers
-    fixture.assert_query_succeeds(
-        "INSERT (big:BigValue {value: 999999999999999})"
-    );
-    
-    fixture.assert_query_succeeds(
-        "MATCH (b:BigValue) RETURN sum(b.value) as big_sum"
-    );
-    
-    // Test aggregation with very small numbers
-    fixture.assert_query_succeeds(
-        "INSERT (small:SmallValue {value: 0.000001})"
+                avg(t.value) as avg_values",
     );
 
-    fixture.assert_query_succeeds(
-        "MATCH (s:SmallValue) RETURN sum(s.value) as small_sum"
-    );
+    assert_eq!(result.rows.len(), 1);
+    // count(t) should be 3, count(t.value) should be 2 (nulls excluded)
+
+    // Test aggregation with very large numbers
+    fixture.assert_query_succeeds("INSERT (big:BigValue {value: 999999999999999})");
+
+    fixture.assert_query_succeeds("MATCH (b:BigValue) RETURN sum(b.value) as big_sum");
+
+    // Test aggregation with very small numbers
+    fixture.assert_query_succeeds("INSERT (small:SmallValue {value: 0.000001})");
+
+    fixture.assert_query_succeeds("MATCH (s:SmallValue) RETURN sum(s.value) as small_sum");
 }
 
 #[test]
@@ -635,9 +691,13 @@ fn test_aggregation_column_order() {
     // Test that RETURN clause column order is preserved in aggregation results
     let fixture = TestFixture::new().expect("Failed to create test fixture");
     // Setup fresh graph for this test to avoid interference
-    fixture.setup_graph("test_aggregation_column_order").expect("Failed to setup graph");
+    fixture
+        .setup_graph("test_aggregation_column_order")
+        .expect("Failed to setup graph");
     // Re-insert simple data since we have a fresh graph
-    fixture.insert_simple_data().expect("Failed to insert simple data");
+    fixture
+        .insert_simple_data()
+        .expect("Failed to insert simple data");
 
     // Test the specific query that had wrong column order
     let query = r#"
@@ -653,14 +713,23 @@ fn test_aggregation_column_order() {
     // Check that variables are in the correct order as specified in RETURN clause
     assert_eq!(result.variables.len(), 2, "Should have 2 variables");
     // TODO: Aliases for function calls in GROUP BY aren't working yet, so we get "LABELS(...)" instead of "node_labels"
-    assert_eq!(result.variables[0], "LABELS(...)", "First variable should be LABELS(...)");
-    assert_eq!(result.variables[1], "count", "Second variable should be count");
+    assert_eq!(
+        result.variables[0], "LABELS(...)",
+        "First variable should be LABELS(...)"
+    );
+    assert_eq!(
+        result.variables[1], "count",
+        "Second variable should be count"
+    );
 
     // Verify the data looks reasonable
     assert!(!result.rows.is_empty(), "Should have some results");
     for row in &result.rows {
         // Since the alias isn't working, check for "LABELS(...)" instead of "node_labels"
-        assert!(row.values.contains_key("LABELS(...)"), "Should have LABELS(...) column");
+        assert!(
+            row.values.contains_key("LABELS(...)"),
+            "Should have LABELS(...) column"
+        );
         assert!(row.values.contains_key("count"), "Should have count column");
 
         // Verify count is a positive number
@@ -670,7 +739,6 @@ fn test_aggregation_column_order() {
             panic!("Count should be a number");
         }
     }
-
 }
 
 #[test]
@@ -678,9 +746,13 @@ fn test_labels_function_in_aggregation() {
     // Test that LABELS function returns actual node labels instead of empty arrays
     let fixture = TestFixture::new().expect("Failed to create test fixture");
     // Setup fresh graph for this test to avoid interference
-    fixture.setup_graph("test_labels_function_in_aggregation").expect("Failed to setup graph");
+    fixture
+        .setup_graph("test_labels_function_in_aggregation")
+        .expect("Failed to setup graph");
     // Re-insert fraud data since we have a fresh graph
-    fixture.insert_fraud_data().expect("Failed to insert fraud data");
+    fixture
+        .insert_fraud_data()
+        .expect("Failed to insert fraud data");
 
     // First, test that nodes exist and have labels (using Account nodes from fraud data)
     let simple_query = "MATCH (n:Account) RETURN LABELS(n) AS labels LIMIT 1";
@@ -698,16 +770,17 @@ fn test_labels_function_in_aggregation() {
     assert!(!result.rows.is_empty(), "Should have aggregation results");
 
     // Debug: Print all values in result rows
-    for (i, row) in result.rows.iter().enumerate() {
-    }
+    for (i, row) in result.rows.iter().enumerate() {}
 
     // Check that LABELS function returns actual labels, not empty arrays
     let mut found_non_empty_labels = false;
     for row in &result.rows {
         // Look for either the alias "node_labels" or the raw column name "LABELS(...)"
-        let node_labels_value = row.values.get("node_labels").or_else(|| row.values.get("LABELS(...)"));
+        let node_labels_value = row
+            .values
+            .get("node_labels")
+            .or_else(|| row.values.get("LABELS(...)"));
         if let Some(node_labels_value) = node_labels_value {
-
             match node_labels_value {
                 Value::Array(labels) | Value::List(labels) => {
                     // In the simple fixture, we should have nodes with actual labels
@@ -717,12 +790,18 @@ fn test_labels_function_in_aggregation() {
 
                         // Verify labels are strings
                         for label in labels {
-                            assert!(matches!(label, Value::String(_)), "Labels should be strings");
+                            assert!(
+                                matches!(label, Value::String(_)),
+                                "Labels should be strings"
+                            );
                         }
                     }
-                },
+                }
                 _ => {
-                    panic!("node_labels should be an array or list, got: {:?}", node_labels_value);
+                    panic!(
+                        "node_labels should be an array or list, got: {:?}",
+                        node_labels_value
+                    );
                 }
             }
         } else {
@@ -731,27 +810,36 @@ fn test_labels_function_in_aggregation() {
     }
 
     // We should have at least some nodes with labels in the simple fixture
-    if !found_non_empty_labels {
-    }
-
+    if !found_non_empty_labels {}
 }
 
 #[test]
 fn test_labels_aggregation_with_multiple_labels_and_order_by() {
     let fixture = TestFixture::new().expect("Failed to create test fixture");
     // Setup fresh graph for this test to avoid interference
-    fixture.setup_graph("test_labels_aggregation_with_multiple_labels_and_order_by").expect("Failed to setup graph");
+    fixture
+        .setup_graph("test_labels_aggregation_with_multiple_labels_and_order_by")
+        .expect("Failed to setup graph");
     // Re-insert simple data since we have a fresh graph
-    fixture.insert_simple_data().expect("Failed to insert simple data");
+    fixture
+        .insert_simple_data()
+        .expect("Failed to insert simple data");
 
     // Create a test graph in the schema
-    fixture.assert_query_succeeds(&format!("CREATE GRAPH /{}/multi_label_test_graph", fixture.schema_name()));
+    fixture.assert_query_succeeds(&format!(
+        "CREATE GRAPH /{}/multi_label_test_graph",
+        fixture.schema_name()
+    ));
 
     // Set the session graph
-    fixture.assert_query_succeeds(&format!("SESSION SET GRAPH /{}/multi_label_test_graph", fixture.schema_name()));
+    fixture.assert_query_succeeds(&format!(
+        "SESSION SET GRAPH /{}/multi_label_test_graph",
+        fixture.schema_name()
+    ));
 
     // Create nodes with various label combinations
-    fixture.assert_query_succeeds(r#"
+    fixture.assert_query_succeeds(
+        r#"
         INSERT
         (a:Person {name: "Alice"}),
         (b:Person:Employee {name: "Bob", id: 1}),
@@ -762,20 +850,21 @@ fn test_labels_aggregation_with_multiple_labels_and_order_by() {
         (g:Person {name: "Grace"}),
         (h:Person:Employee {name: "Henry", id: 6}),
         (i:Company {name: "TechCorp"})
-    "#);
-
+    "#,
+    );
 
     // Test the query with ORDER BY
     let result = fixture.assert_query_succeeds(
         "MATCH (n) RETURN LABELS(n) AS node_labels, COUNT(n) AS count GROUP BY LABELS(n) ORDER BY node_labels"
     );
 
-
     // Print all results to analyze the ordering
     for (i, row) in result.rows.iter().enumerate() {
-        if let Some(node_labels_value) = row.get_value("node_labels").or_else(|| row.get_value("LABELS(...)")) {
-            if let Some(count_value) = row.get_value("count") {
-            }
+        if let Some(node_labels_value) = row
+            .get_value("node_labels")
+            .or_else(|| row.get_value("LABELS(...)"))
+        {
+            if let Some(count_value) = row.get_value("count") {}
         }
     }
 
@@ -788,12 +877,19 @@ fn test_labels_aggregation_with_multiple_labels_and_order_by() {
     // - [Person] (2 nodes: a, g)
     // - [Person, Employee] (2 nodes: b, h)
     // - [Person, Employee, Manager] (1 node: c)
-    assert!(result.rows.len() >= 6, "Expected at least 6 different label combinations, got {}", result.rows.len());
+    assert!(
+        result.rows.len() >= 6,
+        "Expected at least 6 different label combinations, got {}",
+        result.rows.len()
+    );
 
     // Check that ORDER BY is working by verifying the results are sorted
     let mut previous_labels: Option<String> = None;
     for row in &result.rows {
-        if let Some(node_labels_value) = row.get_value("node_labels").or_else(|| row.get_value("LABELS(...)")) {
+        if let Some(node_labels_value) = row
+            .get_value("node_labels")
+            .or_else(|| row.get_value("LABELS(...)"))
+        {
             let current_labels = format!("{:?}", node_labels_value);
             // For basic ordering test - labels should be in some consistent order
             // (exact alphabetical ordering may depend on how arrays are compared)
@@ -808,10 +904,14 @@ fn test_labels_aggregation_with_multiple_labels_and_order_by() {
     let mut found_employee_manager = false;
 
     for row in &result.rows {
-        if let Some(node_labels_value) = row.get_value("node_labels").or_else(|| row.get_value("LABELS(...)")) {
+        if let Some(node_labels_value) = row
+            .get_value("node_labels")
+            .or_else(|| row.get_value("LABELS(...)"))
+        {
             match node_labels_value {
                 Value::List(labels) => {
-                    let label_strings: Vec<String> = labels.iter()
+                    let label_strings: Vec<String> = labels
+                        .iter()
                         .filter_map(|v| match v {
                             Value::String(s) => Some(s.clone()),
                             _ => None,
@@ -819,54 +919,94 @@ fn test_labels_aggregation_with_multiple_labels_and_order_by() {
                         .collect();
 
                     match label_strings.len() {
-                        1 if label_strings.contains(&"Person".to_string()) => found_single_person = true,
-                        2 if label_strings.contains(&"Person".to_string()) && label_strings.contains(&"Employee".to_string()) => found_person_employee = true,
-                        2 if label_strings.contains(&"Employee".to_string()) && label_strings.contains(&"Manager".to_string()) => found_employee_manager = true,
-                        3 if label_strings.contains(&"Person".to_string()) && label_strings.contains(&"Employee".to_string()) && label_strings.contains(&"Manager".to_string()) => found_person_employee_manager = true,
+                        1 if label_strings.contains(&"Person".to_string()) => {
+                            found_single_person = true
+                        }
+                        2 if label_strings.contains(&"Person".to_string())
+                            && label_strings.contains(&"Employee".to_string()) =>
+                        {
+                            found_person_employee = true
+                        }
+                        2 if label_strings.contains(&"Employee".to_string())
+                            && label_strings.contains(&"Manager".to_string()) =>
+                        {
+                            found_employee_manager = true
+                        }
+                        3 if label_strings.contains(&"Person".to_string())
+                            && label_strings.contains(&"Employee".to_string())
+                            && label_strings.contains(&"Manager".to_string()) =>
+                        {
+                            found_person_employee_manager = true
+                        }
                         _ => {}
                     }
-
-                },
-                Value::Array(labels) => {
-                    let label_strings: Vec<String> = labels.iter()
-                        .filter_map(|v| match v {
-                            Value::String(s) => Some(s.clone()),
-                            _ => None,
-                        })
-                        .collect();
-
-                    match label_strings.len() {
-                        1 if label_strings.contains(&"Person".to_string()) => found_single_person = true,
-                        2 if label_strings.contains(&"Person".to_string()) && label_strings.contains(&"Employee".to_string()) => found_person_employee = true,
-                        2 if label_strings.contains(&"Employee".to_string()) && label_strings.contains(&"Manager".to_string()) => found_employee_manager = true,
-                        3 if label_strings.contains(&"Person".to_string()) && label_strings.contains(&"Employee".to_string()) && label_strings.contains(&"Manager".to_string()) => found_person_employee_manager = true,
-                        _ => {}
-                    }
-
-                },
-                _ => {
                 }
+                Value::Array(labels) => {
+                    let label_strings: Vec<String> = labels
+                        .iter()
+                        .filter_map(|v| match v {
+                            Value::String(s) => Some(s.clone()),
+                            _ => None,
+                        })
+                        .collect();
+
+                    match label_strings.len() {
+                        1 if label_strings.contains(&"Person".to_string()) => {
+                            found_single_person = true
+                        }
+                        2 if label_strings.contains(&"Person".to_string())
+                            && label_strings.contains(&"Employee".to_string()) =>
+                        {
+                            found_person_employee = true
+                        }
+                        2 if label_strings.contains(&"Employee".to_string())
+                            && label_strings.contains(&"Manager".to_string()) =>
+                        {
+                            found_employee_manager = true
+                        }
+                        3 if label_strings.contains(&"Person".to_string())
+                            && label_strings.contains(&"Employee".to_string())
+                            && label_strings.contains(&"Manager".to_string()) =>
+                        {
+                            found_person_employee_manager = true
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
             }
         }
     }
 
     // Verify we found the expected combinations
-    assert!(found_single_person, "Should find nodes with only Person label");
-    assert!(found_person_employee, "Should find nodes with Person and Employee labels");
-    assert!(found_person_employee_manager, "Should find nodes with Person, Employee, and Manager labels");
-    assert!(found_employee_manager, "Should find nodes with Employee and Manager labels");
-
+    assert!(
+        found_single_person,
+        "Should find nodes with only Person label"
+    );
+    assert!(
+        found_person_employee,
+        "Should find nodes with Person and Employee labels"
+    );
+    assert!(
+        found_person_employee_manager,
+        "Should find nodes with Person, Employee, and Manager labels"
+    );
+    assert!(
+        found_employee_manager,
+        "Should find nodes with Employee and Manager labels"
+    );
 
     // Additional test: verify the counts are correct
     for row in &result.rows {
         if let (Some(labels), Some(count)) = (
-            row.get_value("node_labels").or_else(|| row.get_value("LABELS(...)")),
-            row.get_value("count")
+            row.get_value("node_labels")
+                .or_else(|| row.get_value("LABELS(...)")),
+            row.get_value("count"),
         ) {
             match count {
                 Value::Number(n) => {
                     assert!(*n >= 1.0, "Count should be at least 1, got {}", n);
-                },
+                }
                 _ => panic!("Count should be a number, got {:?}", count),
             }
         }

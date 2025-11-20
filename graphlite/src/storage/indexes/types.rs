@@ -3,10 +3,10 @@
 //
 //! Type definitions for the indexing system
 
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
-use std::collections::HashMap;
 use crate::storage::Value;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Unique identifier for an index
 #[allow(dead_code)] // ROADMAP v0.4.0 - Index identifier type for metadata management

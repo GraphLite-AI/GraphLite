@@ -6,14 +6,14 @@
 //! This module integrates pattern optimization into the logical planning phase,
 //! providing the main entry point for comma-separated pattern optimization.
 
-use std::collections::HashMap;
-use crate::ast::ast::{PathPattern, MatchClause};
+use crate::ast::ast::{MatchClause, PathPattern};
+use crate::plan::logical::LogicalPlan;
 use crate::plan::pattern_optimization::{
+    cost_estimation::{ExecutionCost, StatisticsManager},
     pattern_analysis::{PatternConnectivity, PatternPlanStrategy},
     pattern_analyzer::PatternAnalyzer,
-    cost_estimation::{StatisticsManager, ExecutionCost},
 };
-use crate::plan::logical::LogicalPlan;
+use std::collections::HashMap;
 
 /// Result of pattern optimization analysis
 ///
@@ -116,7 +116,10 @@ impl LogicalPatternOptimizer {
                 },
                 estimated_cost: ExecutionCost::new(0.0, 0, 0, 1.0),
                 optimized: false,
-                optimization_reason: format!("Too few patterns ({}) for optimization", patterns.len()),
+                optimization_reason: format!(
+                    "Too few patterns ({}) for optimization",
+                    patterns.len()
+                ),
             };
         }
 
@@ -129,25 +132,28 @@ impl LogicalPatternOptimizer {
                 },
                 estimated_cost: ExecutionCost::new(f64::INFINITY, u64::MAX, u64::MAX, 1.0),
                 optimized: false,
-                optimization_reason: format!("Too many patterns ({}) for optimization", patterns.len()),
+                optimization_reason: format!(
+                    "Too many patterns ({}) for optimization",
+                    patterns.len()
+                ),
             };
         }
 
         // Analyze pattern connectivity
         let connectivity = self.pattern_analyzer.analyze_patterns(patterns.to_vec());
-        
+
         // Generate alternative execution strategies
         let strategies = self.generate_execution_strategies(&connectivity, context);
-        
+
         // Estimate costs for each strategy
         let mut cost_estimator = self.statistics_manager.create_cost_estimator();
         let mut strategy_costs: Vec<(PatternPlanStrategy, ExecutionCost)> = Vec::new();
-        
+
         for strategy in strategies {
             let cost = cost_estimator.estimate_cost(&strategy);
             strategy_costs.push((strategy, cost));
         }
-        
+
         // Choose the best strategy
         self.choose_best_strategy(strategy_costs, context)
     }
@@ -159,38 +165,39 @@ impl LogicalPatternOptimizer {
         context: &OptimizationContext,
     ) -> Vec<PatternPlanStrategy> {
         let mut strategies = Vec::new();
-        
+
         // Always include Cartesian product as baseline
         strategies.push(PatternPlanStrategy::CartesianProduct {
             patterns: connectivity.patterns.clone(),
             estimated_cost: 0.0,
         });
-        
+
         // Try path traversal optimization if enabled and applicable
         if self.config.enable_path_traversal {
             if let Some(linear_path) = self.pattern_analyzer.detect_linear_path(connectivity) {
                 strategies.push(PatternPlanStrategy::PathTraversal(linear_path));
             }
         }
-        
+
         // Try hash join optimization if enabled
         if self.config.enable_hash_joins && connectivity.patterns.len() >= 2 {
             if let Some(join_strategy) = self.generate_hash_join_strategy(connectivity, context) {
                 strategies.push(join_strategy);
             }
         }
-        
+
         // Add nested loop join as fallback for complex cases
-        if connectivity.patterns.len() <= 4 { // Only for small pattern sets
+        if connectivity.patterns.len() <= 4 {
+            // Only for small pattern sets
             strategies.push(PatternPlanStrategy::NestedLoopJoin {
                 patterns: connectivity.patterns.clone(),
                 estimated_cost: 0.0,
             });
         }
-        
+
         strategies
     }
-    
+
     /// Generate hash join strategy if applicable
     fn generate_hash_join_strategy(
         &self,
@@ -199,24 +206,27 @@ impl LogicalPatternOptimizer {
     ) -> Option<PatternPlanStrategy> {
         // For now, use simple join ordering based on pattern complexity
         let join_order = self.generate_join_order(connectivity);
-        
+
         if join_order.is_empty() {
             return None;
         }
-        
+
         Some(PatternPlanStrategy::HashJoin {
             patterns: connectivity.patterns.clone(),
             join_order,
             estimated_cost: 0.0,
         })
     }
-    
+
     /// Generate join order for hash joins
-    fn generate_join_order(&self, connectivity: &PatternConnectivity) -> Vec<crate::plan::pattern_optimization::pattern_analysis::JoinStep> {
+    fn generate_join_order(
+        &self,
+        connectivity: &PatternConnectivity,
+    ) -> Vec<crate::plan::pattern_optimization::pattern_analysis::JoinStep> {
         use crate::plan::pattern_optimization::pattern_analysis::{JoinStep, JoinType};
-        
+
         let mut join_order = Vec::new();
-        
+
         // Simple strategy: join patterns in order of shared variables
         for (var, pattern_indices) in &connectivity.shared_variables {
             if pattern_indices.len() >= 2 {
@@ -231,10 +241,10 @@ impl LogicalPatternOptimizer {
                 join_order.push(join_step);
             }
         }
-        
+
         join_order
     }
-    
+
     /// Choose the best execution strategy based on cost estimates
     fn choose_best_strategy(
         &self,
@@ -252,11 +262,11 @@ impl LogicalPatternOptimizer {
                 optimization_reason: "No strategies available".to_string(),
             };
         }
-        
+
         // Find the strategy with the best cost
         let mut best_strategy_idx = 0;
         let mut best_cost_score = strategy_costs[0].1.total_cost();
-        
+
         for (i, (_, cost)) in strategy_costs.iter().enumerate() {
             let cost_score = cost.total_cost();
             if cost_score < best_cost_score {
@@ -264,35 +274,41 @@ impl LogicalPatternOptimizer {
                 best_cost_score = cost_score;
             }
         }
-        
+
         let best_strategy = &strategy_costs[best_strategy_idx];
-        
+
         // Check if we found a better strategy than Cartesian product
-        let cartesian_cost = strategy_costs.iter()
+        let cartesian_cost = strategy_costs
+            .iter()
             .find(|(s, _)| matches!(s, PatternPlanStrategy::CartesianProduct { .. }))
             .map(|(_, cost)| cost.total_cost())
             .unwrap_or(f64::INFINITY);
-            
-        let optimized = best_cost_score < cartesian_cost * (1.0 - self.config.cost_improvement_threshold);
-        
+
+        let optimized =
+            best_cost_score < cartesian_cost * (1.0 - self.config.cost_improvement_threshold);
+
         let optimization_reason = if optimized {
             match &best_strategy.0 {
-                PatternPlanStrategy::PathTraversal(_) => 
-                    "Path traversal optimization applied for connected patterns".to_string(),
-                PatternPlanStrategy::HashJoin { .. } => 
-                    "Hash join optimization applied for shared variables".to_string(),
-                PatternPlanStrategy::NestedLoopJoin { .. } => 
-                    "Nested loop join selected for complex patterns".to_string(),
-                PatternPlanStrategy::CartesianProduct { .. } => 
-                    "Cartesian product is optimal for these patterns".to_string(),
+                PatternPlanStrategy::PathTraversal(_) => {
+                    "Path traversal optimization applied for connected patterns".to_string()
+                }
+                PatternPlanStrategy::HashJoin { .. } => {
+                    "Hash join optimization applied for shared variables".to_string()
+                }
+                PatternPlanStrategy::NestedLoopJoin { .. } => {
+                    "Nested loop join selected for complex patterns".to_string()
+                }
+                PatternPlanStrategy::CartesianProduct { .. } => {
+                    "Cartesian product is optimal for these patterns".to_string()
+                }
             }
         } else {
             format!(
-                "No significant improvement found (best: {:.2}, baseline: {:.2})", 
+                "No significant improvement found (best: {:.2}, baseline: {:.2})",
                 best_cost_score, cartesian_cost
             )
         };
-        
+
         PatternOptimizationResult {
             strategy: best_strategy.0.clone(),
             estimated_cost: best_strategy.1.clone(),
@@ -300,11 +316,12 @@ impl LogicalPatternOptimizer {
             optimization_reason,
         }
     }
-    
+
     /// Update statistics from query execution
     #[allow(dead_code)] // ROADMAP v0.4.0 - Query profiling for adaptive optimization
     pub fn record_query_execution(&mut self, query: &str, result_count: u64) {
-        self.statistics_manager.record_query_execution(query, result_count);
+        self.statistics_manager
+            .record_query_execution(query, result_count);
     }
 
     /// Get current optimization configuration
@@ -413,7 +430,7 @@ pub fn optimize_match_clause_patterns(
 ) -> Result<PatternOptimizationResult, String> {
     // Extract patterns from the match clause
     let patterns: Vec<PathPattern> = match_clause.patterns.clone();
-    
+
     if patterns.is_empty() {
         return Ok(PatternOptimizationResult {
             strategy: PatternPlanStrategy::CartesianProduct {
@@ -425,10 +442,10 @@ pub fn optimize_match_clause_patterns(
             optimization_reason: "No patterns to optimize".to_string(),
         });
     }
-    
+
     // Apply pattern optimization
     let result = optimizer.optimize_comma_separated_patterns(&patterns, context);
-    
+
     Ok(result)
 }
 
@@ -442,11 +459,11 @@ pub fn apply_optimization_to_logical_plan(
         // No optimization applied, return original plan
         return Ok(current_plan.clone());
     }
-    
+
     // For Phase 3, we'll create a placeholder for the optimized plan
     // Phase 4 will implement the actual physical plan generation
     let optimized_plan = current_plan.clone();
-    
+
     // Add optimization metadata to the plan
     // This will be used by Phase 4 for physical plan generation
     match &optimization_result.strategy {
@@ -465,7 +482,7 @@ pub fn apply_optimization_to_logical_plan(
             // Use default Cartesian product behavior
         }
     }
-    
+
     Ok(optimized_plan)
 }
 
@@ -485,7 +502,7 @@ mod tests {
     fn test_optimization_with_few_patterns() {
         let mut optimizer = LogicalPatternOptimizer::new();
         let context = OptimizationContext::default();
-        
+
         // Test with single pattern - should not optimize
         let pattern = PathPattern {
             assignment: None,
@@ -493,7 +510,7 @@ mod tests {
             elements: vec![],
             location: Location::default(),
         };
-        
+
         let result = optimizer.optimize_comma_separated_patterns(&[pattern], &context);
         assert!(!result.optimized);
         assert!(result.optimization_reason.contains("Too few patterns"));
@@ -503,15 +520,17 @@ mod tests {
     fn test_optimization_with_many_patterns() {
         let mut optimizer = LogicalPatternOptimizer::new();
         let context = OptimizationContext::default();
-        
+
         // Test with too many patterns - should not optimize
-        let patterns: Vec<PathPattern> = (0..15).map(|_| PathPattern {
-            assignment: None,
-            path_type: None,
-            elements: vec![],
-            location: Location::default(),
-        }).collect();
-        
+        let patterns: Vec<PathPattern> = (0..15)
+            .map(|_| PathPattern {
+                assignment: None,
+                path_type: None,
+                elements: vec![],
+                location: Location::default(),
+            })
+            .collect();
+
         let result = optimizer.optimize_comma_separated_patterns(&patterns, &context);
         assert!(!result.optimized);
         assert!(result.optimization_reason.contains("Too many patterns"));
@@ -520,7 +539,10 @@ mod tests {
     #[test]
     fn test_optimization_context_default() {
         let context = OptimizationContext::default();
-        assert_eq!(context.performance_requirements.optimization_priority, OptimizationPriority::Balanced);
+        assert_eq!(
+            context.performance_requirements.optimization_priority,
+            OptimizationPriority::Balanced
+        );
         assert!(context.available_indexes.is_empty());
         assert!(context.hints.is_empty());
     }
@@ -534,7 +556,7 @@ mod tests {
             max_patterns_for_optimization: 5,
             cost_improvement_threshold: 0.2,
         };
-        
+
         let optimizer = LogicalPatternOptimizer::with_config(config.clone());
         assert_eq!(optimizer.config.min_patterns_for_optimization, 3);
         assert!(!optimizer.config.enable_path_traversal);

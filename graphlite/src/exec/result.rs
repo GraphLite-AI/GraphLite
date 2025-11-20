@@ -3,11 +3,11 @@
 //
 //! Query execution results for graph databases
 
+use crate::ast::ast::{CatalogPath, GraphExpression};
+use crate::storage::Value;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use serde::{Deserialize, Serialize};
-use crate::storage::Value;
-use crate::ast::ast::{GraphExpression, CatalogPath};
 
 /// Entity identifier for tracking graph element identities in set operations
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -25,17 +25,15 @@ pub enum SessionResult {
     /// Set the current graph for the session
     SetGraph {
         graph_expression: GraphExpression,
-        validated: bool,  // Whether executor validated the graph exists
+        validated: bool, // Whether executor validated the graph exists
     },
     /// Set the current schema for the session
     SetSchema {
         schema_reference: CatalogPath,
-        validated: bool,  // Whether executor validated the schema exists
+        validated: bool, // Whether executor validated the schema exists
     },
     /// Set session timezone
-    SetTimeZone {
-        timezone: String,
-    },
+    SetTimeZone { timezone: String },
     /// Reset session to defaults
     Reset,
     /// Close session
@@ -69,7 +67,7 @@ impl QueryResult {
             warnings: Vec::new(),
         }
     }
-    
+
     /// Create a query result for a session statement
     pub fn for_session(session_result: SessionResult) -> Self {
         Self {
@@ -91,14 +89,15 @@ impl QueryResult {
     pub fn has_warnings(&self) -> bool {
         !self.warnings.is_empty()
     }
-    
+
     /// Get values from all rows at a specific position (for set operations)
     pub fn get_values_at_position(&self, position: usize) -> Vec<&Value> {
-        self.rows.iter()
+        self.rows
+            .iter()
             .filter_map(|row| row.get_value_at_position(position))
             .collect()
     }
-    
+
     /// Create a new result with unified variable names for set operations
     pub fn with_unified_variables(mut self, unified_variables: Vec<String>) -> Self {
         self.variables = unified_variables;
@@ -112,30 +111,30 @@ impl QueryResult {
 
     /// Get a formatted message for session commands (returns None if not a session command)
     pub fn get_session_message(&self) -> Option<String> {
-        self.session_result.as_ref().map(|sr| {
-            match sr {
-                SessionResult::SetGraph { graph_expression, validated: _ } => {
-                    let graph_path = match graph_expression {
-                        GraphExpression::Reference(path) => path.to_string(),
-                        GraphExpression::Union { .. } => "UNION expression".to_string(),
-                        GraphExpression::CurrentGraph => "CURRENT_GRAPH".to_string(),
-                    };
-                    format!("Session graph set to: {}", graph_path)
-                },
-                SessionResult::SetSchema { schema_reference, validated: _ } => {
-                    let schema_path = format!("/{}", schema_reference.segments.join("/"));
-                    format!("Session schema set to: {}", schema_path)
-                },
-                SessionResult::SetTimeZone { timezone } => {
-                    format!("Session timezone set to: {}", timezone)
-                },
-                SessionResult::Reset => {
-                    "Session reset to defaults".to_string()
-                },
-                SessionResult::Close => {
-                    "Session closed".to_string()
-                },
+        self.session_result.as_ref().map(|sr| match sr {
+            SessionResult::SetGraph {
+                graph_expression,
+                validated: _,
+            } => {
+                let graph_path = match graph_expression {
+                    GraphExpression::Reference(path) => path.to_string(),
+                    GraphExpression::Union { .. } => "UNION expression".to_string(),
+                    GraphExpression::CurrentGraph => "CURRENT_GRAPH".to_string(),
+                };
+                format!("Session graph set to: {}", graph_path)
             }
+            SessionResult::SetSchema {
+                schema_reference,
+                validated: _,
+            } => {
+                let schema_path = format!("/{}", schema_reference.segments.join("/"));
+                format!("Session schema set to: {}", schema_path)
+            }
+            SessionResult::SetTimeZone { timezone } => {
+                format!("Session timezone set to: {}", timezone)
+            }
+            SessionResult::Reset => "Session reset to defaults".to_string(),
+            SessionResult::Close => "Session closed".to_string(),
         })
     }
 }
@@ -217,23 +216,23 @@ impl Row {
     pub fn get_highlight_snippet(&self) -> Option<&str> {
         self.highlight_snippet.as_deref()
     }
-    
+
     /// Add a value to the row (both named and positional)
     pub fn add_value(&mut self, name: String, value: Value) {
         self.values.insert(name, value.clone());
         self.positional_values.push(value);
     }
-    
+
     /// Get a value by variable name
     pub fn get_value(&self, name: &str) -> Option<&Value> {
         self.values.get(name)
     }
-    
+
     /// Get a value by position (for set operations)
     pub fn get_value_at_position(&self, position: usize) -> Option<&Value> {
         self.positional_values.get(position)
     }
-    
+
     /// Set a value in the row
     pub fn set_value(&mut self, name: String, value: Value) {
         self.values.insert(name, value.clone());
@@ -250,17 +249,13 @@ impl Row {
     pub fn with_entity(&mut self, var_name: &str, value: &Value) {
         match value {
             Value::Node(node) => {
-                self.source_entities.insert(
-                    var_name.to_string(),
-                    EntityId::Node(node.id.clone())
-                );
-            },
+                self.source_entities
+                    .insert(var_name.to_string(), EntityId::Node(node.id.clone()));
+            }
             Value::Edge(edge) => {
-                self.source_entities.insert(
-                    var_name.to_string(),
-                    EntityId::Edge(edge.id.clone())
-                );
-            },
+                self.source_entities
+                    .insert(var_name.to_string(), EntityId::Edge(edge.id.clone()));
+            }
             _ => {
                 // Properties and computed values don't have entity IDs
                 // We might track their source entity in the future
@@ -311,7 +306,7 @@ impl Row {
         if self.positional_values.len() != other_values.len() {
             return false;
         }
-        
+
         for (self_val, other_val) in self.positional_values.iter().zip(other_values.iter()) {
             // In SQL set operations, NULL != NULL
             if matches!(self_val, Value::Null) || matches!(other_val, Value::Null) {
@@ -321,16 +316,16 @@ impl Row {
                 return false;
             }
         }
-        
+
         true
     }
-    
+
     /// SQL set operation equality for named values
     fn sql_set_equal_named(&self, other: &Self) -> bool {
         if self.values.len() != other.values.len() {
             return false;
         }
-        
+
         for (key, self_val) in &self.values {
             if let Some(other_val) = other.values.get(key) {
                 // In SQL set operations, NULL != NULL
@@ -344,7 +339,7 @@ impl Row {
                 return false;
             }
         }
-        
+
         true
     }
 }
@@ -366,4 +361,4 @@ impl Hash for Row {
             }
         }
     }
-} 
+}

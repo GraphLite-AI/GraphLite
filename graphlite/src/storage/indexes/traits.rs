@@ -3,11 +3,11 @@
 //
 //! Core traits for the indexing system
 
+use super::{IndexError, IndexStatistics, IndexType, SearchQuery, SearchResult};
+use crate::storage::Value;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use super::{IndexError, IndexStatistics, IndexType, SearchQuery, SearchResult};
-use crate::storage::Value;
 
 /// Core trait that all indexes must implement
 #[async_trait]
@@ -67,7 +67,10 @@ pub trait BatchIndex: Index {
     async fn batch_delete(&mut self, keys: Vec<Vec<u8>>) -> Result<usize, IndexError>;
 
     /// Search with multiple queries
-    async fn batch_search(&self, queries: Vec<SearchQuery>) -> Result<Vec<Vec<SearchResult>>, IndexError>;
+    async fn batch_search(
+        &self,
+        queries: Vec<SearchQuery>,
+    ) -> Result<Vec<Vec<SearchResult>>, IndexError>;
 }
 
 /// Trait for indexes that support graph operations
@@ -75,19 +78,37 @@ pub trait BatchIndex: Index {
 #[allow(dead_code)] // ROADMAP v0.4.0 - Graph-aware indexes for traversal optimization
 pub trait GraphIndex: Index {
     /// Add an edge to the graph index
-    async fn add_edge(&mut self, source: &str, target: &str, properties: Option<HashMap<String, Value>>) -> Result<(), IndexError>;
+    async fn add_edge(
+        &mut self,
+        source: &str,
+        target: &str,
+        properties: Option<HashMap<String, Value>>,
+    ) -> Result<(), IndexError>;
 
     /// Remove an edge from the graph index
     async fn remove_edge(&mut self, source: &str, target: &str) -> Result<bool, IndexError>;
 
     /// Get all neighbors of a node
-    async fn get_neighbors(&self, node: &str, direction: super::Direction) -> Result<Vec<String>, IndexError>;
+    async fn get_neighbors(
+        &self,
+        node: &str,
+        direction: super::Direction,
+    ) -> Result<Vec<String>, IndexError>;
 
     /// Check if there's a path between two nodes
-    async fn has_path(&self, source: &str, target: &str, max_hops: Option<usize>) -> Result<bool, IndexError>;
+    async fn has_path(
+        &self,
+        source: &str,
+        target: &str,
+        max_hops: Option<usize>,
+    ) -> Result<bool, IndexError>;
 
     /// Find shortest path between two nodes
-    async fn shortest_path(&self, source: &str, target: &str) -> Result<Option<Vec<String>>, IndexError>;
+    async fn shortest_path(
+        &self,
+        source: &str,
+        target: &str,
+    ) -> Result<Option<Vec<String>>, IndexError>;
 
     /// Get node degree
     async fn degree(&self, node: &str) -> Result<usize, IndexError>;

@@ -4,18 +4,18 @@
 // Ingestion schema validator - validates data during bulk ingestion
 // Follows the synchronous pattern used by StorageManager and CatalogManager
 
-use std::sync::Arc;
 use parking_lot::RwLock;
+use serde_json::{json, Value};
 use std::collections::HashMap;
-use serde_json::{Value, json};
+use std::sync::Arc;
 
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::QueryType;
-use crate::schema::validator::{SchemaValidator};
-use crate::schema::enforcement::config::SchemaEnforcementConfig;
-use crate::schema::types::SchemaEnforcementMode;
-use crate::schema::types::GraphTypeDefinition;
 use crate::exec::ExecutionError;
+use crate::schema::enforcement::config::SchemaEnforcementConfig;
+use crate::schema::types::GraphTypeDefinition;
+use crate::schema::types::SchemaEnforcementMode;
+use crate::schema::validator::SchemaValidator;
 
 /// Validates data during ingestion operations
 /// Uses synchronous operations using synchronous operations
@@ -98,35 +98,34 @@ impl IngestionSchemaValidator {
         for (label, properties) in nodes {
             self.validation_stats.total_records += 1;
 
-            match self.schema_validator.validate_node_with_type(&graph_type, label, properties) {
+            match self
+                .schema_validator
+                .validate_node_with_type(&graph_type, label, properties)
+            {
                 Ok(()) => {
                     self.validation_stats.valid_records += 1;
                     results.push(true);
                 }
-                Err(validation_error) => {
-                    match self.enforcement_config.mode {
-                        SchemaEnforcementMode::Strict => {
-                            self.validation_stats.invalid_records += 1;
-                            self.validation_stats.errors.push(format!(
-                                "Node with label '{}': {}",
-                                label, validation_error
-                            ));
-                            results.push(false);
-                        }
-                        SchemaEnforcementMode::Advisory => {
-                            self.validation_stats.warnings.push(format!(
-                                "Node with label '{}': {}",
-                                label, validation_error
-                            ));
-                            self.validation_stats.valid_records += 1;
-                            results.push(true);
-                        }
-                        SchemaEnforcementMode::Disabled => {
-                            self.validation_stats.valid_records += 1;
-                            results.push(true);
-                        }
+                Err(validation_error) => match self.enforcement_config.mode {
+                    SchemaEnforcementMode::Strict => {
+                        self.validation_stats.invalid_records += 1;
+                        self.validation_stats
+                            .errors
+                            .push(format!("Node with label '{}': {}", label, validation_error));
+                        results.push(false);
                     }
-                }
+                    SchemaEnforcementMode::Advisory => {
+                        self.validation_stats
+                            .warnings
+                            .push(format!("Node with label '{}': {}", label, validation_error));
+                        self.validation_stats.valid_records += 1;
+                        results.push(true);
+                    }
+                    SchemaEnforcementMode::Disabled => {
+                        self.validation_stats.valid_records += 1;
+                        results.push(true);
+                    }
+                },
             }
         }
 
@@ -165,35 +164,39 @@ impl IngestionSchemaValidator {
         for (edge_type, from_label, to_label, properties) in edges {
             self.validation_stats.total_records += 1;
 
-            match self.schema_validator.validate_edge(&graph_type, edge_type, from_label, to_label, properties) {
+            match self.schema_validator.validate_edge(
+                &graph_type,
+                edge_type,
+                from_label,
+                to_label,
+                properties,
+            ) {
                 Ok(()) => {
                     self.validation_stats.valid_records += 1;
                     results.push(true);
                 }
-                Err(validation_error) => {
-                    match self.enforcement_config.mode {
-                        SchemaEnforcementMode::Strict => {
-                            self.validation_stats.invalid_records += 1;
-                            self.validation_stats.errors.push(format!(
-                                "Edge '{}' from '{}' to '{}': {}",
-                                edge_type, from_label, to_label, validation_error
-                            ));
-                            results.push(false);
-                        }
-                        SchemaEnforcementMode::Advisory => {
-                            self.validation_stats.warnings.push(format!(
-                                "Edge '{}' from '{}' to '{}': {}",
-                                edge_type, from_label, to_label, validation_error
-                            ));
-                            self.validation_stats.valid_records += 1;
-                            results.push(true);
-                        }
-                        SchemaEnforcementMode::Disabled => {
-                            self.validation_stats.valid_records += 1;
-                            results.push(true);
-                        }
+                Err(validation_error) => match self.enforcement_config.mode {
+                    SchemaEnforcementMode::Strict => {
+                        self.validation_stats.invalid_records += 1;
+                        self.validation_stats.errors.push(format!(
+                            "Edge '{}' from '{}' to '{}': {}",
+                            edge_type, from_label, to_label, validation_error
+                        ));
+                        results.push(false);
                     }
-                }
+                    SchemaEnforcementMode::Advisory => {
+                        self.validation_stats.warnings.push(format!(
+                            "Edge '{}' from '{}' to '{}': {}",
+                            edge_type, from_label, to_label, validation_error
+                        ));
+                        self.validation_stats.valid_records += 1;
+                        results.push(true);
+                    }
+                    SchemaEnforcementMode::Disabled => {
+                        self.validation_stats.valid_records += 1;
+                        results.push(true);
+                    }
+                },
             }
         }
 
@@ -246,12 +249,19 @@ impl IngestionSchemaValidator {
 
     /// Get the graph type definition for a graph (synchronous)
     #[allow(dead_code)] // ROADMAP v0.4.0 - Schema validation for data ingestion (see ROADMAP.md §4)
-    fn get_graph_type(&self, graph_name: &str) -> Result<Option<GraphTypeDefinition>, ExecutionError> {
+    fn get_graph_type(
+        &self,
+        graph_name: &str,
+    ) -> Result<Option<GraphTypeDefinition>, ExecutionError> {
         // Try to get the graph type from the catalog
         let catalog_manager = self.catalog_manager.read();
 
         // First, try to get the graph metadata to find its type
-        match catalog_manager.query_read_only("graph", QueryType::GetGraph, json!({ "name": graph_name })) {
+        match catalog_manager.query_read_only(
+            "graph",
+            QueryType::GetGraph,
+            json!({ "name": graph_name }),
+        ) {
             Ok(response) => {
                 // Extract graph type name from response
                 if let Some(data) = response.data() {
@@ -260,12 +270,14 @@ impl IngestionSchemaValidator {
                         match catalog_manager.query_read_only(
                             "graph_type",
                             QueryType::GetGraphType,
-                            json!({ "name": graph_type_name })
+                            json!({ "name": graph_type_name }),
                         ) {
                             Ok(type_response) => {
                                 // Parse the graph type definition from the response
                                 if let Some(type_data) = type_response.data() {
-                                    match serde_json::from_value::<GraphTypeDefinition>(type_data.clone()) {
+                                    match serde_json::from_value::<GraphTypeDefinition>(
+                                        type_data.clone(),
+                                    ) {
                                         Ok(graph_type) => Ok(Some(graph_type)),
                                         Err(_) => Ok(None),
                                     }

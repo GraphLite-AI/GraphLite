@@ -2,17 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //! Write-Ahead Log (WAL) implementation with persistent storage
-//! 
+//!
 //! This module provides a high-performance WAL system that writes transaction
 //! operations to disk in a compact binary format for durability and recovery.
 
-use std::fs::{File, OpenOptions, create_dir_all};
-use std::io::{BufWriter, Write, Seek, SeekFrom, BufReader, Read};
+use std::fs::{create_dir_all, File, OpenOptions};
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::state::{TransactionId, OperationType};
+use super::state::{OperationType, TransactionId};
 
 /// Magic number to identify WAL files
 const WAL_MAGIC: u32 = 0x53594E57;
@@ -100,26 +100,26 @@ impl WALEntry {
             description,
         }
     }
-    
+
     /// Check if this entry affects the catalog
     pub fn affects_catalog(&self) -> bool {
         match self.operation_type {
-            Some(OperationType::CreateTable) |
-            Some(OperationType::CreateGraph) |
-            Some(OperationType::DropTable) |
-            Some(OperationType::DropGraph) => true,
+            Some(OperationType::CreateTable)
+            | Some(OperationType::CreateGraph)
+            | Some(OperationType::DropTable)
+            | Some(OperationType::DropGraph) => true,
             _ => {
                 // Check if description contains catalog-related keywords
-                self.description.contains("SCHEMA") ||
-                self.description.contains("INDEX") ||
-                self.description.contains("CONSTRAINT") ||
-                self.description.contains("VIEW")
+                self.description.contains("SCHEMA")
+                    || self.description.contains("INDEX")
+                    || self.description.contains("CONSTRAINT")
+                    || self.description.contains("VIEW")
             }
         }
     }
 
     /// Serialize WAL entry to binary format
-    /// 
+    ///
     /// Binary Format:
     /// - Magic (4 bytes): WAL_MAGIC
     /// - Entry Type (1 byte): WALEntryType
@@ -133,29 +133,30 @@ impl WALEntry {
     /// - Checksum (4 bytes): CRC32
     pub fn serialize(&self) -> Vec<u8> {
         let mut buffer = Vec::with_capacity(256);
-        
+
         // Magic number
         buffer.extend_from_slice(&WAL_MAGIC.to_le_bytes());
-        
+
         // Entry type
         buffer.push(self.entry_type as u8);
-        
+
         // Transaction ID
         buffer.extend_from_slice(&self.transaction_id.id().to_le_bytes());
-        
+
         // Global sequence
         buffer.extend_from_slice(&self.global_sequence.to_le_bytes());
-        
+
         // Transaction sequence
         buffer.extend_from_slice(&self.txn_sequence.to_le_bytes());
-        
+
         // Timestamp
-        let timestamp_nanos = self.timestamp
+        let timestamp_nanos = self
+            .timestamp
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos() as u64;
         buffer.extend_from_slice(&timestamp_nanos.to_le_bytes());
-        
+
         // Operation type (255 = None)
         let op_type_byte = match &self.operation_type {
             // Read operations
@@ -189,34 +190,35 @@ impl WALEntry {
             None => 255,
         };
         buffer.push(op_type_byte);
-        
+
         // Description
         let desc_bytes = self.description.as_bytes();
         buffer.extend_from_slice(&(desc_bytes.len() as u32).to_le_bytes());
         buffer.extend_from_slice(desc_bytes);
-        
+
         // Calculate CRC32 checksum
         let checksum = crc32fast::hash(&buffer);
         buffer.extend_from_slice(&checksum.to_le_bytes());
-        
+
         buffer
     }
 
     /// Deserialize WAL entry from binary format
     pub fn deserialize(data: &[u8]) -> Result<Self, WALError> {
-        if data.len() < 50 { // Minimum size check
+        if data.len() < 50 {
+            // Minimum size check
             return Err(WALError::CorruptedEntry("Entry too small".to_string()));
         }
-        
+
         let mut offset = 0;
-        
+
         // Check magic number
         let magic = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
         if magic != WAL_MAGIC {
             return Err(WALError::CorruptedEntry("Invalid magic number".to_string()));
         }
         offset += 4;
-        
+
         // Entry type
         let entry_type = match data[offset] {
             1 => WALEntryType::TransactionBegin,
@@ -226,40 +228,64 @@ impl WALEntry {
             _ => return Err(WALError::CorruptedEntry("Invalid entry type".to_string())),
         };
         offset += 1;
-        
+
         // Transaction ID
         let txn_id_bytes = [
-            data[offset], data[offset+1], data[offset+2], data[offset+3],
-            data[offset+4], data[offset+5], data[offset+6], data[offset+7]
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+            data[offset + 4],
+            data[offset + 5],
+            data[offset + 6],
+            data[offset + 7],
         ];
         let transaction_id = TransactionId::from_u64(u64::from_le_bytes(txn_id_bytes));
         offset += 8;
-        
+
         // Global sequence
         let global_seq_bytes = [
-            data[offset], data[offset+1], data[offset+2], data[offset+3],
-            data[offset+4], data[offset+5], data[offset+6], data[offset+7]
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+            data[offset + 4],
+            data[offset + 5],
+            data[offset + 6],
+            data[offset + 7],
         ];
         let global_sequence = u64::from_le_bytes(global_seq_bytes);
         offset += 8;
-        
+
         // Transaction sequence
         let txn_seq_bytes = [
-            data[offset], data[offset+1], data[offset+2], data[offset+3],
-            data[offset+4], data[offset+5], data[offset+6], data[offset+7]
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+            data[offset + 4],
+            data[offset + 5],
+            data[offset + 6],
+            data[offset + 7],
         ];
         let txn_sequence = u64::from_le_bytes(txn_seq_bytes);
         offset += 8;
-        
+
         // Timestamp
         let timestamp_bytes = [
-            data[offset], data[offset+1], data[offset+2], data[offset+3],
-            data[offset+4], data[offset+5], data[offset+6], data[offset+7]
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+            data[offset + 4],
+            data[offset + 5],
+            data[offset + 6],
+            data[offset + 7],
         ];
         let timestamp_nanos = u64::from_le_bytes(timestamp_bytes);
         let timestamp = UNIX_EPOCH + std::time::Duration::from_nanos(timestamp_nanos);
         offset += 8;
-        
+
         // Operation type
         let operation_type = match data[offset] {
             // Read operations
@@ -291,35 +317,53 @@ impl WALEntry {
             // Other
             99 => Some(OperationType::Other),
             255 => None,
-            _ => return Err(WALError::CorruptedEntry("Invalid operation type".to_string())),
+            _ => {
+                return Err(WALError::CorruptedEntry(
+                    "Invalid operation type".to_string(),
+                ))
+            }
         };
         offset += 1;
-        
+
         // Description length
         if offset + 4 > data.len() {
-            return Err(WALError::CorruptedEntry("Truncated description length".to_string()));
+            return Err(WALError::CorruptedEntry(
+                "Truncated description length".to_string(),
+            ));
         }
-        let desc_len_bytes = [data[offset], data[offset+1], data[offset+2], data[offset+3]];
+        let desc_len_bytes = [
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+        ];
         let desc_len = u32::from_le_bytes(desc_len_bytes) as usize;
         offset += 4;
-        
+
         // Description
         if offset + desc_len + 4 > data.len() {
-            return Err(WALError::CorruptedEntry("Truncated description or checksum".to_string()));
+            return Err(WALError::CorruptedEntry(
+                "Truncated description or checksum".to_string(),
+            ));
         }
         let description = String::from_utf8(data[offset..offset + desc_len].to_vec())
             .map_err(|_| WALError::CorruptedEntry("Invalid UTF-8 in description".to_string()))?;
         offset += desc_len;
-        
+
         // Verify checksum
-        let expected_checksum_bytes = [data[offset], data[offset+1], data[offset+2], data[offset+3]];
+        let expected_checksum_bytes = [
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+        ];
         let expected_checksum = u32::from_le_bytes(expected_checksum_bytes);
         let actual_checksum = crc32fast::hash(&data[..offset]);
-        
+
         if expected_checksum != actual_checksum {
             return Err(WALError::CorruptedEntry("Checksum mismatch".to_string()));
         }
-        
+
         Ok(Self {
             entry_type,
             transaction_id,
@@ -350,22 +394,23 @@ impl PersistentWAL {
     /// associated with a database directory to ensure proper data organization.
     pub fn new_with_path(db_path: PathBuf) -> Result<Self, WALError> {
         let wal_dir = db_path.join("wal");
-        
+
         // Create WAL directory if it doesn't exist
         create_dir_all(&wal_dir)
             .map_err(|e| WALError::IOError(format!("Failed to create WAL directory: {}", e)))?;
-        
+
         // Create catalog WAL directory
         let catalog_wal_dir = wal_dir.join("catalog");
-        create_dir_all(&catalog_wal_dir)
-            .map_err(|e| WALError::IOError(format!("Failed to create catalog WAL directory: {}", e)))?;
-        
+        create_dir_all(&catalog_wal_dir).map_err(|e| {
+            WALError::IOError(format!("Failed to create catalog WAL directory: {}", e))
+        })?;
+
         let catalog_wal = CatalogWAL {
             catalog_wal_dir,
             writer: Arc::new(Mutex::new(None)),
             file_number: Arc::new(Mutex::new(0)),
         };
-        
+
         let mut wal = Self {
             wal_dir,
             current_writer: Arc::new(Mutex::new(None)),
@@ -375,18 +420,18 @@ impl PersistentWAL {
             current_file_size: Arc::new(Mutex::new(0)),
             catalog_wal: Some(Arc::new(catalog_wal)),
         };
-        
+
         // Initialize WAL by finding the latest file and sequence numbers
         wal.initialize()?;
-        
+
         Ok(wal)
     }
-    
+
     /// Initialize WAL by scanning existing files
     fn initialize(&mut self) -> Result<(), WALError> {
         let mut max_file_number = 0u64;
         let mut max_global_sequence = 0u64;
-        
+
         // Scan existing WAL files
         if let Ok(entries) = std::fs::read_dir(&self.wal_dir) {
             for entry in entries {
@@ -394,14 +439,18 @@ impl PersistentWAL {
                     if let Some(filename) = entry.file_name().to_str() {
                         if filename.starts_with("wal_") && filename.ends_with(".log") {
                             // Extract file number from filename (wal_NNNNNN.log)
-                            if let Some(number_str) = filename.strip_prefix("wal_").and_then(|s| s.strip_suffix(".log")) {
+                            if let Some(number_str) = filename
+                                .strip_prefix("wal_")
+                                .and_then(|s| s.strip_suffix(".log"))
+                            {
                                 if let Ok(file_number) = number_str.parse::<u64>() {
                                     max_file_number = max_file_number.max(file_number);
-                                    
+
                                     // Scan this file for the highest sequence number
                                     if let Ok(entries) = self.read_wal_file(file_number) {
                                         for entry in entries {
-                                            max_global_sequence = max_global_sequence.max(entry.global_sequence);
+                                            max_global_sequence =
+                                                max_global_sequence.max(entry.global_sequence);
                                         }
                                     }
                                 }
@@ -411,21 +460,21 @@ impl PersistentWAL {
                 }
             }
         }
-        
+
         // Set initial values
         *self.current_file_number.lock().unwrap() = max_file_number;
         *self.global_sequence.lock().unwrap() = max_global_sequence;
-        
+
         // Open current WAL file for writing
         self.rotate_wal_file()?;
-        
+
         Ok(())
     }
-    
+
     /// Write a WAL entry to persistent storage
     pub fn write_entry(&self, entry: WALEntry) -> Result<(), WALError> {
         let serialized = entry.serialize();
-        
+
         // Check if we need to rotate to a new file
         {
             let current_size = *self.current_file_size.lock().unwrap();
@@ -433,39 +482,43 @@ impl PersistentWAL {
                 self.rotate_wal_file()?;
             }
         }
-        
+
         // Write to current file
         {
             let mut writer_guard = self.current_writer.lock().unwrap();
             if let Some(writer) = writer_guard.as_mut() {
-                writer.write_all(&serialized)
+                writer
+                    .write_all(&serialized)
                     .map_err(|e| WALError::IOError(format!("Failed to write WAL entry: {}", e)))?;
-                
+
                 // Force write to disk for durability
-                writer.flush()
+                writer
+                    .flush()
                     .map_err(|e| WALError::IOError(format!("Failed to flush WAL: {}", e)))?;
-                
+
                 // Ensure data is written to disk
-                writer.get_mut().sync_data()
+                writer
+                    .get_mut()
+                    .sync_data()
                     .map_err(|e| WALError::IOError(format!("Failed to sync WAL: {}", e)))?;
-                
+
                 // Update file size
                 *self.current_file_size.lock().unwrap() += serialized.len() as u64;
             } else {
                 return Err(WALError::IOError("No active WAL file".to_string()));
             }
         }
-        
+
         // Also write to catalog WAL if it affects catalog
         if entry.affects_catalog() {
             if let Some(catalog_wal) = &self.catalog_wal {
                 catalog_wal.write_entry(&serialized)?;
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Mark a transaction as committed
     #[allow(dead_code)] // ROADMAP v0.3.0 - WAL commit marker for transaction durability
     pub fn mark_committed(&self, transaction_id: TransactionId) -> Result<(), WALError> {
@@ -478,10 +531,10 @@ impl PersistentWAL {
             Some(OperationType::Commit),
             format!("Transaction {} committed", transaction_id.id()),
         );
-        
+
         self.write_entry(entry)
     }
-    
+
     /// Mark a transaction as rolled back
     #[allow(dead_code)] // ROADMAP v0.3.0 - WAL entry for ROLLBACK durability (write rollback marker to WAL)
     pub fn mark_rolled_back(&self, transaction_id: TransactionId) -> Result<(), WALError> {
@@ -494,10 +547,10 @@ impl PersistentWAL {
             Some(OperationType::Rollback),
             format!("Transaction {} rolled back", transaction_id.id()),
         );
-        
+
         self.write_entry(entry)
     }
-    
+
     /// Rotate to a new WAL file
     fn rotate_wal_file(&self) -> Result<(), WALError> {
         // First, properly close the old writer if it exists
@@ -505,19 +558,22 @@ impl PersistentWAL {
             let mut writer_guard = self.current_writer.lock().unwrap();
             if let Some(mut old_writer) = writer_guard.take() {
                 // Flush any pending data
-                old_writer.flush()
+                old_writer
+                    .flush()
                     .map_err(|e| WALError::IOError(format!("Failed to flush old WAL: {}", e)))?;
-                old_writer.get_mut().sync_all()
+                old_writer
+                    .get_mut()
+                    .sync_all()
                     .map_err(|e| WALError::IOError(format!("Failed to sync old WAL: {}", e)))?;
             }
         }
-        
+
         let mut file_number = self.current_file_number.lock().unwrap();
         *file_number += 1;
-        
+
         let filename = format!("wal_{:06}.log", *file_number);
         let file_path = self.wal_dir.join(&filename);
-        
+
         let file = OpenOptions::new()
             .create(true)
             .write(true)
@@ -525,105 +581,117 @@ impl PersistentWAL {
             .append(true)
             .open(&file_path)
             .map_err(|e| WALError::IOError(format!("Failed to create WAL file: {}", e)))?;
-        
+
         let mut writer = BufWriter::new(file);
-        
+
         // Write WAL file header
         let header = self.create_file_header()?;
-        writer.write_all(&header)
+        writer
+            .write_all(&header)
             .map_err(|e| WALError::IOError(format!("Failed to write WAL header: {}", e)))?;
-        
-        writer.flush()
+
+        writer
+            .flush()
             .map_err(|e| WALError::IOError(format!("Failed to flush WAL header: {}", e)))?;
-        
+
         *self.current_writer.lock().unwrap() = Some(writer);
         *self.current_file_path.lock().unwrap() = Some(file_path);
         *self.current_file_size.lock().unwrap() = header.len() as u64;
-        
+
         Ok(())
     }
-    
+
     /// Create WAL file header
     fn create_file_header(&self) -> Result<Vec<u8>, WALError> {
         let mut header = Vec::with_capacity(64);
-        
+
         // Magic number
         header.extend_from_slice(&WAL_MAGIC.to_le_bytes());
-        
+
         // Version
         header.extend_from_slice(&WAL_VERSION.to_le_bytes());
-        
+
         // Creation timestamp
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos() as u64;
         header.extend_from_slice(&timestamp.to_le_bytes());
-        
+
         // Reserved space for future use (50 bytes to make total 64)
         header.extend_from_slice(&[0u8; 50]);
-        
+
         Ok(header)
     }
-    
+
     /// Get next global sequence number
     pub fn next_global_sequence(&self) -> u64 {
         let mut seq = self.global_sequence.lock().unwrap();
         *seq += 1;
         *seq
     }
-    
+
     /// Get current WAL file number (for testing)
     #[allow(dead_code)] // ROADMAP v0.6.0 - WAL file number accessor for monitoring and debugging
     pub fn current_file_number(&self) -> u64 {
         *self.current_file_number.lock().unwrap()
     }
-    
+
     /// Ensure all pending writes are flushed (for testing)
     #[allow(dead_code)] // ROADMAP v0.3.0 - Manual WAL flush for durability checkpoints and testing
     pub fn flush(&self) -> Result<(), WALError> {
         let mut writer_guard = self.current_writer.lock().unwrap();
         if let Some(writer) = writer_guard.as_mut() {
-            writer.flush()
+            writer
+                .flush()
                 .map_err(|e| WALError::IOError(format!("Failed to flush WAL: {}", e)))?;
-            writer.get_mut().sync_all()
+            writer
+                .get_mut()
+                .sync_all()
                 .map_err(|e| WALError::IOError(format!("Failed to sync WAL: {}", e)))?;
         }
         Ok(())
     }
-    
+
     /// Read all entries from a specific WAL file
     pub fn read_wal_file(&self, file_number: u64) -> Result<Vec<WALEntry>, WALError> {
         let filename = format!("wal_{:06}.log", file_number);
         let file_path = self.wal_dir.join(&filename);
-        
+
         if !file_path.exists() {
-            return Err(WALError::IOError(format!("WAL file not found: {}", file_path.display())));
+            return Err(WALError::IOError(format!(
+                "WAL file not found: {}",
+                file_path.display()
+            )));
         }
-        
+
         let mut file = File::open(&file_path)
             .map_err(|e| WALError::IOError(format!("Failed to open WAL file: {}", e)))?;
-        
+
         // Skip file header (64 bytes)
         file.seek(SeekFrom::Start(64))
             .map_err(|e| WALError::IOError(format!("Failed to seek in WAL file: {}", e)))?;
-        
+
         let mut reader = BufReader::new(file);
         let mut entries = Vec::new();
         let mut buffer = Vec::new();
-        
+
         // Read entire file
-        reader.read_to_end(&mut buffer)
+        reader
+            .read_to_end(&mut buffer)
             .map_err(|e| WALError::IOError(format!("Failed to read WAL file: {}", e)))?;
-        
+
         let mut offset = 0;
         while offset < buffer.len() {
             // Try to find next entry by looking for magic number
             if offset + 4 <= buffer.len() {
                 let magic = u32::from_le_bytes([
-                    buffer[offset], buffer[offset+1], buffer[offset+2], buffer[offset+3]
+                    buffer[offset],
+                    buffer[offset + 1],
+                    buffer[offset + 2],
+                    buffer[offset + 3],
                 ]);
-                
+
                 if magic == WAL_MAGIC {
                     // Read the minimum size to determine actual entry size
                     if offset + 50 <= buffer.len() {
@@ -634,7 +702,7 @@ impl PersistentWAL {
                                 // Calculate the actual size of this entry
                                 let entry_bytes = entry.serialize();
                                 let entry_size = entry_bytes.len();
-                                
+
                                 entries.push(entry);
                                 // Move offset past this entry
                                 offset += entry_size;
@@ -656,7 +724,7 @@ impl PersistentWAL {
                 break;
             }
         }
-        
+
         Ok(entries)
     }
 }
@@ -693,41 +761,44 @@ impl CatalogWAL {
                 self.rotate_catalog_file()?;
             }
         }
-        
+
         // Now write the entry
         let mut writer_guard = self.writer.lock().unwrap();
         if let Some(writer) = writer_guard.as_mut() {
-            writer.write_all(serialized)
-                .map_err(|e| WALError::IOError(format!("Failed to write catalog WAL entry: {}", e)))?;
-            
-            writer.flush()
+            writer.write_all(serialized).map_err(|e| {
+                WALError::IOError(format!("Failed to write catalog WAL entry: {}", e))
+            })?;
+
+            writer
+                .flush()
                 .map_err(|e| WALError::IOError(format!("Failed to flush catalog WAL: {}", e)))?;
-            
-            writer.get_mut().sync_all()
+
+            writer
+                .get_mut()
+                .sync_all()
                 .map_err(|e| WALError::IOError(format!("Failed to sync catalog WAL: {}", e)))?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Rotate to a new catalog WAL file
     fn rotate_catalog_file(&self) -> Result<(), WALError> {
         let mut file_number = self.file_number.lock().unwrap();
         *file_number += 1;
-        
+
         let filename = format!("catalog_{:06}.log", *file_number);
         let file_path = self.catalog_wal_dir.join(&filename);
-        
+
         let file = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&file_path)
             .map_err(|e| WALError::IOError(format!("Failed to create catalog WAL file: {}", e)))?;
-        
+
         let writer = BufWriter::new(file);
         *self.writer.lock().unwrap() = Some(writer);
-        
+
         Ok(())
     }
 }
-

@@ -6,13 +6,12 @@
 #[path = "testutils/mod.rs"]
 mod testutils;
 
-use testutils::test_fixture::TestFixture;
 use graphlite::Value;
+use testutils::test_fixture::TestFixture;
 
 #[test]
 fn test_role_management_comprehensive() {
-    let fixture = TestFixture::empty()
-        .expect("Failed to create test fixture");
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     log::debug!("=== Testing Comprehensive Role Management ===");
 
@@ -26,7 +25,10 @@ fn test_role_management_comprehensive() {
     let roles_query_result = fixture.query("CALL gql.list_roles()");
     match roles_query_result {
         Ok(roles_result) => {
-            log::debug!("✓ Role listing works, found {} roles", roles_result.rows.len());
+            log::debug!(
+                "✓ Role listing works, found {} roles",
+                roles_result.rows.len()
+            );
         }
         Err(e) => {
             log::debug!("⚠ Role listing not available in test environment: {}", e);
@@ -61,7 +63,11 @@ fn test_role_management_comprehensive() {
     // Check if the response indicates the user already has the role
     if let Some(row) = duplicate_result.rows.first() {
         if let Some(Value::String(message)) = row.values.get("status") {
-            assert!(message.contains("already has"), "Should indicate user already has role: {}", message);
+            assert!(
+                message.contains("already has"),
+                "Should indicate user already has role: {}",
+                message
+            );
             log::debug!("✓ Correctly handled duplicate role grant: {}", message);
         }
     }
@@ -80,8 +86,7 @@ fn test_role_management_comprehensive() {
 
 #[test]
 fn test_role_management_negative_scenarios() {
-    let fixture = TestFixture::empty()
-        .expect("Failed to create test fixture");
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     log::debug!("=== Testing Role Management Negative Scenarios ===");
 
@@ -92,7 +97,7 @@ fn test_role_management_negative_scenarios() {
     log::debug!("\n1. Testing system role protection - 'user' role...");
     fixture.assert_query_fails(
         "REVOKE ROLE 'user' FROM 'test_user'",
-        "Cannot revoke system role 'user'"
+        "Cannot revoke system role 'user'",
     );
     log::debug!("✓ Correctly prevented removal of 'user' role");
 
@@ -100,7 +105,7 @@ fn test_role_management_negative_scenarios() {
     log::debug!("\n2. Testing system role protection - 'admin' role from 'admin' user...");
     fixture.assert_query_fails(
         "REVOKE ROLE 'admin' FROM 'admin'",
-        "Cannot revoke 'admin' role from 'admin' user"
+        "Cannot revoke 'admin' role from 'admin' user",
     );
     log::debug!("✓ Correctly prevented removal of 'admin' role from 'admin' user");
 
@@ -108,7 +113,7 @@ fn test_role_management_negative_scenarios() {
     log::debug!("\n3. Testing grant of non-existent role...");
     fixture.assert_query_fails(
         "GRANT ROLE 'nonexistent_role' TO 'test_user'",
-        "Role 'nonexistent_role' does not exist"
+        "Role 'nonexistent_role' does not exist",
     );
     log::debug!("✓ Correctly failed to grant non-existent role");
 
@@ -116,7 +121,7 @@ fn test_role_management_negative_scenarios() {
     log::debug!("\n4. Testing grant to non-existent user...");
     fixture.assert_query_fails(
         "GRANT ROLE 'user' TO 'nonexistent_user'",
-        "User 'nonexistent_user' does not exist"
+        "User 'nonexistent_user' does not exist",
     );
     log::debug!("✓ Correctly failed to grant role to non-existent user");
 
@@ -124,7 +129,7 @@ fn test_role_management_negative_scenarios() {
     log::debug!("\n5. Testing revoke of non-existent role...");
     fixture.assert_query_fails(
         "REVOKE ROLE 'nonexistent_role' FROM 'test_user'",
-        "Role 'nonexistent_role' does not exist"
+        "Role 'nonexistent_role' does not exist",
     );
     log::debug!("✓ Correctly failed to revoke non-existent role");
 
@@ -133,7 +138,7 @@ fn test_role_management_negative_scenarios() {
     fixture.assert_query_succeeds("CREATE ROLE 'test_revoke_role'");
     fixture.assert_query_fails(
         "REVOKE ROLE 'test_revoke_role' FROM 'nonexistent_user'",
-        "User 'nonexistent_user' does not exist"
+        "User 'nonexistent_user' does not exist",
     );
     log::debug!("✓ Correctly failed to revoke role from non-existent user");
 
@@ -143,7 +148,11 @@ fn test_role_management_negative_scenarios() {
 
     if let Some(row) = revoke_missing.rows.first() {
         if let Some(Value::String(message)) = row.values.get("status") {
-            assert!(message.contains("does not have"), "Should indicate user doesn't have role: {}", message);
+            assert!(
+                message.contains("does not have"),
+                "Should indicate user doesn't have role: {}",
+                message
+            );
             log::debug!("✓ Correctly handled missing role revocation: {}", message);
         }
     }
@@ -153,8 +162,7 @@ fn test_role_management_negative_scenarios() {
 
 #[test]
 fn test_role_assignment_integrity() {
-    let fixture = TestFixture::empty()
-        .expect("Failed to create test fixture");
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     log::debug!("=== Testing Role Assignment Integrity ===");
 
@@ -226,7 +234,10 @@ fn test_role_assignment_integrity() {
         }
     }
 
-    assert!(all_users_have_user_role, "All users should retain default 'user' role");
+    assert!(
+        all_users_have_user_role,
+        "All users should retain default 'user' role"
+    );
     log::debug!("✓ Default 'user' role is preserved through role operations");
 
     log::debug!("✅ ALL INTEGRITY TESTS PASSED!");
@@ -234,8 +245,7 @@ fn test_role_assignment_integrity() {
 
 #[test]
 fn test_role_management_syntax_validation() {
-    let fixture = TestFixture::empty()
-        .expect("Failed to create test fixture");
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     log::debug!("=== Testing Role Management Syntax Validation ===");
 
@@ -270,8 +280,7 @@ fn test_role_management_syntax_validation() {
 
 #[test]
 fn test_role_management_edge_cases() {
-    let fixture = TestFixture::empty()
-        .expect("Failed to create test fixture");
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     log::debug!("=== Testing Role Management Edge Cases ===");
 
@@ -290,7 +299,7 @@ fn test_role_management_edge_cases() {
     // But cannot revoke admin role from admin
     fixture.assert_query_fails(
         "REVOKE ROLE 'admin' FROM 'admin'",
-        "Cannot revoke 'admin' role from 'admin' user"
+        "Cannot revoke 'admin' role from 'admin' user",
     );
     log::debug!("✓ Cannot revoke admin role from admin user");
 
@@ -321,7 +330,10 @@ fn test_role_management_edge_cases() {
         }
     }
 
-    assert_eq!(users_with_shared_role, 2, "Both users should have shared_role");
+    assert_eq!(
+        users_with_shared_role, 2,
+        "Both users should have shared_role"
+    );
     log::debug!("✓ Multiple users can share the same role");
 
     // Test final system state
@@ -338,7 +350,12 @@ fn test_role_management_edge_cases() {
     for row in &final_users.rows {
         if let Some(Value::String(username)) = row.values.get("username") {
             if let Some(Value::String(roles_str)) = row.values.get("roles") {
-                assert!(roles_str.contains("user"), "User '{}' should have 'user' role: {}", username, roles_str);
+                assert!(
+                    roles_str.contains("user"),
+                    "User '{}' should have 'user' role: {}",
+                    username,
+                    roles_str
+                );
             }
         }
     }

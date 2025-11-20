@@ -4,7 +4,7 @@
 // Schema-specific AST nodes for ISO GQL Graph Type statements
 
 use crate::schema::types::{
-    NodeTypeDefinition, EdgeTypeDefinition, GraphTypeVersion, SchemaChange
+    EdgeTypeDefinition, GraphTypeVersion, NodeTypeDefinition, SchemaChange,
 };
 
 /// CREATE GRAPH TYPE statement AST
@@ -32,6 +32,7 @@ pub struct AlterGraphTypeStatement {
     pub name: String,
     #[allow(dead_code)] // ROADMAP v0.4.0 - Version specification for schema evolution tracking
     pub version: Option<GraphTypeVersion>,
-    #[allow(dead_code)] // ROADMAP v0.4.0 - Schema change operations (ADD/DROP/ALTER node/edge types)
+    #[allow(dead_code)]
+    // ROADMAP v0.4.0 - Schema change operations (ADD/DROP/ALTER node/edge types)
     pub changes: Vec<SchemaChange>,
 }

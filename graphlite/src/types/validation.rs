@@ -5,7 +5,7 @@
 //!
 //! Implements type checking and validation rules using TypeSpec
 
-use crate::types::{GqlType, TypeError, TypeResult, GraphTypeSpec};
+use crate::types::{GqlType, GraphTypeSpec, TypeError, TypeResult};
 
 /// Runtime type constraints for validation
 #[derive(Debug, Clone)]
@@ -38,34 +38,68 @@ impl TypeValidator {
             _ if left == right => true,
 
             // Numeric type compatibility - can implicit cast between numeric types
-            (GqlType::SmallInt, GqlType::Integer | GqlType::BigInt | GqlType::Int128 | GqlType::Int256) => true,
+            (
+                GqlType::SmallInt,
+                GqlType::Integer | GqlType::BigInt | GqlType::Int128 | GqlType::Int256,
+            ) => true,
             (GqlType::Integer, GqlType::BigInt | GqlType::Int128 | GqlType::Int256) => true,
             (GqlType::BigInt, GqlType::Int128 | GqlType::Int256) => true,
             (GqlType::Int128, GqlType::Int256) => true,
-            
+
             // Integer to decimal
-            (GqlType::SmallInt | GqlType::Integer | GqlType::BigInt | GqlType::Int128 | GqlType::Int256, 
-             GqlType::Decimal { .. }) => true,
-            
+            (
+                GqlType::SmallInt
+                | GqlType::Integer
+                | GqlType::BigInt
+                | GqlType::Int128
+                | GqlType::Int256,
+                GqlType::Decimal { .. },
+            ) => true,
+
             // Integer to float
-            (GqlType::SmallInt | GqlType::Integer, 
-             GqlType::Float { .. } | GqlType::Real | GqlType::Double) => true,
-             
+            (
+                GqlType::SmallInt | GqlType::Integer,
+                GqlType::Float { .. } | GqlType::Real | GqlType::Double,
+            ) => true,
+
             // Float widening
             (GqlType::Float { .. }, GqlType::Double) => true,
             (GqlType::Real, GqlType::Double) => true,
 
             // String types with different max lengths
-            (GqlType::String { max_length: Some(l_max) }, GqlType::String { max_length: Some(r_max) }) => {
-                l_max <= r_max
-            }
-            (GqlType::String { max_length: Some(_) }, GqlType::String { max_length: None }) => true, // Bounded to unbounded is ok
-            (GqlType::String { max_length: None }, GqlType::String { max_length: Some(_) }) => false, // Unbounded to bounded is not ok
+            (
+                GqlType::String {
+                    max_length: Some(l_max),
+                },
+                GqlType::String {
+                    max_length: Some(r_max),
+                },
+            ) => l_max <= r_max,
+            (
+                GqlType::String {
+                    max_length: Some(_),
+                },
+                GqlType::String { max_length: None },
+            ) => true, // Bounded to unbounded is ok
+            (
+                GqlType::String { max_length: None },
+                GqlType::String {
+                    max_length: Some(_),
+                },
+            ) => false, // Unbounded to bounded is not ok
             (GqlType::String { max_length: None }, GqlType::String { max_length: None }) => true,
 
             // List type compatibility
-            (GqlType::List { element_type: l_elem, max_length: l_max }, 
-             GqlType::List { element_type: r_elem, max_length: r_max }) => {
+            (
+                GqlType::List {
+                    element_type: l_elem,
+                    max_length: l_max,
+                },
+                GqlType::List {
+                    element_type: r_elem,
+                    max_length: r_max,
+                },
+            ) => {
                 // Check element type compatibility first
                 if !Self::are_compatible(l_elem, r_elem) {
                     return false;
@@ -73,45 +107,63 @@ impl TypeValidator {
                 // Check max_length constraints (similar to strings)
                 match (l_max, r_max) {
                     (Some(l), Some(r)) => l <= r, // Left max must be <= right max
-                    (Some(_), None) => true,       // Bounded to unbounded is ok
-                    (None, Some(_)) => false,      // Unbounded to bounded is not ok
-                    (None, None) => true,          // Both unbounded is ok
+                    (Some(_), None) => true,      // Bounded to unbounded is ok
+                    (None, Some(_)) => false,     // Unbounded to bounded is not ok
+                    (None, None) => true,         // Both unbounded is ok
                 }
             }
 
             // Reference type compatibility
-            (GqlType::Reference { target_type: Some(l) }, GqlType::Reference { target_type: Some(r) }) => {
-                Self::are_compatible(l, r)
-            }
+            (
+                GqlType::Reference {
+                    target_type: Some(l),
+                },
+                GqlType::Reference {
+                    target_type: Some(r),
+                },
+            ) => Self::are_compatible(l, r),
 
             // Temporal type compatibility
-            (l @ (GqlType::Date | GqlType::Time { .. } | GqlType::Timestamp { .. } | 
-                  GqlType::ZonedTime { .. } | GqlType::ZonedDateTime { .. } | 
-                  GqlType::LocalTime { .. } | GqlType::LocalDateTime { .. }), 
-             r @ (GqlType::Date | GqlType::Time { .. } | GqlType::Timestamp { .. } | 
-                  GqlType::ZonedTime { .. } | GqlType::ZonedDateTime { .. } | 
-                  GqlType::LocalTime { .. } | GqlType::LocalDateTime { .. })) => {
-                Self::are_temporal_compatible(l, r)
-            }
+            (
+                l @ (GqlType::Date
+                | GqlType::Time { .. }
+                | GqlType::Timestamp { .. }
+                | GqlType::ZonedTime { .. }
+                | GqlType::ZonedDateTime { .. }
+                | GqlType::LocalTime { .. }
+                | GqlType::LocalDateTime { .. }),
+                r @ (GqlType::Date
+                | GqlType::Time { .. }
+                | GqlType::Timestamp { .. }
+                | GqlType::ZonedTime { .. }
+                | GqlType::ZonedDateTime { .. }
+                | GqlType::LocalTime { .. }
+                | GqlType::LocalDateTime { .. }),
+            ) => Self::are_temporal_compatible(l, r),
 
             _ => false,
         }
     }
-    
+
     /// Check if temporal types are compatible
     fn are_temporal_compatible(left: &GqlType, right: &GqlType) -> bool {
         match (left, right) {
             // Same temporal type
             _ if std::mem::discriminant(left) == std::mem::discriminant(right) => true,
-            
+
             // Date to timestamp conversions
-            (GqlType::Date, GqlType::Timestamp { .. } | GqlType::ZonedDateTime { .. } | GqlType::LocalDateTime { .. }) => true,
-            
+            (
+                GqlType::Date,
+                GqlType::Timestamp { .. }
+                | GqlType::ZonedDateTime { .. }
+                | GqlType::LocalDateTime { .. },
+            ) => true,
+
             // Time conversions
             (GqlType::Time { .. }, GqlType::ZonedTime { .. } | GqlType::LocalTime { .. }) => true,
             (GqlType::ZonedTime { .. }, GqlType::Time { .. } | GqlType::LocalTime { .. }) => true,
             (GqlType::LocalTime { .. }, GqlType::Time { .. }) => true,
-            
+
             _ => false,
         }
     }
@@ -120,8 +172,13 @@ impl TypeValidator {
     #[allow(dead_code)] // ROADMAP v0.4.0 - List size validation for schema constraints
     pub fn validate_list_size(list_type: &GqlType, size: usize) -> bool {
         match list_type {
-            GqlType::List { max_length: Some(max), .. } => size <= *max,
-            GqlType::List { max_length: None, .. } => true,
+            GqlType::List {
+                max_length: Some(max),
+                ..
+            } => size <= *max,
+            GqlType::List {
+                max_length: None, ..
+            } => true,
             _ => false,
         }
     }
@@ -190,10 +247,7 @@ impl TypeValidator {
 
     /// Validate nullability constraints
     #[allow(dead_code)] // ROADMAP v0.5.0 - Type validation for static analysis (see ROADMAP.md §7)
-    pub fn validate_nullability(
-        _value_type: &GqlType,
-        allow_null: bool,
-    ) -> TypeResult<()> {
+    pub fn validate_nullability(_value_type: &GqlType, allow_null: bool) -> TypeResult<()> {
         // Note: TypeSpec doesn't have a Null variant - null handling is done at the Value level
         if !allow_null {
             // In a full implementation, we'd check if the value is null at runtime
@@ -213,7 +267,10 @@ impl TypeValidator {
         element_types: &[GqlType],
     ) -> TypeResult<()> {
         match list_type {
-            GqlType::List { element_type, max_length } => {
+            GqlType::List {
+                element_type,
+                max_length,
+            } => {
                 // Check size constraint
                 if let Some(max) = max_length {
                     if element_types.len() > *max {
@@ -273,8 +330,14 @@ impl TypeValidator {
 
             // Nested list validation
             (
-                GqlType::List { element_type: value_elem, max_length: value_max },
-                GqlType::List { element_type: expected_elem, max_length: expected_max }
+                GqlType::List {
+                    element_type: value_elem,
+                    max_length: value_max,
+                },
+                GqlType::List {
+                    element_type: expected_elem,
+                    max_length: expected_max,
+                },
             ) => {
                 // Validate max length constraint
                 match (value_max, expected_max) {
@@ -298,29 +361,31 @@ impl TypeValidator {
 
             // Nested reference validation
             (
-                GqlType::Reference { target_type: Some(value_target) },
-                GqlType::Reference { target_type: Some(expected_target) },
-            ) => {
-                Self::validate_nested_type_structure_impl(
-                    value_target,
-                    expected_target,
-                    max_depth,
-                    current_depth + 1,
-                )
-            }
+                GqlType::Reference {
+                    target_type: Some(value_target),
+                },
+                GqlType::Reference {
+                    target_type: Some(expected_target),
+                },
+            ) => Self::validate_nested_type_structure_impl(
+                value_target,
+                expected_target,
+                max_depth,
+                current_depth + 1,
+            ),
 
             // Reference dereferencing validation
             (
-                GqlType::Reference { target_type: Some(value_target) },
-                expected_type
-            ) => {
-                Self::validate_nested_type_structure_impl(
-                    value_target,
-                    expected_type,
-                    max_depth,
-                    current_depth + 1,
-                )
-            }
+                GqlType::Reference {
+                    target_type: Some(value_target),
+                },
+                expected_type,
+            ) => Self::validate_nested_type_structure_impl(
+                value_target,
+                expected_type,
+                max_depth,
+                current_depth + 1,
+            ),
 
             _ => Err(TypeError::TypeMismatch {
                 expected: format!("{}", expected_type),
@@ -336,9 +401,9 @@ impl TypeValidator {
         target_value_type: &GqlType,
     ) -> TypeResult<()> {
         match ref_type {
-            GqlType::Reference { target_type: Some(expected_target) } => {
-                Self::validate_value_type(target_value_type, expected_target)
-            }
+            GqlType::Reference {
+                target_type: Some(expected_target),
+            } => Self::validate_value_type(target_value_type, expected_target),
             GqlType::Reference { target_type: None } => {
                 // Untyped reference - accepts any type
                 Ok(())
@@ -392,7 +457,9 @@ impl TypeValidator {
         // Check precision constraints for numeric types
         if let Some(max_precision) = constraints.max_numeric_precision {
             match value_type {
-                GqlType::Decimal { precision: Some(p), .. } if *p > max_precision => {
+                GqlType::Decimal {
+                    precision: Some(p), ..
+                } if *p > max_precision => {
                     return Err(TypeError::NumericOverflow(format!(
                         "Decimal precision {} exceeds maximum {}",
                         p, max_precision
@@ -427,16 +494,29 @@ mod tests {
 
     #[test]
     fn test_type_compatibility() {
-        assert!(TypeValidator::are_compatible(&GqlType::Boolean, &GqlType::Boolean));
-        assert!(TypeValidator::are_compatible(&GqlType::Integer, &GqlType::BigInt));
-        assert!(!TypeValidator::are_compatible(&GqlType::BigInt, &GqlType::Integer));
+        assert!(TypeValidator::are_compatible(
+            &GqlType::Boolean,
+            &GqlType::Boolean
+        ));
+        assert!(TypeValidator::are_compatible(
+            &GqlType::Integer,
+            &GqlType::BigInt
+        ));
+        assert!(!TypeValidator::are_compatible(
+            &GqlType::BigInt,
+            &GqlType::Integer
+        ));
     }
 
     #[test]
     fn test_string_compatibility() {
         let unbounded = GqlType::String { max_length: None };
-        let bounded_10 = GqlType::String { max_length: Some(10) };
-        let bounded_20 = GqlType::String { max_length: Some(20) };
+        let bounded_10 = GqlType::String {
+            max_length: Some(10),
+        };
+        let bounded_20 = GqlType::String {
+            max_length: Some(20),
+        };
 
         assert!(TypeValidator::are_compatible(&bounded_10, &unbounded));
         assert!(!TypeValidator::are_compatible(&unbounded, &bounded_10));
@@ -446,9 +526,9 @@ mod tests {
 
     #[test]
     fn test_list_validation() {
-        let list_type = GqlType::List { 
+        let list_type = GqlType::List {
             element_type: Box::new(GqlType::Integer),
-            max_length: Some(3)
+            max_length: Some(3),
         };
 
         let elements = vec![GqlType::Integer, GqlType::SmallInt];

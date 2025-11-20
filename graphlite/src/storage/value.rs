@@ -8,11 +8,11 @@
 //! - Temporal types: DateTime
 //! - Collections: Array
 
-use chrono::{DateTime, Utc, FixedOffset};
+use crate::storage::types::{Edge, Node};
+use chrono::{DateTime, FixedOffset, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use crate::storage::types::{Node, Edge};
 
 /// Temporal value wrapper that adds temporal metadata to any value
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -33,7 +33,7 @@ impl TemporalValue {
             transaction_time: Utc::now(),
         }
     }
-    
+
     /// Create a temporal value with explicit time bounds
     pub fn with_bounds(
         value: Value,
@@ -48,12 +48,12 @@ impl TemporalValue {
             transaction_time,
         }
     }
-    
+
     /// Check if this value is valid at a specific point in time
     pub fn is_valid_at(&self, time: DateTime<Utc>) -> bool {
         time >= self.valid_from && self.valid_to.map_or(true, |vt| time < vt)
-    }   
-    
+    }
+
     /// Check if this value is currently valid (valid_to is None or in the future)
     pub fn is_current(&self) -> bool {
         self.valid_to.map_or(true, |vt| vt > Utc::now())
@@ -75,12 +75,12 @@ impl TimeWindow {
         }
         Ok(Self { start, end })
     }
-    
+
     /// Check if a datetime falls within this time window
     pub fn contains(&self, dt: &DateTime<Utc>) -> bool {
         dt >= &self.start && dt <= &self.end
     }
-    
+
     /// Get the duration of this time window in seconds
     pub fn duration_seconds(&self) -> i64 {
         self.end.signed_duration_since(self.start).num_seconds()
@@ -107,30 +107,31 @@ impl PathValue {
             elements: Vec::new(),
         }
     }
-    
+
     /// Create a path from a list of elements
     pub fn from_elements(elements: Vec<PathElement>) -> Self {
         Self { elements }
     }
-    
+
     /// Add an element to the path
     pub fn add_element(&mut self, element: PathElement) {
         self.elements.push(element);
     }
-    
+
     /// Get the length of the path (number of edges)
     pub fn length(&self) -> usize {
         self.elements.iter().filter(|e| e.edge_id.is_some()).count()
     }
-    
+
     /// Get all node IDs in the path
     pub fn get_nodes(&self) -> Vec<&str> {
         self.elements.iter().map(|e| e.node_id.as_str()).collect()
     }
-    
+
     /// Get all edge IDs in the path (non-None values)
     pub fn get_edges(&self) -> Vec<&str> {
-        self.elements.iter()
+        self.elements
+            .iter()
             .filter_map(|e| e.edge_id.as_ref().map(|id| id.as_str()))
             .collect()
     }
@@ -147,11 +148,11 @@ pub enum Value {
     DateTimeWithNamedTz(String, DateTime<Utc>), // Store timezone name and UTC datetime
     TimeWindow(TimeWindow),
     Array(Vec<Value>),
-    List(Vec<Value>), // Alias for Array for ISO GQL compatibility
-    Vector(Vec<f32>), // Dedicated vector type for better performance and type safety
-    Path(PathValue),  // PATH constructor support
-    Node(Node),       // Graph node with labels and properties
-    Edge(Edge),       // Graph edge with label and properties
+    List(Vec<Value>),        // Alias for Array for ISO GQL compatibility
+    Vector(Vec<f32>),        // Dedicated vector type for better performance and type safety
+    Path(PathValue),         // PATH constructor support
+    Node(Node),              // Graph node with labels and properties
+    Edge(Edge),              // Graph edge with label and properties
     Temporal(TemporalValue), // Temporal value wrapper
     Null,
 }
@@ -164,7 +165,7 @@ impl Value {
             _ => None,
         }
     }
-    
+
     /// Extract as string if possible
     pub fn as_string(&self) -> Option<&str> {
         match self {
@@ -172,7 +173,7 @@ impl Value {
             _ => None,
         }
     }
-    
+
     /// Extract as boolean if possible
     pub fn as_boolean(&self) -> Option<bool> {
         match self {
@@ -180,7 +181,7 @@ impl Value {
             _ => None,
         }
     }
-    
+
     /// Extract as datetime if possible (UTC only)
     pub fn as_datetime(&self) -> Option<&DateTime<Utc>> {
         match self {
@@ -189,7 +190,7 @@ impl Value {
             _ => None,
         }
     }
-    
+
     /// Extract as datetime with fixed offset if possible
     pub fn as_datetime_with_offset(&self) -> Option<&DateTime<FixedOffset>> {
         match self {
@@ -197,7 +198,7 @@ impl Value {
             _ => None,
         }
     }
-    
+
     /// Extract as datetime with named timezone if possible
     pub fn as_datetime_with_named_tz(&self) -> Option<(&str, &DateTime<Utc>)> {
         match self {
@@ -205,7 +206,7 @@ impl Value {
             _ => None,
         }
     }
-    
+
     /// Get any datetime as UTC, converting if necessary
     pub fn as_datetime_utc(&self) -> Option<DateTime<Utc>> {
         match self {
@@ -215,7 +216,7 @@ impl Value {
             _ => None,
         }
     }
-    
+
     /// Get timezone information if available
     pub fn get_timezone_info(&self) -> Option<String> {
         match self {
@@ -225,7 +226,7 @@ impl Value {
             _ => None,
         }
     }
-    
+
     /// Extract as array if possible
     pub fn as_array(&self) -> Option<&Vec<Value>> {
         match self {
@@ -250,7 +251,7 @@ impl Value {
             _ => None,
         }
     }
-    
+
     /// Extract as time window if possible
     pub fn as_time_window(&self) -> Option<&TimeWindow> {
         match self {
@@ -258,7 +259,7 @@ impl Value {
             _ => None,
         }
     }
-    
+
     /// Extract as vector if possible
     pub fn as_vector(&self) -> Option<&Vec<f32>> {
         match self {
@@ -266,7 +267,7 @@ impl Value {
             _ => None,
         }
     }
-    
+
     /// Extract as path if possible
     pub fn as_path(&self) -> Option<&PathValue> {
         match self {
@@ -274,7 +275,7 @@ impl Value {
             _ => None,
         }
     }
-    
+
     /// Extract as node if possible
     pub fn as_node(&self) -> Option<&Node> {
         match self {
@@ -282,7 +283,7 @@ impl Value {
             _ => None,
         }
     }
-    
+
     /// Extract as edge if possible
     pub fn as_edge(&self) -> Option<&Edge> {
         match self {
@@ -290,7 +291,7 @@ impl Value {
             _ => None,
         }
     }
-    
+
     /// Extract as temporal value if possible
     pub fn as_temporal(&self) -> Option<&TemporalValue> {
         match self {
@@ -298,18 +299,18 @@ impl Value {
             _ => None,
         }
     }
-    
+
     /// Check if value is null
     pub fn is_null(&self) -> bool {
         matches!(self, Value::Null)
     }
-    
+
     /// Get the type name of this value
     pub fn type_name(&self) -> &'static str {
         match self {
             Value::String(_) => "String",
             Value::Number(_) => "Number",
-            Value::Boolean(_) => "Boolean", 
+            Value::Boolean(_) => "Boolean",
             Value::DateTime(_) => "DateTime",
             Value::DateTimeWithFixedOffset(_) => "DateTimeWithOffset",
             Value::DateTimeWithNamedTz(_, _) => "DateTimeWithTz",
@@ -333,15 +334,24 @@ impl fmt::Display for Value {
             Value::Number(n) => write!(f, "{}", n),
             Value::Boolean(b) => write!(f, "{}", b),
             Value::DateTime(dt) => write!(f, "{}", dt.format("%Y-%m-%d %H:%M:%S UTC")),
-            Value::DateTimeWithFixedOffset(dt) => write!(f, "{}", dt.format("%Y-%m-%d %H:%M:%S %:z")),
-            Value::DateTimeWithNamedTz(tz_name, dt) => write!(f, "{} {}", dt.format("%Y-%m-%d %H:%M:%S"), tz_name),
-            Value::TimeWindow(tw) => write!(f, "TIME_WINDOW({}, {})", 
-                tw.start.format("%Y-%m-%dT%H:%M:%SZ"), 
-                tw.end.format("%Y-%m-%dT%H:%M:%SZ")),
+            Value::DateTimeWithFixedOffset(dt) => {
+                write!(f, "{}", dt.format("%Y-%m-%d %H:%M:%S %:z"))
+            }
+            Value::DateTimeWithNamedTz(tz_name, dt) => {
+                write!(f, "{} {}", dt.format("%Y-%m-%d %H:%M:%S"), tz_name)
+            }
+            Value::TimeWindow(tw) => write!(
+                f,
+                "TIME_WINDOW({}, {})",
+                tw.start.format("%Y-%m-%dT%H:%M:%SZ"),
+                tw.end.format("%Y-%m-%dT%H:%M:%SZ")
+            ),
             Value::Array(arr) => {
                 write!(f, "[")?;
                 for (i, item) in arr.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{}", item)?;
                 }
                 write!(f, "]")
@@ -349,7 +359,9 @@ impl fmt::Display for Value {
             Value::List(list) => {
                 write!(f, "[")?;
                 for (i, item) in list.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{}", item)?;
                 }
                 write!(f, "]")
@@ -357,7 +369,9 @@ impl fmt::Display for Value {
             Value::Vector(vec) => {
                 write!(f, "VECTOR[")?;
                 for (i, item) in vec.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     write!(f, "{}", item)?;
                 }
                 write!(f, "]")
@@ -365,7 +379,9 @@ impl fmt::Display for Value {
             Value::Path(path) => {
                 write!(f, "PATH[")?;
                 for (i, element) in path.elements.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
                     if let Some(edge_id) = &element.edge_id {
                         write!(f, "({}, {})", element.node_id, edge_id)?;
                     } else {
@@ -378,14 +394,27 @@ impl fmt::Display for Value {
                 write!(f, "NODE({}, [{}])", node.id, node.labels.join(", "))
             }
             Value::Edge(edge) => {
-                write!(f, "EDGE({}, {}-[{}]->{}, {})", edge.id, edge.from_node, edge.label, edge.to_node, edge.properties.len())
+                write!(
+                    f,
+                    "EDGE({}, {}-[{}]->{}, {})",
+                    edge.id,
+                    edge.from_node,
+                    edge.label,
+                    edge.to_node,
+                    edge.properties.len()
+                )
             }
             Value::Temporal(tv) => {
-                write!(f, "TEMPORAL({}, valid_from: {}, valid_to: {}, tx_time: {})", 
+                write!(
+                    f,
+                    "TEMPORAL({}, valid_from: {}, valid_to: {}, tx_time: {})",
                     tv.value,
                     tv.valid_from.format("%Y-%m-%dT%H:%M:%SZ"),
-                    tv.valid_to.map_or("ongoing".to_string(), |vt| vt.format("%Y-%m-%dT%H:%M:%SZ").to_string()),
-                    tv.transaction_time.format("%Y-%m-%dT%H:%M:%SZ"))
+                    tv.valid_to.map_or("ongoing".to_string(), |vt| vt
+                        .format("%Y-%m-%dT%H:%M:%SZ")
+                        .to_string()),
+                    tv.transaction_time.format("%Y-%m-%dT%H:%M:%SZ")
+                )
             }
             Value::Null => write!(f, "null"),
         }
@@ -504,7 +533,7 @@ impl Hash for Value {
             Value::Boolean(b) => {
                 1.hash(state);
                 b.hash(state);
-            },
+            }
             Value::Number(n) => {
                 2.hash(state);
                 // Handle NaN and infinity consistently
@@ -519,53 +548,53 @@ impl Hash for Value {
                 } else {
                     n.to_bits().hash(state);
                 }
-            },
+            }
             Value::String(s) => {
                 3.hash(state);
                 s.hash(state);
-            },
+            }
             Value::DateTime(dt) => {
                 4.hash(state);
                 dt.timestamp().hash(state);
                 dt.timestamp_subsec_nanos().hash(state);
-            },
+            }
             Value::TimeWindow(tw) => {
                 5.hash(state);
                 tw.hash(state);
-            },
+            }
             Value::Array(arr) => {
                 6.hash(state);
                 arr.len().hash(state);
                 for item in arr {
                     item.hash(state);
                 }
-            },
+            }
             Value::List(list) => {
                 11.hash(state); // Use unique discriminant
                 list.len().hash(state);
                 for item in list {
                     item.hash(state);
                 }
-            },
+            }
             Value::Vector(vec) => {
                 7.hash(state);
                 vec.len().hash(state);
                 for &item in vec {
                     item.to_bits().hash(state);
                 }
-            },
+            }
             Value::DateTimeWithFixedOffset(dt) => {
                 8.hash(state);
                 dt.timestamp().hash(state);
                 dt.timestamp_subsec_nanos().hash(state);
                 dt.offset().local_minus_utc().hash(state);
-            },
+            }
             Value::DateTimeWithNamedTz(tz_name, dt) => {
                 9.hash(state);
                 tz_name.hash(state);
                 dt.timestamp().hash(state);
                 dt.timestamp_subsec_nanos().hash(state);
-            },
+            }
             Value::Path(path) => {
                 10.hash(state);
                 path.elements.len().hash(state);
@@ -573,7 +602,7 @@ impl Hash for Value {
                     element.node_id.hash(state);
                     element.edge_id.hash(state);
                 }
-            },
+            }
             Value::Node(node) => {
                 12.hash(state);
                 node.id.hash(state);
@@ -583,7 +612,7 @@ impl Hash for Value {
                     key.hash(state);
                     value.hash(state);
                 }
-            },
+            }
             Value::Edge(edge) => {
                 13.hash(state);
                 edge.id.hash(state);
@@ -595,12 +624,11 @@ impl Hash for Value {
                     key.hash(state);
                     value.hash(state);
                 }
-            },
+            }
             Value::Temporal(tv) => {
                 14.hash(state);
                 tv.hash(state);
-            },
+            }
         }
     }
 }
-

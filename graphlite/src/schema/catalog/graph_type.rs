@@ -3,16 +3,16 @@
 //
 // GraphTypeCatalog - Catalog provider for ISO GQL Graph Type definitions
 
-use std::collections::HashMap;
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use serde_json;
+use std::collections::HashMap;
+use std::sync::Arc;
 
-use crate::catalog::traits::{CatalogProvider, CatalogSchema};
-use crate::catalog::operations::{CatalogOperation, CatalogResponse, EntityType, QueryType};
 use crate::catalog::error::{CatalogError, CatalogResult};
-use crate::storage::StorageManager;
+use crate::catalog::operations::{CatalogOperation, CatalogResponse, EntityType, QueryType};
+use crate::catalog::traits::{CatalogProvider, CatalogSchema};
 use crate::schema::types::GraphTypeDefinition;
+use crate::storage::StorageManager;
 
 /// GraphTypeCatalog manages graph type definitions persistently
 #[derive(Debug, Serialize, Deserialize)]
@@ -36,7 +36,8 @@ impl GraphTypeCatalog {
 
     /// List all graph types
     fn list_graph_types(&self) -> CatalogResult<CatalogResponse> {
-        let types: Vec<serde_json::Value> = self.graph_types
+        let types: Vec<serde_json::Value> = self
+            .graph_types
             .iter()
             .map(|(name, def)| {
                 serde_json::json!({
@@ -63,9 +64,10 @@ impl GraphTypeCatalog {
 
                 Ok(CatalogResponse::success_with_data(response))
             }
-            None => Err(CatalogError::NotFound(
-                format!("Graph type '{}' not found", name)
-            ))
+            None => Err(CatalogError::NotFound(format!(
+                "Graph type '{}' not found",
+                name
+            ))),
         }
     }
 
@@ -104,9 +106,10 @@ impl GraphTypeCatalog {
 
                 Ok(CatalogResponse::query(description))
             }
-            None => Err(CatalogError::NotFound(
-                format!("Graph type '{}' not found", name)
-            ))
+            None => Err(CatalogError::NotFound(format!(
+                "Graph type '{}' not found",
+                name
+            ))),
         }
     }
 
@@ -136,19 +139,27 @@ impl CatalogProvider for GraphTypeCatalog {
 
     fn execute(&mut self, op: CatalogOperation) -> CatalogResult<CatalogResponse> {
         match op {
-            CatalogOperation::Create { entity_type, name, params } => {
+            CatalogOperation::Create {
+                entity_type,
+                name,
+                params,
+            } => {
                 match entity_type {
                     EntityType::GraphType => {
                         let graph_type: GraphTypeDefinition = serde_json::from_value(params)
-                            .map_err(|e| CatalogError::InvalidOperation(
-                                format!("Invalid graph type definition: {}", e)
-                            ))?;
+                            .map_err(|e| {
+                                CatalogError::InvalidOperation(format!(
+                                    "Invalid graph type definition: {}",
+                                    e
+                                ))
+                            })?;
 
                         // Check if graph type already exists
                         if self.graph_types.contains_key(&name) {
-                            return Err(CatalogError::DuplicateEntry(
-                                format!("Graph type '{}' already exists", name)
-                            ));
+                            return Err(CatalogError::DuplicateEntry(format!(
+                                "Graph type '{}' already exists",
+                                name
+                            )));
                         }
 
                         // Store the graph type
@@ -159,26 +170,28 @@ impl CatalogProvider for GraphTypeCatalog {
                             storage.save_catalog_provider("graph_type", &self.save()?)?;
                         }
 
-                        Ok(CatalogResponse::success_with_data(
-                            serde_json::json!({
-                                "name": name,
-                                "message": "Graph type created successfully"
-                            })
-                        ))
+                        Ok(CatalogResponse::success_with_data(serde_json::json!({
+                            "name": name,
+                            "message": "Graph type created successfully"
+                        })))
                     }
-                    _ => Err(CatalogError::InvalidOperation(
-                        format!("GraphTypeCatalog does not support creating {:?}", entity_type)
-                    ))
+                    _ => Err(CatalogError::InvalidOperation(format!(
+                        "GraphTypeCatalog does not support creating {:?}",
+                        entity_type
+                    ))),
                 }
             }
 
-            CatalogOperation::Drop { entity_type, name, .. } => {
+            CatalogOperation::Drop {
+                entity_type, name, ..
+            } => {
                 match entity_type {
                     EntityType::GraphType => {
                         if !self.graph_types.contains_key(&name) {
-                            return Err(CatalogError::NotFound(
-                                format!("Graph type '{}' not found", name)
-                            ));
+                            return Err(CatalogError::NotFound(format!(
+                                "Graph type '{}' not found",
+                                name
+                            )));
                         }
 
                         // Remove the graph type
@@ -189,16 +202,15 @@ impl CatalogProvider for GraphTypeCatalog {
                             storage.save_catalog_provider("graph_type", &self.save()?)?;
                         }
 
-                        Ok(CatalogResponse::success_with_data(
-                            serde_json::json!({
-                                "name": name,
-                                "message": format!("Graph type '{}' dropped successfully", name)
-                            })
-                        ))
+                        Ok(CatalogResponse::success_with_data(serde_json::json!({
+                            "name": name,
+                            "message": format!("Graph type '{}' dropped successfully", name)
+                        })))
                     }
-                    _ => Err(CatalogError::InvalidOperation(
-                        format!("GraphTypeCatalog does not support dropping {:?}", entity_type)
-                    ))
+                    _ => Err(CatalogError::InvalidOperation(format!(
+                        "GraphTypeCatalog does not support dropping {:?}",
+                        entity_type
+                    ))),
                 }
             }
 
@@ -206,78 +218,82 @@ impl CatalogProvider for GraphTypeCatalog {
                 self.execute_read_only(CatalogOperation::Query { query_type, params })
             }
 
-            CatalogOperation::List { entity_type, filters: _ } => {
-                match entity_type {
-                    EntityType::GraphType => self.list_graph_types(),
-                    _ => Err(CatalogError::InvalidOperation(
-                        format!("GraphTypeCatalog does not support listing {:?}", entity_type)
-                    ))
-                }
-            }
+            CatalogOperation::List {
+                entity_type,
+                filters: _,
+            } => match entity_type {
+                EntityType::GraphType => self.list_graph_types(),
+                _ => Err(CatalogError::InvalidOperation(format!(
+                    "GraphTypeCatalog does not support listing {:?}",
+                    entity_type
+                ))),
+            },
 
-            _ => Err(CatalogError::NotSupported(
-                format!("Operation not supported by GraphTypeCatalog")
-            ))
+            _ => Err(CatalogError::NotSupported(format!(
+                "Operation not supported by GraphTypeCatalog"
+            ))),
         }
     }
 
     fn execute_read_only(&self, op: CatalogOperation) -> CatalogResult<CatalogResponse> {
         match op {
-            CatalogOperation::Query { query_type, params } => {
-                match query_type {
-                    QueryType::List => self.list_graph_types(),
+            CatalogOperation::Query { query_type, params } => match query_type {
+                QueryType::List => self.list_graph_types(),
 
-                    QueryType::Get | QueryType::GetGraphType => {
-                        let name = params.get("name")
-                            .and_then(|v| v.as_str())
-                            .ok_or_else(|| CatalogError::InvalidOperation(
-                                "Missing 'name' parameter for Get query".to_string()
-                            ))?;
-                        self.get_graph_type(name)
-                    }
-
-                    QueryType::Exists => {
-                        let name = params.get("name")
-                            .and_then(|v| v.as_str())
-                            .ok_or_else(|| CatalogError::InvalidOperation(
-                                "Missing 'name' parameter for Exists query".to_string()
-                            ))?;
-                        self.exists(name)
-                    }
-
-                    _ => Err(CatalogError::NotSupported(
-                        format!("Query type {:?} not supported", query_type)
-                    ))
+                QueryType::Get | QueryType::GetGraphType => {
+                    let name = params.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
+                        CatalogError::InvalidOperation(
+                            "Missing 'name' parameter for Get query".to_string(),
+                        )
+                    })?;
+                    self.get_graph_type(name)
                 }
-            }
 
-            CatalogOperation::List { entity_type, filters: _ } => {
-                match entity_type {
-                    EntityType::GraphType => self.list_graph_types(),
-                    _ => Err(CatalogError::InvalidOperation(
-                        format!("GraphTypeCatalog does not support listing {:?}", entity_type)
-                    ))
+                QueryType::Exists => {
+                    let name = params.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
+                        CatalogError::InvalidOperation(
+                            "Missing 'name' parameter for Exists query".to_string(),
+                        )
+                    })?;
+                    self.exists(name)
                 }
-            }
+
+                _ => Err(CatalogError::NotSupported(format!(
+                    "Query type {:?} not supported",
+                    query_type
+                ))),
+            },
+
+            CatalogOperation::List {
+                entity_type,
+                filters: _,
+            } => match entity_type {
+                EntityType::GraphType => self.list_graph_types(),
+                _ => Err(CatalogError::InvalidOperation(format!(
+                    "GraphTypeCatalog does not support listing {:?}",
+                    entity_type
+                ))),
+            },
 
             _ => Err(CatalogError::InvalidOperation(
-                "Only query and list operations are supported in read-only mode".to_string()
-            ))
+                "Only query and list operations are supported in read-only mode".to_string(),
+            )),
         }
     }
 
     fn save(&self) -> CatalogResult<Vec<u8>> {
-        serde_json::to_vec(self)
-            .map_err(|e| CatalogError::SerializationError(
-                format!("Failed to serialize GraphTypeCatalog: {}", e)
-            ))
+        serde_json::to_vec(self).map_err(|e| {
+            CatalogError::SerializationError(format!("Failed to serialize GraphTypeCatalog: {}", e))
+        })
     }
 
     fn load(&mut self, data: &[u8]) -> CatalogResult<()> {
-        let loaded: GraphTypeCatalog = serde_json::from_slice(data)
-            .map_err(|e| CatalogError::SerializationError(
-                format!("Failed to deserialize GraphTypeCatalog: {}", e)
-            ))?;
+        let loaded: GraphTypeCatalog = serde_json::from_slice(data).map_err(|e| {
+            CatalogError::SerializationError(format!(
+                "Failed to deserialize GraphTypeCatalog: {}",
+                e
+            ))
+        })?;
 
         self.graph_types = loaded.graph_types;
 

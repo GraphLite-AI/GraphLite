@@ -10,17 +10,15 @@
 // - Property constraints and data types
 // - Schema usage statistics
 
-use std::sync::Arc;
 use parking_lot::RwLock;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as JsonValue};
+use std::sync::Arc;
 
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::QueryType;
-use crate::schema::types::{
-    GraphTypeDefinition, Constraint,
-};
 use crate::exec::ExecutionError;
+use crate::schema::types::{Constraint, GraphTypeDefinition};
 
 /// Schema introspection interface
 #[allow(dead_code)] // ROADMAP v0.4.0 - Schema introspection for graph type queries
@@ -41,14 +39,10 @@ pub enum IntrospectionQuery {
     },
 
     /// List all node types in a graph type
-    ListNodeTypes {
-        graph_type: String,
-    },
+    ListNodeTypes { graph_type: String },
 
     /// List all edge types in a graph type
-    ListEdgeTypes {
-        graph_type: String,
-    },
+    ListEdgeTypes { graph_type: String },
 
     /// Get properties for a specific node type
     DescribeNodeType {
@@ -63,14 +57,10 @@ pub enum IntrospectionQuery {
     },
 
     /// Get version history for a graph type
-    GetVersionHistory {
-        graph_type: String,
-    },
+    GetVersionHistory { graph_type: String },
 
     /// Get schema statistics (usage, constraints, etc.)
-    GetSchemaStatistics {
-        graph_type: Option<String>,
-    },
+    GetSchemaStatistics { graph_type: Option<String> },
 }
 
 /// Result of an introspection query
@@ -90,24 +80,25 @@ impl SchemaIntrospection {
 
     /// Execute an introspection query
     #[allow(dead_code)] // ROADMAP v0.4.0 - Schema introspection for graph type DDL (see ROADMAP.md §4)
-    pub fn execute(&self, query: IntrospectionQuery) -> Result<IntrospectionResult, ExecutionError> {
+    pub fn execute(
+        &self,
+        query: IntrospectionQuery,
+    ) -> Result<IntrospectionResult, ExecutionError> {
         match query {
             IntrospectionQuery::ListGraphTypes => self.list_graph_types(),
             IntrospectionQuery::DescribeGraphType { name, version } => {
                 self.describe_graph_type(&name, version.as_deref())
             }
-            IntrospectionQuery::ListNodeTypes { graph_type } => {
-                self.list_node_types(&graph_type)
-            }
-            IntrospectionQuery::ListEdgeTypes { graph_type } => {
-                self.list_edge_types(&graph_type)
-            }
-            IntrospectionQuery::DescribeNodeType { graph_type, node_label } => {
-                self.describe_node_type(&graph_type, &node_label)
-            }
-            IntrospectionQuery::DescribeEdgeType { graph_type, edge_label } => {
-                self.describe_edge_type(&graph_type, &edge_label)
-            }
+            IntrospectionQuery::ListNodeTypes { graph_type } => self.list_node_types(&graph_type),
+            IntrospectionQuery::ListEdgeTypes { graph_type } => self.list_edge_types(&graph_type),
+            IntrospectionQuery::DescribeNodeType {
+                graph_type,
+                node_label,
+            } => self.describe_node_type(&graph_type, &node_label),
+            IntrospectionQuery::DescribeEdgeType {
+                graph_type,
+                edge_label,
+            } => self.describe_edge_type(&graph_type, &edge_label),
             IntrospectionQuery::GetVersionHistory { graph_type } => {
                 self.get_version_history(&graph_type)
             }
@@ -122,11 +113,11 @@ impl SchemaIntrospection {
     fn list_graph_types(&self) -> Result<IntrospectionResult, ExecutionError> {
         let catalog = self.catalog_manager.read();
 
-        let response = catalog.query_read_only(
-            "graph_type",
-            QueryType::List,
-            json!({}),
-        ).map_err(|e| ExecutionError::CatalogError(format!("Failed to list graph types: {}", e)))?;
+        let response = catalog
+            .query_read_only("graph_type", QueryType::List, json!({}))
+            .map_err(|e| {
+                ExecutionError::CatalogError(format!("Failed to list graph types: {}", e))
+            })?;
 
         Ok(IntrospectionResult {
             query_type: "ListGraphTypes".to_string(),
@@ -139,7 +130,11 @@ impl SchemaIntrospection {
 
     /// Describe a specific graph type
     #[allow(dead_code)] // ROADMAP v0.4.0 - Schema introspection for graph type DDL (see ROADMAP.md §4)
-    fn describe_graph_type(&self, name: &str, version: Option<&str>) -> Result<IntrospectionResult, ExecutionError> {
+    fn describe_graph_type(
+        &self,
+        name: &str,
+        version: Option<&str>,
+    ) -> Result<IntrospectionResult, ExecutionError> {
         let catalog = self.catalog_manager.read();
 
         let query_params = if let Some(v) = version {
@@ -148,16 +143,18 @@ impl SchemaIntrospection {
             json!({ "name": name })
         };
 
-        let response = catalog.query_read_only(
-            "graph_type",
-            QueryType::GetGraphType,
-            query_params,
-        ).map_err(|e| ExecutionError::CatalogError(format!("Failed to get graph type: {}", e)))?;
+        let response = catalog
+            .query_read_only("graph_type", QueryType::GetGraphType, query_params)
+            .map_err(|e| {
+                ExecutionError::CatalogError(format!("Failed to get graph type: {}", e))
+            })?;
 
         if let Some(data) = response.data() {
             // Parse the graph type definition
-            let graph_type: GraphTypeDefinition = serde_json::from_value(data.clone())
-                .map_err(|e| ExecutionError::RuntimeError(format!("Failed to parse graph type: {}", e)))?;
+            let graph_type: GraphTypeDefinition =
+                serde_json::from_value(data.clone()).map_err(|e| {
+                    ExecutionError::RuntimeError(format!("Failed to parse graph type: {}", e))
+                })?;
 
             // Create a detailed description
             let description = json!({
@@ -193,7 +190,10 @@ impl SchemaIntrospection {
                 })),
             })
         } else {
-            Err(ExecutionError::SchemaValidation(format!("Graph type '{}' not found", name)))
+            Err(ExecutionError::SchemaValidation(format!(
+                "Graph type '{}' not found",
+                name
+            )))
         }
     }
 
@@ -202,15 +202,21 @@ impl SchemaIntrospection {
     fn list_node_types(&self, graph_type: &str) -> Result<IntrospectionResult, ExecutionError> {
         let catalog = self.catalog_manager.read();
 
-        let response = catalog.query_read_only(
-            "graph_type",
-            QueryType::GetGraphType,
-            json!({ "name": graph_type }),
-        ).map_err(|e| ExecutionError::CatalogError(format!("Failed to get graph type: {}", e)))?;
+        let response = catalog
+            .query_read_only(
+                "graph_type",
+                QueryType::GetGraphType,
+                json!({ "name": graph_type }),
+            )
+            .map_err(|e| {
+                ExecutionError::CatalogError(format!("Failed to get graph type: {}", e))
+            })?;
 
         if let Some(data) = response.data() {
             let graph_type_def: GraphTypeDefinition = serde_json::from_value(data.clone())
-                .map_err(|e| ExecutionError::RuntimeError(format!("Failed to parse graph type: {}", e)))?;
+                .map_err(|e| {
+                    ExecutionError::RuntimeError(format!("Failed to parse graph type: {}", e))
+                })?;
 
             let node_types: Vec<JsonValue> = graph_type_def.node_types.iter().map(|nt| {
                 json!({
@@ -230,7 +236,10 @@ impl SchemaIntrospection {
                 })),
             })
         } else {
-            Err(ExecutionError::SchemaValidation(format!("Graph type '{}' not found", graph_type)))
+            Err(ExecutionError::SchemaValidation(format!(
+                "Graph type '{}' not found",
+                graph_type
+            )))
         }
     }
 
@@ -239,15 +248,21 @@ impl SchemaIntrospection {
     fn list_edge_types(&self, graph_type: &str) -> Result<IntrospectionResult, ExecutionError> {
         let catalog = self.catalog_manager.read();
 
-        let response = catalog.query_read_only(
-            "graph_type",
-            QueryType::GetGraphType,
-            json!({ "name": graph_type }),
-        ).map_err(|e| ExecutionError::CatalogError(format!("Failed to get graph type: {}", e)))?;
+        let response = catalog
+            .query_read_only(
+                "graph_type",
+                QueryType::GetGraphType,
+                json!({ "name": graph_type }),
+            )
+            .map_err(|e| {
+                ExecutionError::CatalogError(format!("Failed to get graph type: {}", e))
+            })?;
 
         if let Some(data) = response.data() {
             let graph_type_def: GraphTypeDefinition = serde_json::from_value(data.clone())
-                .map_err(|e| ExecutionError::RuntimeError(format!("Failed to parse graph type: {}", e)))?;
+                .map_err(|e| {
+                    ExecutionError::RuntimeError(format!("Failed to parse graph type: {}", e))
+                })?;
 
             let edge_types: Vec<JsonValue> = graph_type_def.edge_types.iter().map(|et| {
                 json!({
@@ -268,44 +283,68 @@ impl SchemaIntrospection {
                 })),
             })
         } else {
-            Err(ExecutionError::SchemaValidation(format!("Graph type '{}' not found", graph_type)))
+            Err(ExecutionError::SchemaValidation(format!(
+                "Graph type '{}' not found",
+                graph_type
+            )))
         }
     }
 
     /// Describe a specific node type with all its properties
     #[allow(dead_code)] // ROADMAP v0.4.0 - Schema introspection for graph type DDL (see ROADMAP.md §4)
-    fn describe_node_type(&self, graph_type: &str, node_label: &str) -> Result<IntrospectionResult, ExecutionError> {
+    fn describe_node_type(
+        &self,
+        graph_type: &str,
+        node_label: &str,
+    ) -> Result<IntrospectionResult, ExecutionError> {
         let catalog = self.catalog_manager.read();
 
-        let response = catalog.query_read_only(
-            "graph_type",
-            QueryType::GetGraphType,
-            json!({ "name": graph_type }),
-        ).map_err(|e| ExecutionError::CatalogError(format!("Failed to get graph type: {}", e)))?;
+        let response = catalog
+            .query_read_only(
+                "graph_type",
+                QueryType::GetGraphType,
+                json!({ "name": graph_type }),
+            )
+            .map_err(|e| {
+                ExecutionError::CatalogError(format!("Failed to get graph type: {}", e))
+            })?;
 
         if let Some(data) = response.data() {
             let graph_type_def: GraphTypeDefinition = serde_json::from_value(data.clone())
-                .map_err(|e| ExecutionError::RuntimeError(format!("Failed to parse graph type: {}", e)))?;
+                .map_err(|e| {
+                    ExecutionError::RuntimeError(format!("Failed to parse graph type: {}", e))
+                })?;
 
-            let node_type = graph_type_def.node_types.iter()
+            let node_type = graph_type_def
+                .node_types
+                .iter()
                 .find(|nt| nt.label == node_label)
-                .ok_or_else(|| ExecutionError::SchemaValidation(
-                    format!("Node type '{}' not found in graph type '{}'", node_label, graph_type)
-                ))?;
+                .ok_or_else(|| {
+                    ExecutionError::SchemaValidation(format!(
+                        "Node type '{}' not found in graph type '{}'",
+                        node_label, graph_type
+                    ))
+                })?;
 
-            let properties: Vec<JsonValue> = node_type.properties.iter().map(|p| {
-                json!({
-                    "name": p.name,
-                    "data_type": format!("{:?}", p.data_type),
-                    "is_required": p.required,
-                    "is_unique": p.unique,
-                    "default_value": p.default_value,
-                    "description": p.description,
+            let properties: Vec<JsonValue> = node_type
+                .properties
+                .iter()
+                .map(|p| {
+                    json!({
+                        "name": p.name,
+                        "data_type": format!("{:?}", p.data_type),
+                        "is_required": p.required,
+                        "is_unique": p.unique,
+                        "default_value": p.default_value,
+                        "description": p.description,
+                    })
                 })
-            }).collect();
+                .collect();
 
-            let constraints: Vec<JsonValue> = node_type.constraints.iter().map(|c| {
-                match c {
+            let constraints: Vec<JsonValue> = node_type
+                .constraints
+                .iter()
+                .map(|c| match c {
                     Constraint::Unique => json!({
                         "type": "UNIQUE",
                     }),
@@ -315,7 +354,10 @@ impl SchemaIntrospection {
                     Constraint::PrimaryKey => json!({
                         "type": "PRIMARY_KEY",
                     }),
-                    Constraint::ForeignKey { references, on_delete } => json!({
+                    Constraint::ForeignKey {
+                        references,
+                        on_delete,
+                    } => json!({
                         "type": "FOREIGN_KEY",
                         "references": references,
                         "on_delete": format!("{:?}", on_delete),
@@ -348,8 +390,8 @@ impl SchemaIntrospection {
                         "type": "IN",
                         "values": values,
                     }),
-                }
-            }).collect();
+                })
+                .collect();
 
             Ok(IntrospectionResult {
                 query_type: "DescribeNodeType".to_string(),
@@ -368,41 +410,63 @@ impl SchemaIntrospection {
                 })),
             })
         } else {
-            Err(ExecutionError::SchemaValidation(format!("Graph type '{}' not found", graph_type)))
+            Err(ExecutionError::SchemaValidation(format!(
+                "Graph type '{}' not found",
+                graph_type
+            )))
         }
     }
 
     /// Describe a specific edge type with all its properties
     #[allow(dead_code)] // ROADMAP v0.4.0 - Schema introspection for graph type DDL (see ROADMAP.md §4)
-    fn describe_edge_type(&self, graph_type: &str, edge_label: &str) -> Result<IntrospectionResult, ExecutionError> {
+    fn describe_edge_type(
+        &self,
+        graph_type: &str,
+        edge_label: &str,
+    ) -> Result<IntrospectionResult, ExecutionError> {
         let catalog = self.catalog_manager.read();
 
-        let response = catalog.query_read_only(
-            "graph_type",
-            QueryType::GetGraphType,
-            json!({ "name": graph_type }),
-        ).map_err(|e| ExecutionError::CatalogError(format!("Failed to get graph type: {}", e)))?;
+        let response = catalog
+            .query_read_only(
+                "graph_type",
+                QueryType::GetGraphType,
+                json!({ "name": graph_type }),
+            )
+            .map_err(|e| {
+                ExecutionError::CatalogError(format!("Failed to get graph type: {}", e))
+            })?;
 
         if let Some(data) = response.data() {
             let graph_type_def: GraphTypeDefinition = serde_json::from_value(data.clone())
-                .map_err(|e| ExecutionError::RuntimeError(format!("Failed to parse graph type: {}", e)))?;
+                .map_err(|e| {
+                    ExecutionError::RuntimeError(format!("Failed to parse graph type: {}", e))
+                })?;
 
-            let edge_type = graph_type_def.edge_types.iter()
+            let edge_type = graph_type_def
+                .edge_types
+                .iter()
                 .find(|et| et.type_name == edge_label)
-                .ok_or_else(|| ExecutionError::SchemaValidation(
-                    format!("Edge type '{}' not found in graph type '{}'", edge_label, graph_type)
-                ))?;
+                .ok_or_else(|| {
+                    ExecutionError::SchemaValidation(format!(
+                        "Edge type '{}' not found in graph type '{}'",
+                        edge_label, graph_type
+                    ))
+                })?;
 
-            let properties: Vec<JsonValue> = edge_type.properties.iter().map(|p| {
-                json!({
-                    "name": p.name,
-                    "data_type": format!("{:?}", p.data_type),
-                    "is_required": p.required,
-                    "is_unique": p.unique,
-                    "default_value": p.default_value,
-                    "description": p.description,
+            let properties: Vec<JsonValue> = edge_type
+                .properties
+                .iter()
+                .map(|p| {
+                    json!({
+                        "name": p.name,
+                        "data_type": format!("{:?}", p.data_type),
+                        "is_required": p.required,
+                        "is_unique": p.unique,
+                        "default_value": p.default_value,
+                        "description": p.description,
+                    })
                 })
-            }).collect();
+                .collect();
 
             Ok(IntrospectionResult {
                 query_type: "DescribeEdgeType".to_string(),
@@ -420,7 +484,10 @@ impl SchemaIntrospection {
                 })),
             })
         } else {
-            Err(ExecutionError::SchemaValidation(format!("Graph type '{}' not found", graph_type)))
+            Err(ExecutionError::SchemaValidation(format!(
+                "Graph type '{}' not found",
+                graph_type
+            )))
         }
     }
 
@@ -429,11 +496,15 @@ impl SchemaIntrospection {
     fn get_version_history(&self, graph_type: &str) -> Result<IntrospectionResult, ExecutionError> {
         let catalog = self.catalog_manager.read();
 
-        let response = catalog.query_read_only(
-            "graph_type",
-            QueryType::ListVersions,
-            json!({ "name": graph_type }),
-        ).map_err(|e| ExecutionError::CatalogError(format!("Failed to get version history: {}", e)))?;
+        let response = catalog
+            .query_read_only(
+                "graph_type",
+                QueryType::ListVersions,
+                json!({ "name": graph_type }),
+            )
+            .map_err(|e| {
+                ExecutionError::CatalogError(format!("Failed to get version history: {}", e))
+            })?;
 
         Ok(IntrospectionResult {
             query_type: "GetVersionHistory".to_string(),
@@ -447,20 +518,29 @@ impl SchemaIntrospection {
 
     /// Get schema statistics
     #[allow(dead_code)] // ROADMAP v0.4.0 - Schema introspection for graph type DDL (see ROADMAP.md §4)
-    fn get_schema_statistics(&self, graph_type: Option<&str>) -> Result<IntrospectionResult, ExecutionError> {
+    fn get_schema_statistics(
+        &self,
+        graph_type: Option<&str>,
+    ) -> Result<IntrospectionResult, ExecutionError> {
         let catalog = self.catalog_manager.read();
 
         if let Some(gt_name) = graph_type {
             // Statistics for a specific graph type
-            let response = catalog.query_read_only(
-                "graph_type",
-                QueryType::GetGraphType,
-                json!({ "name": gt_name }),
-            ).map_err(|e| ExecutionError::CatalogError(format!("Failed to get graph type: {}", e)))?;
+            let response = catalog
+                .query_read_only(
+                    "graph_type",
+                    QueryType::GetGraphType,
+                    json!({ "name": gt_name }),
+                )
+                .map_err(|e| {
+                    ExecutionError::CatalogError(format!("Failed to get graph type: {}", e))
+                })?;
 
             if let Some(data) = response.data() {
                 let graph_type_def: GraphTypeDefinition = serde_json::from_value(data.clone())
-                    .map_err(|e| ExecutionError::RuntimeError(format!("Failed to parse graph type: {}", e)))?;
+                    .map_err(|e| {
+                        ExecutionError::RuntimeError(format!("Failed to parse graph type: {}", e))
+                    })?;
 
                 let stats = json!({
                     "graph_type": gt_name,
@@ -485,15 +565,18 @@ impl SchemaIntrospection {
                     metadata: None,
                 })
             } else {
-                Err(ExecutionError::SchemaValidation(format!("Graph type '{}' not found", gt_name)))
+                Err(ExecutionError::SchemaValidation(format!(
+                    "Graph type '{}' not found",
+                    gt_name
+                )))
             }
         } else {
             // Global statistics - all graph types
-            let response = catalog.query_read_only(
-                "graph_type",
-                QueryType::List,
-                json!({}),
-            ).map_err(|e| ExecutionError::CatalogError(format!("Failed to list graph types: {}", e)))?;
+            let response = catalog
+                .query_read_only("graph_type", QueryType::List, json!({}))
+                .map_err(|e| {
+                    ExecutionError::CatalogError(format!("Failed to list graph types: {}", e))
+                })?;
 
             let stats = json!({
                 "total_graph_types": response.data().and_then(|d| d.as_array()).map(|a| a.len()).unwrap_or(0),

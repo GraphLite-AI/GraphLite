@@ -12,7 +12,7 @@
 
 use super::function_trait::{Function, FunctionContext, FunctionError, FunctionResult};
 use crate::storage::Value;
-use chrono::{DateTime, Utc, FixedOffset, Offset};
+use chrono::{DateTime, FixedOffset, Offset, Utc};
 use chrono_tz::Tz;
 
 /// Parse timezone string into either a named timezone or fixed offset
@@ -21,79 +21,83 @@ fn parse_timezone(tz_str: &str) -> Result<TimezoneType, String> {
     if let Ok(tz) = tz_str.parse::<Tz>() {
         return Ok(TimezoneType::Named(tz));
     }
-    
+
     // Try common timezone abbreviations
     let canonical_tz = match tz_str.to_uppercase().as_str() {
         "UTC" | "GMT" => "UTC",
-        "EST" => "America/New_York", // Eastern Standard Time
-        "EDT" => "America/New_York", // Eastern Daylight Time  
-        "CST" => "America/Chicago",  // Central Standard Time
-        "CDT" => "America/Chicago",  // Central Daylight Time
-        "MST" => "America/Denver",   // Mountain Standard Time
-        "MDT" => "America/Denver",   // Mountain Daylight Time
+        "EST" => "America/New_York",    // Eastern Standard Time
+        "EDT" => "America/New_York",    // Eastern Daylight Time
+        "CST" => "America/Chicago",     // Central Standard Time
+        "CDT" => "America/Chicago",     // Central Daylight Time
+        "MST" => "America/Denver",      // Mountain Standard Time
+        "MDT" => "America/Denver",      // Mountain Daylight Time
         "PST" => "America/Los_Angeles", // Pacific Standard Time
         "PDT" => "America/Los_Angeles", // Pacific Daylight Time
-        "BST" => "Europe/London",    // British Summer Time
-        "CET" => "Europe/Paris",     // Central European Time
-        "CEST" => "Europe/Paris",    // Central European Summer Time
-        "JST" => "Asia/Tokyo",       // Japan Standard Time
-        "IST" => "Asia/Kolkata",     // India Standard Time
-        "AEST" => "Australia/Sydney", // Australian Eastern Standard Time
-        "AEDT" => "Australia/Sydney", // Australian Eastern Daylight Time
-        _ => tz_str, // Use original if no abbreviation match
+        "BST" => "Europe/London",       // British Summer Time
+        "CET" => "Europe/Paris",        // Central European Time
+        "CEST" => "Europe/Paris",       // Central European Summer Time
+        "JST" => "Asia/Tokyo",          // Japan Standard Time
+        "IST" => "Asia/Kolkata",        // India Standard Time
+        "AEST" => "Australia/Sydney",   // Australian Eastern Standard Time
+        "AEDT" => "Australia/Sydney",   // Australian Eastern Daylight Time
+        _ => tz_str,                    // Use original if no abbreviation match
     };
-    
+
     // Try parsing the canonical timezone name
     if let Ok(tz) = canonical_tz.parse::<Tz>() {
         return Ok(TimezoneType::Named(tz));
     }
-    
+
     // Try parsing as fixed offset (+05:30, -04:00, etc.)
     if let Ok(offset) = parse_fixed_offset(tz_str) {
         return Ok(TimezoneType::Fixed(offset));
     }
-    
+
     Err(format!("Invalid timezone: {}", tz_str))
 }
 
 /// Parse fixed offset strings like "+05:30", "-04:00", "+0530", "-0400"
 fn parse_fixed_offset(offset_str: &str) -> Result<FixedOffset, String> {
     let trimmed = offset_str.trim();
-    
+
     if trimmed.len() < 3 {
         return Err("Invalid offset format".to_string());
     }
-    
+
     let sign = match trimmed.chars().next() {
         Some('+') => 1,
         Some('-') => -1,
         _ => return Err("Offset must start with + or -".to_string()),
     };
-    
+
     let offset_part = &trimmed[1..];
-    
+
     // Handle formats like "05:30" or "0530"
     let (hours, minutes) = if offset_part.contains(':') {
         let parts: Vec<&str> = offset_part.split(':').collect();
         if parts.len() != 2 {
             return Err("Invalid offset format".to_string());
         }
-        (parts[0].parse::<i32>().map_err(|_| "Invalid hours")?,
-         parts[1].parse::<i32>().map_err(|_| "Invalid minutes")?)
+        (
+            parts[0].parse::<i32>().map_err(|_| "Invalid hours")?,
+            parts[1].parse::<i32>().map_err(|_| "Invalid minutes")?,
+        )
     } else if offset_part.len() == 4 {
         // Format like "0530"
         let hours_str = &offset_part[0..2];
         let minutes_str = &offset_part[2..4];
-        (hours_str.parse::<i32>().map_err(|_| "Invalid hours")?,
-         minutes_str.parse::<i32>().map_err(|_| "Invalid minutes")?)
+        (
+            hours_str.parse::<i32>().map_err(|_| "Invalid hours")?,
+            minutes_str.parse::<i32>().map_err(|_| "Invalid minutes")?,
+        )
     } else {
         return Err("Invalid offset format".to_string());
     };
-    
+
     if hours > 23 || minutes > 59 {
         return Err("Invalid offset values".to_string());
     }
-    
+
     let total_seconds = sign * (hours * 3600 + minutes * 60);
     FixedOffset::east_opt(total_seconds).ok_or_else(|| "Invalid offset".to_string())
 }
@@ -119,7 +123,7 @@ impl TimezoneType {
             }
         }
     }
-    
+
     /// Get timezone name/identifier
     fn name(&self) -> String {
         match self {
@@ -127,7 +131,7 @@ impl TimezoneType {
             TimezoneType::Fixed(offset) => offset.to_string(),
         }
     }
-    
+
     /// Get timezone offset in seconds for a given UTC datetime
     fn offset_seconds(&self, utc_dt: &DateTime<Utc>) -> i32 {
         match self {
@@ -135,9 +139,7 @@ impl TimezoneType {
                 let tz_dt = utc_dt.with_timezone(tz);
                 tz_dt.offset().fix().local_minus_utc()
             }
-            TimezoneType::Fixed(offset) => {
-                offset.local_minus_utc()
-            }
+            TimezoneType::Fixed(offset) => offset.local_minus_utc(),
         }
     }
 }
@@ -171,9 +173,9 @@ impl Function for AtTimeZoneFunction {
 
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         if context.arguments.len() != 2 {
-            return Err(FunctionError::InvalidArgumentCount { 
-                expected: 2, 
-                actual: context.arguments.len()
+            return Err(FunctionError::InvalidArgumentCount {
+                expected: 2,
+                actual: context.arguments.len(),
             });
         }
 
@@ -181,10 +183,12 @@ impl Function for AtTimeZoneFunction {
         let timezone_arg = &context.arguments[1];
 
         // Extract timezone string
-        let tz_str = timezone_arg.as_string()
-            .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                message: "Timezone must be a string".to_string() 
-            })?;
+        let tz_str =
+            timezone_arg
+                .as_string()
+                .ok_or_else(|| FunctionError::InvalidArgumentType {
+                    message: "Timezone must be a string".to_string(),
+                })?;
 
         // Parse timezone
         let timezone = parse_timezone(tz_str)
@@ -193,15 +197,17 @@ impl Function for AtTimeZoneFunction {
         // Convert datetime to UTC first if needed
         let utc_dt = match datetime_arg.as_datetime_utc() {
             Some(dt) => dt,
-            None => return Err(FunctionError::InvalidArgumentType { 
-                message: "First argument must be a datetime".to_string() 
-            }),
+            None => {
+                return Err(FunctionError::InvalidArgumentType {
+                    message: "First argument must be a datetime".to_string(),
+                })
+            }
         };
 
         // Convert to target timezone
         Ok(timezone.convert_from_utc(&utc_dt))
     }
-    
+
     fn graph_context_required(&self) -> bool {
         false // Timezone functions are pure scalar functions
     }
@@ -236,9 +242,9 @@ impl Function for ConvertTzFunction {
 
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         if context.arguments.len() != 3 {
-            return Err(FunctionError::InvalidArgumentCount { 
-                expected: 3, 
-                actual: context.arguments.len()
+            return Err(FunctionError::InvalidArgumentCount {
+                expected: 3,
+                actual: context.arguments.len(),
             });
         }
 
@@ -247,39 +253,45 @@ impl Function for ConvertTzFunction {
         let to_tz_arg = &context.arguments[2];
 
         // Extract timezone strings
-        let from_tz_str = from_tz_arg.as_string()
-            .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                message: "From timezone must be a string".to_string() 
-            })?;
-        let to_tz_str = to_tz_arg.as_string()
-            .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                message: "To timezone must be a string".to_string() 
-            })?;
+        let from_tz_str =
+            from_tz_arg
+                .as_string()
+                .ok_or_else(|| FunctionError::InvalidArgumentType {
+                    message: "From timezone must be a string".to_string(),
+                })?;
+        let to_tz_str =
+            to_tz_arg
+                .as_string()
+                .ok_or_else(|| FunctionError::InvalidArgumentType {
+                    message: "To timezone must be a string".to_string(),
+                })?;
 
         // Parse timezones
-        let _from_timezone = parse_timezone(from_tz_str)
-            .map_err(|e| FunctionError::InvalidArgumentType { 
-                message: format!("Invalid from timezone: {}", e) 
+        let _from_timezone =
+            parse_timezone(from_tz_str).map_err(|e| FunctionError::InvalidArgumentType {
+                message: format!("Invalid from timezone: {}", e),
             })?;
-        let to_timezone = parse_timezone(to_tz_str)
-            .map_err(|e| FunctionError::InvalidArgumentType { 
-                message: format!("Invalid to timezone: {}", e) 
+        let to_timezone =
+            parse_timezone(to_tz_str).map_err(|e| FunctionError::InvalidArgumentType {
+                message: format!("Invalid to timezone: {}", e),
             })?;
 
         // Get UTC datetime
         let utc_dt = if from_tz_str.to_uppercase() == "UTC" {
             // Source is UTC
-            datetime_arg.as_datetime_utc()
-                .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                    message: "First argument must be a datetime".to_string() 
+            datetime_arg
+                .as_datetime_utc()
+                .ok_or_else(|| FunctionError::InvalidArgumentType {
+                    message: "First argument must be a datetime".to_string(),
                 })?
         } else {
             // Convert from source timezone to UTC first
-            let source_dt = datetime_arg.as_datetime_utc()
-                .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                    message: "First argument must be a datetime".to_string() 
-                })?;
-            
+            let source_dt = datetime_arg.as_datetime_utc().ok_or_else(|| {
+                FunctionError::InvalidArgumentType {
+                    message: "First argument must be a datetime".to_string(),
+                }
+            })?;
+
             // For simplicity, assume input datetime is in the from_timezone and convert to UTC
             // This is a simplified implementation - in practice, you'd need to handle the conversion more carefully
             source_dt
@@ -288,7 +300,7 @@ impl Function for ConvertTzFunction {
         // Convert to target timezone
         Ok(to_timezone.convert_from_utc(&utc_dt))
     }
-    
+
     fn graph_context_required(&self) -> bool {
         false // Timezone functions are pure scalar functions
     }
@@ -323,9 +335,9 @@ impl Function for TimezoneFunction {
 
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         if context.arguments.len() != 2 {
-            return Err(FunctionError::InvalidArgumentCount { 
-                expected: 2, 
-                actual: context.arguments.len()
+            return Err(FunctionError::InvalidArgumentCount {
+                expected: 2,
+                actual: context.arguments.len(),
             });
         }
 
@@ -334,10 +346,12 @@ impl Function for TimezoneFunction {
         let datetime_arg = &context.arguments[1];
 
         // Extract timezone string
-        let tz_str = timezone_arg.as_string()
-            .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                message: "Timezone must be a string".to_string() 
-            })?;
+        let tz_str =
+            timezone_arg
+                .as_string()
+                .ok_or_else(|| FunctionError::InvalidArgumentType {
+                    message: "Timezone must be a string".to_string(),
+                })?;
 
         // Parse timezone
         let timezone = parse_timezone(tz_str)
@@ -346,15 +360,17 @@ impl Function for TimezoneFunction {
         // Convert datetime to UTC first if needed
         let utc_dt = match datetime_arg.as_datetime_utc() {
             Some(dt) => dt,
-            None => return Err(FunctionError::InvalidArgumentType { 
-                message: "Second argument must be a datetime".to_string() 
-            }),
+            None => {
+                return Err(FunctionError::InvalidArgumentType {
+                    message: "Second argument must be a datetime".to_string(),
+                })
+            }
         };
 
         // Convert to target timezone
         Ok(timezone.convert_from_utc(&utc_dt))
     }
-    
+
     fn graph_context_required(&self) -> bool {
         false // Timezone functions are pure scalar functions
     }
@@ -389,18 +405,19 @@ impl Function for ExtractTimezoneFunction {
 
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         if context.arguments.len() != 2 {
-            return Err(FunctionError::InvalidArgumentCount { 
-                expected: 2, 
-                actual: context.arguments.len()
+            return Err(FunctionError::InvalidArgumentCount {
+                expected: 2,
+                actual: context.arguments.len(),
             });
         }
 
         let unit_arg = &context.arguments[0];
         let datetime_arg = &context.arguments[1];
 
-        let unit = unit_arg.as_string()
-            .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                message: "Extract unit must be a string".to_string() 
+        let unit = unit_arg
+            .as_string()
+            .ok_or_else(|| FunctionError::InvalidArgumentType {
+                message: "Extract unit must be a string".to_string(),
             })?
             .to_uppercase();
 
@@ -409,18 +426,19 @@ impl Function for ExtractTimezoneFunction {
                 // Return timezone name/identifier
                 match datetime_arg.get_timezone_info() {
                     Some(tz_info) => Ok(Value::String(tz_info)),
-                    None => Err(FunctionError::InvalidArgumentType { 
-                        message: "Datetime has no timezone information".to_string() 
+                    None => Err(FunctionError::InvalidArgumentType {
+                        message: "Datetime has no timezone information".to_string(),
                     }),
                 }
             }
             "TIMEZONE_HOUR" => {
                 // Return timezone offset in hours
-                let utc_dt = datetime_arg.as_datetime_utc()
-                    .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                        message: "Argument must be a datetime".to_string() 
-                    })?;
-                    
+                let utc_dt = datetime_arg.as_datetime_utc().ok_or_else(|| {
+                    FunctionError::InvalidArgumentType {
+                        message: "Argument must be a datetime".to_string(),
+                    }
+                })?;
+
                 match datetime_arg {
                     Value::DateTime(_) => Ok(Value::Number(0.0)), // UTC is +0
                     Value::DateTimeWithFixedOffset(dt) => {
@@ -433,23 +451,24 @@ impl Function for ExtractTimezoneFunction {
                             let offset_seconds = tz_dt.offset().fix().local_minus_utc();
                             Ok(Value::Number(offset_seconds as f64 / 3600.0))
                         } else {
-                            Err(FunctionError::InvalidArgumentType { 
-                                message: "Invalid timezone name".to_string() 
+                            Err(FunctionError::InvalidArgumentType {
+                                message: "Invalid timezone name".to_string(),
                             })
                         }
                     }
-                    _ => Err(FunctionError::InvalidArgumentType { 
-                        message: "Argument must be a datetime".to_string() 
+                    _ => Err(FunctionError::InvalidArgumentType {
+                        message: "Argument must be a datetime".to_string(),
                     }),
                 }
             }
             "TIMEZONE_MINUTE" => {
                 // Return timezone offset minutes component
-                let utc_dt = datetime_arg.as_datetime_utc()
-                    .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                        message: "Argument must be a datetime".to_string() 
-                    })?;
-                    
+                let utc_dt = datetime_arg.as_datetime_utc().ok_or_else(|| {
+                    FunctionError::InvalidArgumentType {
+                        message: "Argument must be a datetime".to_string(),
+                    }
+                })?;
+
                 match datetime_arg {
                     Value::DateTime(_) => Ok(Value::Number(0.0)), // UTC is +0
                     Value::DateTimeWithFixedOffset(dt) => {
@@ -464,22 +483,22 @@ impl Function for ExtractTimezoneFunction {
                             let offset_minutes = (offset_seconds % 3600) / 60;
                             Ok(Value::Number(offset_minutes as f64))
                         } else {
-                            Err(FunctionError::InvalidArgumentType { 
-                                message: "Invalid timezone name".to_string() 
+                            Err(FunctionError::InvalidArgumentType {
+                                message: "Invalid timezone name".to_string(),
                             })
                         }
                     }
-                    _ => Err(FunctionError::InvalidArgumentType { 
-                        message: "Argument must be a datetime".to_string() 
+                    _ => Err(FunctionError::InvalidArgumentType {
+                        message: "Argument must be a datetime".to_string(),
                     }),
                 }
             }
-            _ => Err(FunctionError::UnsupportedOperation { 
-                operation: format!("Timezone extract unit: {}", unit) 
+            _ => Err(FunctionError::UnsupportedOperation {
+                operation: format!("Timezone extract unit: {}", unit),
             }),
         }
     }
-    
+
     fn graph_context_required(&self) -> bool {
         false // Timezone functions are pure scalar functions
     }
@@ -514,25 +533,27 @@ impl Function for GetTimezoneNameFunction {
 
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         if context.arguments.len() != 1 {
-            return Err(FunctionError::InvalidArgumentCount { 
-                expected: 1, 
-                actual: context.arguments.len()
+            return Err(FunctionError::InvalidArgumentCount {
+                expected: 1,
+                actual: context.arguments.len(),
             });
         }
 
         let timezone_arg = &context.arguments[0];
 
-        let tz_str = timezone_arg.as_string()
-            .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                message: "Timezone argument must be a string".to_string() 
-            })?;
+        let tz_str =
+            timezone_arg
+                .as_string()
+                .ok_or_else(|| FunctionError::InvalidArgumentType {
+                    message: "Timezone argument must be a string".to_string(),
+                })?;
 
         let timezone = parse_timezone(tz_str)
             .map_err(|e| FunctionError::InvalidArgumentType { message: e })?;
 
         Ok(Value::String(timezone.name()))
     }
-    
+
     fn graph_context_required(&self) -> bool {
         false // Timezone functions are pure scalar functions
     }
@@ -567,18 +588,20 @@ impl Function for GetTimezoneAbbreviationFunction {
 
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         if context.arguments.len() != 1 {
-            return Err(FunctionError::InvalidArgumentCount { 
-                expected: 1, 
-                actual: context.arguments.len()
+            return Err(FunctionError::InvalidArgumentCount {
+                expected: 1,
+                actual: context.arguments.len(),
             });
         }
 
         let timezone_arg = &context.arguments[0];
 
-        let tz_str = timezone_arg.as_string()
-            .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                message: "Timezone argument must be a string".to_string() 
-            })?;
+        let tz_str =
+            timezone_arg
+                .as_string()
+                .ok_or_else(|| FunctionError::InvalidArgumentType {
+                    message: "Timezone argument must be a string".to_string(),
+                })?;
 
         // Parse timezone to validate it exists
         let timezone = parse_timezone(tz_str)
@@ -592,7 +615,7 @@ impl Function for GetTimezoneAbbreviationFunction {
                 match canonical_name.as_str() {
                     "UTC" => "UTC".to_string(),
                     "America/New_York" => "EST/EDT".to_string(),
-                    "America/Chicago" => "CST/CDT".to_string(), 
+                    "America/Chicago" => "CST/CDT".to_string(),
                     "America/Denver" => "MST/MDT".to_string(),
                     "America/Los_Angeles" => "PST/PDT".to_string(),
                     "Europe/London" => "GMT/BST".to_string(),
@@ -619,7 +642,7 @@ impl Function for GetTimezoneAbbreviationFunction {
 
         Ok(Value::String(abbreviation))
     }
-    
+
     fn graph_context_required(&self) -> bool {
         false // Timezone functions are pure scalar functions
     }
@@ -654,18 +677,20 @@ impl Function for GetTimezoneOffsetFunction {
 
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         if context.arguments.len() != 1 {
-            return Err(FunctionError::InvalidArgumentCount { 
-                expected: 1, 
-                actual: context.arguments.len()
+            return Err(FunctionError::InvalidArgumentCount {
+                expected: 1,
+                actual: context.arguments.len(),
             });
         }
 
         let timezone_arg = &context.arguments[0];
 
-        let tz_str = timezone_arg.as_string()
-            .ok_or_else(|| FunctionError::InvalidArgumentType { 
-                message: "Timezone argument must be a string".to_string() 
-            })?;
+        let tz_str =
+            timezone_arg
+                .as_string()
+                .ok_or_else(|| FunctionError::InvalidArgumentType {
+                    message: "Timezone argument must be a string".to_string(),
+                })?;
 
         // Parse timezone to validate it exists
         let timezone = parse_timezone(tz_str)
@@ -673,7 +698,7 @@ impl Function for GetTimezoneOffsetFunction {
 
         // Get current UTC time for calculating offset (since DST affects offset)
         let now_utc = chrono::Utc::now();
-        
+
         // Use the existing helper method
         let offset_seconds = timezone.offset_seconds(&now_utc);
 
@@ -682,11 +707,11 @@ impl Function for GetTimezoneOffsetFunction {
         let abs_seconds = offset_seconds.abs();
         let hours = abs_seconds / 3600;
         let minutes = (abs_seconds % 3600) / 60;
-        
+
         let formatted_offset = format!("{}{:02}:{:02}", sign, hours, minutes);
         Ok(Value::String(formatted_offset))
     }
-    
+
     fn graph_context_required(&self) -> bool {
         false // Timezone functions are pure scalar functions
     }
@@ -700,27 +725,27 @@ mod tests {
     fn test_parse_fixed_offset() {
         // Test valid formats
         assert!(parse_fixed_offset("+05:30").is_ok());
-        assert!(parse_fixed_offset("-04:00").is_ok()); 
+        assert!(parse_fixed_offset("-04:00").is_ok());
         assert!(parse_fixed_offset("+0530").is_ok());
         assert!(parse_fixed_offset("-0400").is_ok());
-        
+
         // Test invalid formats
-        assert!(parse_fixed_offset("05:30").is_err());  // No sign
+        assert!(parse_fixed_offset("05:30").is_err()); // No sign
         assert!(parse_fixed_offset("+25:00").is_err()); // Invalid hour
         assert!(parse_fixed_offset("+05:60").is_err()); // Invalid minute
     }
-    
+
     #[test]
     fn test_parse_timezone() {
         // Test named timezone
         assert!(parse_timezone("America/New_York").is_ok());
         assert!(parse_timezone("Europe/London").is_ok());
         assert!(parse_timezone("Asia/Tokyo").is_ok());
-        
+
         // Test fixed offset
         assert!(parse_timezone("+05:30").is_ok());
         assert!(parse_timezone("-04:00").is_ok());
-        
+
         // Test invalid
         assert!(parse_timezone("Invalid/Timezone").is_err());
         assert!(parse_timezone("not-a-timezone").is_err());

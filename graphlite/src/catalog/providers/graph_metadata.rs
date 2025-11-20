@@ -7,15 +7,15 @@
 //! pluggable catalog architecture. It manages graph instances, graph types,
 //! vertex types, edge types, and property type definitions.
 
-use std::sync::Arc;
-use std::collections::HashMap;
-use uuid::Uuid;
+use crate::catalog::error::{CatalogError, CatalogResult};
+use crate::catalog::operations::{CatalogOperation, CatalogResponse, EntityType, QueryType};
+use crate::catalog::traits::{CatalogProvider, CatalogSchema};
+use crate::storage::StorageManager;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use crate::storage::StorageManager;
-use crate::catalog::traits::{CatalogProvider, CatalogSchema};
-use crate::catalog::operations::{CatalogOperation, CatalogResponse, EntityType, QueryType};
-use crate::catalog::error::{CatalogError, CatalogResult};
+use std::collections::HashMap;
+use std::sync::Arc;
+use uuid::Uuid;
 
 /// Graph identifier
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -58,19 +58,19 @@ impl GraphTypeId {
 pub struct Graph {
     pub id: GraphId,
     pub graph_type_id: Option<GraphTypeId>,
-    
+
     /// Graph-level properties
     pub properties: HashMap<String, GraphProperty>,
-    
+
     /// Creation timestamp
     pub created_at: chrono::DateTime<chrono::Utc>,
-    
+
     /// Last modification timestamp
     pub modified_at: chrono::DateTime<chrono::Utc>,
-    
+
     /// Graph description/documentation
     pub description: Option<String>,
-    
+
     /// Whether this graph is materialized or virtual
     pub is_materialized: bool,
 }
@@ -88,30 +88,32 @@ impl Graph {
             is_materialized: true,
         }
     }
-    
+
     /// Create from parameters
     pub fn from_params(name: String, params: &Value) -> Self {
-        let schema_name = params.get("schema_name")
+        let schema_name = params
+            .get("schema_name")
             .and_then(|v| v.as_str())
             .unwrap_or("default")
             .to_string();
-        
+
         let id = GraphId::new(name, schema_name.clone());
-        
-        let graph_type_id = params.get("graph_type")
+
+        let graph_type_id = params
+            .get("graph_type")
             .and_then(|v| v.as_str())
             .map(|type_name| GraphTypeId::new(type_name.to_string(), schema_name.clone()));
-        
+
         let mut graph = Self::new(id, graph_type_id);
-        
+
         if let Some(desc) = params.get("description").and_then(|v| v.as_str()) {
             graph.description = Some(desc.to_string());
         }
-        
+
         if let Some(mat) = params.get("is_materialized").and_then(|v| v.as_bool()) {
             graph.is_materialized = mat;
         }
-        
+
         if let Some(props) = params.get("properties").and_then(|v| v.as_object()) {
             for (key, value) in props {
                 if let Ok(prop) = serde_json::from_value::<GraphProperty>(value.clone()) {
@@ -119,16 +121,16 @@ impl Graph {
                 }
             }
         }
-        
+
         graph
     }
-    
+
     /// Set a graph property
     pub fn set_property(&mut self, key: String, value: GraphProperty) {
         self.properties.insert(key, value);
         self.modified_at = chrono::Utc::now();
     }
-    
+
     /// Get a graph property
     #[allow(dead_code)] // ROADMAP v0.4.0 - Graph property accessor for metadata queries
     pub fn get_property(&self, key: &str) -> Option<&GraphProperty> {
@@ -151,19 +153,19 @@ pub enum GraphProperty {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphType {
     pub id: GraphTypeId,
-    
+
     /// Vertex types in this graph type
     pub vertex_types: HashMap<String, VertexType>,
-    
+
     /// Edge types in this graph type
     pub edge_types: HashMap<String, EdgeType>,
-    
+
     /// Creation timestamp
     pub created_at: chrono::DateTime<chrono::Utc>,
-    
+
     /// Last modification timestamp
     pub modified_at: chrono::DateTime<chrono::Utc>,
-    
+
     /// Graph type description
     pub description: Option<String>,
 }
@@ -180,21 +182,22 @@ impl GraphType {
             description: None,
         }
     }
-    
+
     /// Create from parameters
     pub fn from_params(name: String, params: &Value) -> Self {
-        let schema_name = params.get("schema_name")
+        let schema_name = params
+            .get("schema_name")
             .and_then(|v| v.as_str())
             .unwrap_or("default")
             .to_string();
-        
+
         let id = GraphTypeId::new(name, schema_name);
         let mut graph_type = Self::new(id);
-        
+
         if let Some(desc) = params.get("description").and_then(|v| v.as_str()) {
             graph_type.description = Some(desc.to_string());
         }
-        
+
         // Parse vertex types
         if let Some(vertex_types) = params.get("vertex_types").and_then(|v| v.as_object()) {
             for (name, spec) in vertex_types {
@@ -203,7 +206,7 @@ impl GraphType {
                 }
             }
         }
-        
+
         // Parse edge types
         if let Some(edge_types) = params.get("edge_types").and_then(|v| v.as_object()) {
             for (name, spec) in edge_types {
@@ -212,16 +215,16 @@ impl GraphType {
                 }
             }
         }
-        
+
         graph_type
     }
-    
+
     /// Add a vertex type
     pub fn add_vertex_type(&mut self, name: String, vertex_type: VertexType) {
         self.vertex_types.insert(name, vertex_type);
         self.modified_at = chrono::Utc::now();
     }
-    
+
     /// Add an edge type
     pub fn add_edge_type(&mut self, name: String, edge_type: EdgeType) {
         self.edge_types.insert(name, edge_type);
@@ -248,7 +251,7 @@ impl VertexType {
             description: None,
         }
     }
-    
+
     /// Add a label to this vertex type
     #[allow(dead_code)] // ROADMAP v0.4.0 - Graph type builder methods (see ROADMAP.md §4)
     pub fn add_label(&mut self, label: String) {
@@ -256,7 +259,7 @@ impl VertexType {
             self.labels.push(label);
         }
     }
-    
+
     /// Add a property to this vertex type
     #[allow(dead_code)] // ROADMAP v0.4.0 - Graph type builder methods (see ROADMAP.md §4)
     pub fn add_property(&mut self, name: String, property_type: PropertyType) {
@@ -287,7 +290,7 @@ impl EdgeType {
             description: None,
         }
     }
-    
+
     /// Add a label to this edge type
     #[allow(dead_code)] // ROADMAP v0.4.0 - Graph type builder methods (see ROADMAP.md §4)
     pub fn add_label(&mut self, label: String) {
@@ -331,7 +334,7 @@ impl PropertyType {
             description: None,
         }
     }
-    
+
     #[allow(dead_code)] // ROADMAP v0.4.0 - Graph type builder methods (see ROADMAP.md §4)
     pub fn with_nullable(mut self, nullable: bool) -> Self {
         self.nullable = nullable;
@@ -349,23 +352,39 @@ impl PropertyType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DataType {
     Boolean,
-    String { max_length: Option<usize> },
-    Bytes { max_length: Option<usize> },
+    String {
+        max_length: Option<usize>,
+    },
+    Bytes {
+        max_length: Option<usize>,
+    },
     Integer,
     BigInteger,
     SmallInteger,
     Float,
     Double,
-    Decimal { precision: Option<u8>, scale: Option<u8> },
+    Decimal {
+        precision: Option<u8>,
+        scale: Option<u8>,
+    },
     Date,
-    Time { with_timezone: bool },
-    DateTime { with_timezone: bool },
+    Time {
+        with_timezone: bool,
+    },
+    DateTime {
+        with_timezone: bool,
+    },
     Duration,
-    List { element_type: Box<DataType>, max_length: Option<usize> },
+    List {
+        element_type: Box<DataType>,
+        max_length: Option<usize>,
+    },
     Record,
     Path,
     Graph,
-    Ref { target_type: Box<DataType> },
+    Ref {
+        target_type: Box<DataType>,
+    },
 }
 
 /// Property values
@@ -393,10 +412,10 @@ struct GraphMetadataState {
 pub struct GraphMetadataCatalog {
     /// Map of graph name to graph instance
     graphs: HashMap<String, Graph>,
-    
+
     /// Map of graph type name to graph type definition
     graph_types: HashMap<String, GraphType>,
-    
+
     /// Storage manager reference
     storage: Option<Arc<StorageManager>>,
 }
@@ -410,135 +429,157 @@ impl GraphMetadataCatalog {
             storage: None,
         })
     }
-    
+
     /// Create a schema-qualified key for graph storage
     fn qualified_graph_key(schema_name: &str, graph_name: &str) -> String {
         format!("{}/{}", schema_name, graph_name)
     }
-    
+
     /// Create a schema-qualified key for graph type storage  
     fn qualified_graph_type_key(schema_name: &str, graph_type_name: &str) -> String {
         format!("{}/{}", schema_name, graph_type_name)
     }
-    
+
     /// Add a graph to the catalog
     fn add_graph(&mut self, graph: Graph) -> CatalogResult<()> {
         let qualified_key = Self::qualified_graph_key(&graph.id.schema_name, &graph.id.name);
         if self.graphs.contains_key(&qualified_key) {
-            return Err(CatalogError::DuplicateEntry(
-                format!("Graph '{}' already exists", qualified_key)
-            ));
+            return Err(CatalogError::DuplicateEntry(format!(
+                "Graph '{}' already exists",
+                qualified_key
+            )));
         }
-        
+
         self.graphs.insert(qualified_key, graph);
         Ok(())
     }
-    
+
     /// Add a graph type to the catalog
     fn add_graph_type(&mut self, graph_type: GraphType) -> CatalogResult<()> {
-        let qualified_key = Self::qualified_graph_type_key(&graph_type.id.schema_name, &graph_type.id.name);
+        let qualified_key =
+            Self::qualified_graph_type_key(&graph_type.id.schema_name, &graph_type.id.name);
         if self.graph_types.contains_key(&qualified_key) {
-            return Err(CatalogError::DuplicateEntry(
-                format!("Graph type '{}' already exists", qualified_key)
-            ));
+            return Err(CatalogError::DuplicateEntry(format!(
+                "Graph type '{}' already exists",
+                qualified_key
+            )));
         }
-        
+
         self.graph_types.insert(qualified_key, graph_type);
         Ok(())
     }
-    
+
     /// Get a graph by name (backward compatibility - searches all schemas)
     fn get_graph(&self, name: &str) -> Option<&Graph> {
         // First try direct lookup for backward compatibility
         if let Some(graph) = self.graphs.get(name) {
             return Some(graph);
         }
-        
+
         // Then search all qualified names ending with the graph name
-        self.graphs.values()
-            .find(|g| g.id.name == name)
+        self.graphs.values().find(|g| g.id.name == name)
     }
-    
+
     /// Get a graph type by name (backward compatibility - searches all schemas)
     fn get_graph_type(&self, name: &str) -> Option<&GraphType> {
         // First try direct lookup for backward compatibility
         if let Some(graph_type) = self.graph_types.get(name) {
             return Some(graph_type);
         }
-        
+
         // Then search all qualified names ending with the graph type name
-        self.graph_types.values()
-            .find(|gt| gt.id.name == name)
+        self.graph_types.values().find(|gt| gt.id.name == name)
     }
-    
+
     /// Remove a graph (backward compatibility - searches all schemas)
     fn remove_graph(&mut self, name: &str) -> CatalogResult<Graph> {
         // First try direct lookup for backward compatibility
         if let Some(graph) = self.graphs.remove(name) {
             return Ok(graph);
         }
-        
+
         // Then search all qualified names ending with the graph name and remove
-        let qualified_key = self.graphs.keys()
+        let qualified_key = self
+            .graphs
+            .keys()
             .find(|k| k.ends_with(&format!("/{}", name)))
             .cloned();
-        
+
         if let Some(key) = qualified_key {
-            self.graphs.remove(&key)
+            self.graphs
+                .remove(&key)
                 .ok_or_else(|| CatalogError::NotFound(format!("Graph '{}' not found", name)))
         } else {
-            Err(CatalogError::NotFound(format!("Graph '{}' not found", name)))
+            Err(CatalogError::NotFound(format!(
+                "Graph '{}' not found",
+                name
+            )))
         }
     }
-    
-    
+
     /// Remove a graph type (backward compatibility - searches all schemas)
     fn remove_graph_type(&mut self, name: &str, cascade: bool) -> CatalogResult<GraphType> {
         // Check if any graphs use this type
         if !cascade {
-            let graphs_using_type: Vec<_> = self.graphs.values()
-                .filter(|g| g.graph_type_id.as_ref().map(|t| t.name == name).unwrap_or(false))
+            let graphs_using_type: Vec<_> = self
+                .graphs
+                .values()
+                .filter(|g| {
+                    g.graph_type_id
+                        .as_ref()
+                        .map(|t| t.name == name)
+                        .unwrap_or(false)
+                })
                 .map(|g| format!("{}/{}", g.id.schema_name, g.id.name))
                 .collect();
-            
+
             if !graphs_using_type.is_empty() {
-                return Err(CatalogError::InvalidOperation(
-                    format!("Cannot drop graph type '{}': used by graphs: {:?}", name, graphs_using_type)
-                ));
+                return Err(CatalogError::InvalidOperation(format!(
+                    "Cannot drop graph type '{}': used by graphs: {:?}",
+                    name, graphs_using_type
+                )));
             }
         }
-        
+
         // First try direct lookup for backward compatibility
         if let Some(graph_type) = self.graph_types.remove(name) {
             return Ok(graph_type);
         }
-        
+
         // Then search all qualified names ending with the graph type name and remove
-        let qualified_key = self.graph_types.keys()
+        let qualified_key = self
+            .graph_types
+            .keys()
             .find(|k| k.ends_with(&format!("/{}", name)))
             .cloned();
-        
+
         if let Some(key) = qualified_key {
-            self.graph_types.remove(&key)
+            self.graph_types
+                .remove(&key)
                 .ok_or_else(|| CatalogError::NotFound(format!("Graph type '{}' not found", name)))
         } else {
-            Err(CatalogError::NotFound(format!("Graph type '{}' not found", name)))
+            Err(CatalogError::NotFound(format!(
+                "Graph type '{}' not found",
+                name
+            )))
         }
     }
-    
+
     /// Update graph properties
     fn update_graph(&mut self, name: &str, updates: &Value) -> CatalogResult<()> {
-        let graph = self.graphs.get_mut(name)
+        let graph = self
+            .graphs
+            .get_mut(name)
             .ok_or_else(|| CatalogError::NotFound(format!("Graph '{}' not found", name)))?;
-        
+
         if let Some(desc) = updates.get("description").and_then(|v| v.as_str()) {
             graph.description = Some(desc.to_string());
         }
-        
+
         if let Some(mat) = updates.get("is_materialized").and_then(|v| v.as_bool()) {
             graph.is_materialized = mat;
         }
-        
+
         if let Some(props) = updates.get("properties").and_then(|v| v.as_object()) {
             for (key, value) in props {
                 if let Ok(prop) = serde_json::from_value::<GraphProperty>(value.clone()) {
@@ -546,73 +587,93 @@ impl GraphMetadataCatalog {
                 }
             }
         }
-        
+
         graph.modified_at = chrono::Utc::now();
         Ok(())
     }
-    
+
     /// Add vertex type to a graph type
-    fn add_vertex_type_to_graph_type(&mut self, graph_type_name: &str, vertex_type: VertexType) -> CatalogResult<()> {
+    fn add_vertex_type_to_graph_type(
+        &mut self,
+        graph_type_name: &str,
+        vertex_type: VertexType,
+    ) -> CatalogResult<()> {
         // First try direct lookup for backward compatibility
         if let Some(graph_type) = self.graph_types.get_mut(graph_type_name) {
             graph_type.add_vertex_type(vertex_type.name.clone(), vertex_type);
             return Ok(());
         }
-        
+
         // Then search all qualified names ending with the graph type name
-        let qualified_key = self.graph_types.keys()
+        let qualified_key = self
+            .graph_types
+            .keys()
             .find(|key| {
                 let parts: Vec<&str> = key.split('/').collect();
                 parts.last() == Some(&graph_type_name)
             })
             .cloned();
-            
+
         if let Some(key) = qualified_key {
             if let Some(graph_type) = self.graph_types.get_mut(&key) {
                 graph_type.add_vertex_type(vertex_type.name.clone(), vertex_type);
                 return Ok(());
             }
         }
-        
-        Err(CatalogError::NotFound(format!("Graph type '{}' not found", graph_type_name)))
+
+        Err(CatalogError::NotFound(format!(
+            "Graph type '{}' not found",
+            graph_type_name
+        )))
     }
-    
+
     /// Add edge type to a graph type
-    fn add_edge_type_to_graph_type(&mut self, graph_type_name: &str, edge_type: EdgeType) -> CatalogResult<()> {
+    fn add_edge_type_to_graph_type(
+        &mut self,
+        graph_type_name: &str,
+        edge_type: EdgeType,
+    ) -> CatalogResult<()> {
         // First try direct lookup for backward compatibility
         if let Some(graph_type) = self.graph_types.get_mut(graph_type_name) {
             graph_type.add_edge_type(edge_type.name.clone(), edge_type);
             return Ok(());
         }
-        
+
         // Then search all qualified names ending with the graph type name
-        let qualified_key = self.graph_types.keys()
+        let qualified_key = self
+            .graph_types
+            .keys()
             .find(|key| {
                 let parts: Vec<&str> = key.split('/').collect();
                 parts.last() == Some(&graph_type_name)
             })
             .cloned();
-            
+
         if let Some(key) = qualified_key {
             if let Some(graph_type) = self.graph_types.get_mut(&key) {
                 graph_type.add_edge_type(edge_type.name.clone(), edge_type);
                 return Ok(());
             }
         }
-        
-        Err(CatalogError::NotFound(format!("Graph type '{}' not found", graph_type_name)))
+
+        Err(CatalogError::NotFound(format!(
+            "Graph type '{}' not found",
+            graph_type_name
+        )))
     }
-    
+
     /// Get graphs by schema
     fn get_graphs_by_schema(&self, schema_name: &str) -> Vec<&Graph> {
-        self.graphs.values()
+        self.graphs
+            .values()
             .filter(|g| g.id.schema_name == schema_name)
             .collect()
     }
-    
+
     /// Get graph types by schema
     fn get_graph_types_by_schema(&self, schema_name: &str) -> Vec<&GraphType> {
-        self.graph_types.values()
+        self.graph_types
+            .values()
             .filter(|gt| gt.id.schema_name == schema_name)
             .collect()
     }
@@ -638,10 +699,15 @@ impl CatalogProvider for GraphMetadataCatalog {
             }
             Ok(None) => {
                 // This is expected on first run - no catalog data exists yet
-                log::debug!("No persisted graph metadata catalog found. Using default initialization.");
+                log::debug!(
+                    "No persisted graph metadata catalog found. Using default initialization."
+                );
             }
             Err(e) => {
-                log::warn!("Error loading graph metadata catalog: {}. Using default initialization.", e);
+                log::warn!(
+                    "Error loading graph metadata catalog: {}. Using default initialization.",
+                    e
+                );
             }
         }
 
@@ -650,195 +716,237 @@ impl CatalogProvider for GraphMetadataCatalog {
 
     fn execute(&mut self, op: CatalogOperation) -> CatalogResult<CatalogResponse> {
         match op {
-            CatalogOperation::Create { entity_type, name, params } => {
-                match entity_type {
-                    EntityType::Graph => {
-                        let graph = Graph::from_params(name.clone(), &params);
-                        self.add_graph(graph)?;
-                        Ok(CatalogResponse::Success { 
-                            data: Some(json!({ "message": format!("Graph '{}' created", name) }))
-                        })
+            CatalogOperation::Create {
+                entity_type,
+                name,
+                params,
+            } => match entity_type {
+                EntityType::Graph => {
+                    let graph = Graph::from_params(name.clone(), &params);
+                    self.add_graph(graph)?;
+                    Ok(CatalogResponse::Success {
+                        data: Some(json!({ "message": format!("Graph '{}' created", name) })),
+                    })
+                }
+                EntityType::GraphType => {
+                    let graph_type = GraphType::from_params(name.clone(), &params);
+                    self.add_graph_type(graph_type)?;
+                    Ok(CatalogResponse::Success {
+                        data: Some(json!({ "message": format!("Graph type '{}' created", name) })),
+                    })
+                }
+                EntityType::VertexType => {
+                    let graph_type_name = params
+                        .get("graph_type")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| {
+                            CatalogError::InvalidParameters(
+                                "Missing 'graph_type' parameter".to_string(),
+                            )
+                        })?;
+
+                    let vertex_type = serde_json::from_value::<VertexType>(params.clone())
+                        .map_err(|e| CatalogError::InvalidParameters(e.to_string()))?;
+
+                    self.add_vertex_type_to_graph_type(graph_type_name, vertex_type)?;
+                    Ok(CatalogResponse::Success {
+                        data: Some(
+                            json!({ "message": format!("Vertex type '{}' added to graph type '{}'", name, graph_type_name) }),
+                        ),
+                    })
+                }
+                EntityType::EdgeType => {
+                    let graph_type_name = params
+                        .get("graph_type")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| {
+                            CatalogError::InvalidParameters(
+                                "Missing 'graph_type' parameter".to_string(),
+                            )
+                        })?;
+
+                    let edge_type = serde_json::from_value::<EdgeType>(params.clone())
+                        .map_err(|e| CatalogError::InvalidParameters(e.to_string()))?;
+
+                    self.add_edge_type_to_graph_type(graph_type_name, edge_type)?;
+                    Ok(CatalogResponse::Success {
+                        data: Some(
+                            json!({ "message": format!("Edge type '{}' added to graph type '{}'", name, graph_type_name) }),
+                        ),
+                    })
+                }
+                _ => Ok(CatalogResponse::NotSupported),
+            },
+
+            CatalogOperation::Drop {
+                entity_type,
+                name,
+                cascade,
+            } => match entity_type {
+                EntityType::Graph => {
+                    let removed = self.remove_graph(&name)?;
+                    Ok(CatalogResponse::Success {
+                        data: Some(serde_json::to_value(removed)?),
+                    })
+                }
+                EntityType::GraphType => {
+                    let removed = self.remove_graph_type(&name, cascade)?;
+                    Ok(CatalogResponse::Success {
+                        data: Some(serde_json::to_value(removed)?),
+                    })
+                }
+                _ => Ok(CatalogResponse::NotSupported),
+            },
+
+            CatalogOperation::Query { query_type, params } => match query_type {
+                QueryType::GetGraph => {
+                    if let Some(name) = params.get("name").and_then(|v| v.as_str()) {
+                        if let Some(graph) = self.get_graph(name) {
+                            Ok(CatalogResponse::Query {
+                                results: serde_json::to_value(graph)?,
+                            })
+                        } else {
+                            Err(CatalogError::NotFound(format!(
+                                "Graph '{}' not found",
+                                name
+                            )))
+                        }
+                    } else {
+                        Err(CatalogError::InvalidParameters(
+                            "Missing 'name' parameter".to_string(),
+                        ))
                     }
-                    EntityType::GraphType => {
-                        let graph_type = GraphType::from_params(name.clone(), &params);
-                        self.add_graph_type(graph_type)?;
-                        Ok(CatalogResponse::Success { 
-                            data: Some(json!({ "message": format!("Graph type '{}' created", name) }))
-                        })
+                }
+                QueryType::GetGraphType => {
+                    if let Some(name) = params.get("name").and_then(|v| v.as_str()) {
+                        if let Some(graph_type) = self.get_graph_type(name) {
+                            Ok(CatalogResponse::Query {
+                                results: serde_json::to_value(graph_type)?,
+                            })
+                        } else {
+                            Err(CatalogError::NotFound(format!(
+                                "Graph type '{}' not found",
+                                name
+                            )))
+                        }
+                    } else {
+                        Err(CatalogError::InvalidParameters(
+                            "Missing 'name' parameter".to_string(),
+                        ))
                     }
-                    EntityType::VertexType => {
-                        let graph_type_name = params.get("graph_type")
+                }
+                QueryType::List => {
+                    if let Some(schema_name) = params.get("schema_name").and_then(|v| v.as_str()) {
+                        let entity_type = params
+                            .get("entity_type")
                             .and_then(|v| v.as_str())
-                            .ok_or_else(|| CatalogError::InvalidParameters("Missing 'graph_type' parameter".to_string()))?;
-                        
-                        let vertex_type = serde_json::from_value::<VertexType>(params.clone())
-                            .map_err(|e| CatalogError::InvalidParameters(e.to_string()))?;
-                        
-                        self.add_vertex_type_to_graph_type(graph_type_name, vertex_type)?;
-                        Ok(CatalogResponse::Success { 
-                            data: Some(json!({ "message": format!("Vertex type '{}' added to graph type '{}'", name, graph_type_name) }))
-                        })
-                    }
-                    EntityType::EdgeType => {
-                        let graph_type_name = params.get("graph_type")
-                            .and_then(|v| v.as_str())
-                            .ok_or_else(|| CatalogError::InvalidParameters("Missing 'graph_type' parameter".to_string()))?;
-                        
-                        let edge_type = serde_json::from_value::<EdgeType>(params.clone())
-                            .map_err(|e| CatalogError::InvalidParameters(e.to_string()))?;
-                        
-                        self.add_edge_type_to_graph_type(graph_type_name, edge_type)?;
-                        Ok(CatalogResponse::Success { 
-                            data: Some(json!({ "message": format!("Edge type '{}' added to graph type '{}'", name, graph_type_name) }))
-                        })
-                    }
-                    _ => Ok(CatalogResponse::NotSupported)
-                }
-            }
-            
-            CatalogOperation::Drop { entity_type, name, cascade } => {
-                match entity_type {
-                    EntityType::Graph => {
-                        let removed = self.remove_graph(&name)?;
-                        Ok(CatalogResponse::Success { 
-                            data: Some(serde_json::to_value(removed)?)
-                        })
-                    }
-                    EntityType::GraphType => {
-                        let removed = self.remove_graph_type(&name, cascade)?;
-                        Ok(CatalogResponse::Success { 
-                            data: Some(serde_json::to_value(removed)?)
-                        })
-                    }
-                    _ => Ok(CatalogResponse::NotSupported)
-                }
-            }
-            
-            CatalogOperation::Query { query_type, params } => {
-                match query_type {
-                    QueryType::GetGraph => {
-                        if let Some(name) = params.get("name").and_then(|v| v.as_str()) {
-                            if let Some(graph) = self.get_graph(name) {
-                                Ok(CatalogResponse::Query { 
-                                    results: serde_json::to_value(graph)?
-                                })
-                            } else {
-                                Err(CatalogError::NotFound(format!("Graph '{}' not found", name)))
+                            .unwrap_or("graph");
+
+                        let results = match entity_type {
+                            "graph" => {
+                                serde_json::to_value(self.get_graphs_by_schema(schema_name))?
                             }
-                        } else {
-                            Err(CatalogError::InvalidParameters("Missing 'name' parameter".to_string()))
-                        }
-                    }
-                    QueryType::GetGraphType => {
-                        if let Some(name) = params.get("name").and_then(|v| v.as_str()) {
-                            if let Some(graph_type) = self.get_graph_type(name) {
-                                Ok(CatalogResponse::Query { 
-                                    results: serde_json::to_value(graph_type)?
-                                })
-                            } else {
-                                Err(CatalogError::NotFound(format!("Graph type '{}' not found", name)))
+                            "graph_type" => {
+                                serde_json::to_value(self.get_graph_types_by_schema(schema_name))?
                             }
-                        } else {
-                            Err(CatalogError::InvalidParameters("Missing 'name' parameter".to_string()))
-                        }
+                            _ => return Ok(CatalogResponse::NotSupported),
+                        };
+
+                        Ok(CatalogResponse::Query { results })
+                    } else {
+                        Err(CatalogError::InvalidParameters(
+                            "Missing 'schema_name' parameter".to_string(),
+                        ))
                     }
-                    QueryType::List => {
-                        if let Some(schema_name) = params.get("schema_name").and_then(|v| v.as_str()) {
-                            let entity_type = params.get("entity_type")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("graph");
-                            
-                            let results = match entity_type {
-                                "graph" => serde_json::to_value(self.get_graphs_by_schema(schema_name))?,
-                                "graph_type" => serde_json::to_value(self.get_graph_types_by_schema(schema_name))?,
-                                _ => return Ok(CatalogResponse::NotSupported)
-                            };
-                            
-                            Ok(CatalogResponse::Query { results })
-                        } else {
-                            Err(CatalogError::InvalidParameters("Missing 'schema_name' parameter".to_string()))
-                        }
-                    }
-                    _ => Ok(CatalogResponse::NotSupported)
                 }
-            }
-            
-            CatalogOperation::Update { entity_type, name, updates } => {
-                match entity_type {
-                    EntityType::Graph => {
-                        self.update_graph(&name, &updates)?;
-                        Ok(CatalogResponse::Success { 
-                            data: Some(json!({ "message": format!("Graph '{}' updated", name) }))
-                        })
-                    }
-                    _ => Ok(CatalogResponse::NotSupported)
+                _ => Ok(CatalogResponse::NotSupported),
+            },
+
+            CatalogOperation::Update {
+                entity_type,
+                name,
+                updates,
+            } => match entity_type {
+                EntityType::Graph => {
+                    self.update_graph(&name, &updates)?;
+                    Ok(CatalogResponse::Success {
+                        data: Some(json!({ "message": format!("Graph '{}' updated", name) })),
+                    })
                 }
-            }
-            
-            CatalogOperation::List { entity_type, filters } => {
-                match entity_type {
-                    EntityType::Graph => {
-                        let graphs: Vec<&Graph> = if let Some(filters) = filters {
-                            if let Some(schema_name) = filters.get("schema_name").and_then(|v| v.as_str()) {
-                                self.get_graphs_by_schema(schema_name)
-                            } else {
-                                self.graphs.values().collect()
-                            }
+                _ => Ok(CatalogResponse::NotSupported),
+            },
+
+            CatalogOperation::List {
+                entity_type,
+                filters,
+            } => match entity_type {
+                EntityType::Graph => {
+                    let graphs: Vec<&Graph> = if let Some(filters) = filters {
+                        if let Some(schema_name) =
+                            filters.get("schema_name").and_then(|v| v.as_str())
+                        {
+                            self.get_graphs_by_schema(schema_name)
                         } else {
                             self.graphs.values().collect()
-                        };
-                        
-                        Ok(CatalogResponse::List { 
-                            items: graphs.iter()
-                                .map(|g| serde_json::to_value(g))
-                                .collect::<Result<Vec<_>, _>>()?
-                        })
-                    }
-                    EntityType::GraphType => {
-                        let graph_types: Vec<&GraphType> = if let Some(filters) = filters {
-                            if let Some(schema_name) = filters.get("schema_name").and_then(|v| v.as_str()) {
-                                self.get_graph_types_by_schema(schema_name)
-                            } else {
-                                self.graph_types.values().collect()
-                            }
+                        }
+                    } else {
+                        self.graphs.values().collect()
+                    };
+
+                    Ok(CatalogResponse::List {
+                        items: graphs
+                            .iter()
+                            .map(|g| serde_json::to_value(g))
+                            .collect::<Result<Vec<_>, _>>()?,
+                    })
+                }
+                EntityType::GraphType => {
+                    let graph_types: Vec<&GraphType> = if let Some(filters) = filters {
+                        if let Some(schema_name) =
+                            filters.get("schema_name").and_then(|v| v.as_str())
+                        {
+                            self.get_graph_types_by_schema(schema_name)
                         } else {
                             self.graph_types.values().collect()
-                        };
-                        
-                        Ok(CatalogResponse::List { 
-                            items: graph_types.iter()
-                                .map(|gt| serde_json::to_value(gt))
-                                .collect::<Result<Vec<_>, _>>()?
-                        })
-                    }
-                    _ => Ok(CatalogResponse::NotSupported)
+                        }
+                    } else {
+                        self.graph_types.values().collect()
+                    };
+
+                    Ok(CatalogResponse::List {
+                        items: graph_types
+                            .iter()
+                            .map(|gt| serde_json::to_value(gt))
+                            .collect::<Result<Vec<_>, _>>()?,
+                    })
                 }
-            }
-            
-            _ => Ok(CatalogResponse::NotSupported)
+                _ => Ok(CatalogResponse::NotSupported),
+            },
+
+            _ => Ok(CatalogResponse::NotSupported),
         }
     }
-    
+
     fn save(&self) -> CatalogResult<Vec<u8>> {
         let state = GraphMetadataState {
             graphs: self.graphs.clone(),
             graph_types: self.graph_types.clone(),
         };
-        
+
         let data = bincode::serialize(&state)
             .map_err(|e| CatalogError::SerializationError(e.to_string()))?;
         Ok(data)
     }
-    
+
     fn load(&mut self, data: &[u8]) -> CatalogResult<()> {
         let state: GraphMetadataState = bincode::deserialize(data)
             .map_err(|e| CatalogError::DeserializationError(e.to_string()))?;
-        
+
         self.graphs = state.graphs;
         self.graph_types = state.graph_types;
         Ok(())
     }
-    
+
     fn schema(&self) -> CatalogSchema {
         CatalogSchema {
             name: "graph_metadata".to_string(),
@@ -852,7 +960,7 @@ impl CatalogProvider for GraphMetadataCatalog {
             operations: self.supported_operations(),
         }
     }
-    
+
     fn supported_operations(&self) -> Vec<String> {
         vec![
             "create_graph".to_string(),
@@ -874,13 +982,13 @@ impl CatalogProvider for GraphMetadataCatalog {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_graph_catalog_creation() {
         let catalog = GraphMetadataCatalog::new();
         assert_eq!(catalog.schema().name, "graph_metadata");
     }
-    
+
     #[test]
     fn test_create_and_get_graph() {
         let mut catalog = GraphMetadataCatalog {
@@ -888,29 +996,29 @@ mod tests {
             graph_types: HashMap::new(),
             storage: None,
         };
-        
+
         let params = json!({
             "schema_name": "test_schema",
             "description": "Test graph",
             "is_materialized": true
         });
-        
+
         let result = catalog.execute(CatalogOperation::Create {
             entity_type: EntityType::Graph,
             name: "test_graph".to_string(),
             params,
         });
-        
+
         assert!(result.is_ok());
-        
+
         let query_result = catalog.execute(CatalogOperation::Query {
             query_type: QueryType::GetGraph,
             params: json!({ "name": "test_graph" }),
         });
-        
+
         assert!(query_result.is_ok());
     }
-    
+
     #[test]
     fn test_create_graph_type_with_vertex_and_edge_types() {
         let mut catalog = GraphMetadataCatalog {
@@ -918,19 +1026,21 @@ mod tests {
             graph_types: HashMap::new(),
             storage: None,
         };
-        
+
         // Create graph type
         let graph_type_params = json!({
             "schema_name": "test_schema",
             "description": "Social network graph type"
         });
-        
-        catalog.execute(CatalogOperation::Create {
-            entity_type: EntityType::GraphType,
-            name: "social_network".to_string(),
-            params: graph_type_params,
-        }).unwrap();
-        
+
+        catalog
+            .execute(CatalogOperation::Create {
+                entity_type: EntityType::GraphType,
+                name: "social_network".to_string(),
+                params: graph_type_params,
+            })
+            .unwrap();
+
         // Add vertex type
         let vertex_params = json!({
             "graph_type": "social_network",
@@ -949,28 +1059,28 @@ mod tests {
                 }
             }
         });
-        
+
         let result = catalog.execute(CatalogOperation::Create {
             entity_type: EntityType::VertexType,
             name: "Person".to_string(),
             params: vertex_params,
         });
-        
+
         assert!(result.is_ok());
-        
+
         // Verify graph type contains vertex type
         let query_result = catalog.execute(CatalogOperation::Query {
             query_type: QueryType::GetGraphType,
             params: json!({ "name": "social_network" }),
         });
-        
+
         assert!(query_result.is_ok());
         if let Ok(CatalogResponse::Query { results }) = query_result {
             let graph_type: GraphType = serde_json::from_value(results).unwrap();
             assert!(graph_type.vertex_types.contains_key("Person"));
         }
     }
-    
+
     #[test]
     fn test_list_graphs_by_schema() {
         let mut catalog = GraphMetadataCatalog {
@@ -978,32 +1088,38 @@ mod tests {
             graph_types: HashMap::new(),
             storage: None,
         };
-        
+
         // Add graphs to different schemas
-        catalog.execute(CatalogOperation::Create {
-            entity_type: EntityType::Graph,
-            name: "graph1".to_string(),
-            params: json!({ "schema_name": "schema1" }),
-        }).unwrap();
-        
-        catalog.execute(CatalogOperation::Create {
-            entity_type: EntityType::Graph,
-            name: "graph2".to_string(),
-            params: json!({ "schema_name": "schema1" }),
-        }).unwrap();
-        
-        catalog.execute(CatalogOperation::Create {
-            entity_type: EntityType::Graph,
-            name: "graph3".to_string(),
-            params: json!({ "schema_name": "schema2" }),
-        }).unwrap();
-        
+        catalog
+            .execute(CatalogOperation::Create {
+                entity_type: EntityType::Graph,
+                name: "graph1".to_string(),
+                params: json!({ "schema_name": "schema1" }),
+            })
+            .unwrap();
+
+        catalog
+            .execute(CatalogOperation::Create {
+                entity_type: EntityType::Graph,
+                name: "graph2".to_string(),
+                params: json!({ "schema_name": "schema1" }),
+            })
+            .unwrap();
+
+        catalog
+            .execute(CatalogOperation::Create {
+                entity_type: EntityType::Graph,
+                name: "graph3".to_string(),
+                params: json!({ "schema_name": "schema2" }),
+            })
+            .unwrap();
+
         // List graphs in schema1
         let result = catalog.execute(CatalogOperation::List {
             entity_type: EntityType::Graph,
             filters: Some(json!({ "schema_name": "schema1" })),
         });
-        
+
         assert!(result.is_ok());
         if let Ok(CatalogResponse::List { items }) = result {
             assert_eq!(items.len(), 2);

@@ -6,14 +6,14 @@
 // This module implements persistent graph schema support per ISO GQL standards,
 // including CREATE GRAPH TYPE and schema validation.
 
-pub mod types;
-pub mod validator;
 pub mod catalog;
-pub mod parser;
-pub mod executor;
 pub mod enforcement;
+pub mod executor;
 pub mod integration;
 pub mod introspection;
+pub mod parser;
+pub mod types;
+pub mod validator;
 
 // Re-export commonly used types - commented out until needed
 // pub use types::{
@@ -38,7 +38,8 @@ pub enum SchemaError {
     ValidationError(#[from] ValidationError),
 
     #[error("Schema not found: {0}")]
-    #[allow(dead_code)] // ROADMAP v0.4.0 - Error variant for schema lookup failures in graph type catalog
+    #[allow(dead_code)]
+    // ROADMAP v0.4.0 - Error variant for schema lookup failures in graph type catalog
     SchemaNotFound(String),
 
     #[error("Schema already exists: {0}")]
@@ -50,11 +51,13 @@ pub enum SchemaError {
     InvalidDefinition(String),
 
     #[error("Version conflict: {0}")]
-    #[allow(dead_code)] // ROADMAP v0.4.0 - Error variant for graph type version conflicts during ALTER
+    #[allow(dead_code)]
+    // ROADMAP v0.4.0 - Error variant for graph type version conflicts during ALTER
     VersionConflict(String),
 
     #[error("Catalog error: {0}")]
-    #[allow(dead_code)] // ROADMAP v0.4.0 - Error variant for graph type catalog operation failures
+    #[allow(dead_code)]
+    // ROADMAP v0.4.0 - Error variant for graph type catalog operation failures
     CatalogError(String),
 
     #[error("IO error: {0}")]

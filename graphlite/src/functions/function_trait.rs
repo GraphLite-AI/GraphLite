@@ -6,8 +6,8 @@
 //! This module defines the core Function trait that all functions must implement.
 //! Functions can be anything - aggregate, scalar, or any other type.
 
-use crate::storage::Value;
 use crate::exec::result::Row;
+use crate::storage::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -16,13 +16,13 @@ use std::sync::Arc;
 pub enum FunctionError {
     #[error("Invalid argument count: expected {expected}, got {actual}")]
     InvalidArgumentCount { expected: usize, actual: usize },
-    
+
     #[error("Invalid argument type: {message}")]
     InvalidArgumentType { message: String },
-    
+
     #[error("Function execution failed: {message}")]
     ExecutionError { message: String },
-    
+
     #[error("Unsupported operation: {operation}")]
     UnsupportedOperation { operation: String },
 }
@@ -58,11 +58,11 @@ impl FunctionContext {
             graph_name: None,
         }
     }
-    
+
     /// Create a new function context with storage access
     pub fn with_storage(
-        rows: Vec<Row>, 
-        variables: HashMap<String, Value>, 
+        rows: Vec<Row>,
+        variables: HashMap<String, Value>,
         arguments: Vec<Value>,
         storage_manager: Option<Arc<crate::storage::StorageManager>>,
         current_graph: Option<Arc<crate::storage::GraphCache>>,
@@ -77,22 +77,22 @@ impl FunctionContext {
             graph_name,
         }
     }
-    
+
     /// Get a specific argument by index
     pub fn get_argument(&self, index: usize) -> FunctionResult<&Value> {
-        self.arguments.get(index).ok_or_else(|| {
-            FunctionError::InvalidArgumentCount {
+        self.arguments
+            .get(index)
+            .ok_or_else(|| FunctionError::InvalidArgumentCount {
                 expected: index + 1,
                 actual: self.arguments.len(),
-            }
-        })
+            })
     }
-    
+
     /// Get the number of arguments
     pub fn argument_count(&self) -> usize {
         self.arguments.len()
     }
-    
+
     /// Check if the function has the expected number of arguments
     pub fn validate_argument_count(&self, expected: usize) -> FunctionResult<()> {
         if self.argument_count() != expected {
@@ -139,4 +139,4 @@ pub trait Function: Send + Sync + std::fmt::Debug {
     fn is_variadic(&self) -> bool {
         false // Default to fixed argument count
     }
-} 
+}
