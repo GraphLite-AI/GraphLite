@@ -64,7 +64,7 @@ We believe in **full transparency** about AI involvement and **welcome AI-assist
 - Copy-pasting AI code without understanding
 - Submitting code with "the AI said it works" as the only verification
 - PRs without tests or documentation
-- Code that violates architectural patterns in [docs/DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md)
+- Code that violates architectural patterns specified in [Critical Rules](#critical-rules).
 
 **Transparency:**
 - You may mention AI tools used in PR descriptions (optional for small changes)
@@ -327,7 +327,10 @@ pub fn process_query(&self, query: &str) -> Result<String> {
 
 ### Critical Rules
 
-GraphLite has specific architectural patterns documented in [docs/DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md). **Please read this file before making contributions.** Key rules:
+GraphLite has the following specific architectural patterns that are expressed as rules below.
+They can be enforced by using github hooks. Use [scripts/install_hooks.sh](../scripts/install_hooks.sh).
+
+Key rules:
 
 1. **ExecutionContext Management**: Never create new `ExecutionContext` instances
 2. **Storage Manager Singleton**: Never create new `StorageManager` instances during query execution
