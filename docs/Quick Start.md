@@ -363,18 +363,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### For Contributors
 
-👥 **[Contribution Guide.md](docs/Contribution%20Guide.md)** - How to contribute:
+👥 **[Contribution Guide.md](/CONTRIBUTING.md)** - How to contribute:
 - Development setup
-- Testing guidelines (see also [Testing Guide.md](docs/Testing%20Guide.md))
+- Testing guidelines
 - Code style and quality standards
 - Pull request process
-
-🧪 **[Testing Guide.md](docs/Testing%20Guide.md)** - Comprehensive testing:
-- Running tests (single-threaded mode)
-- Test categories
-- Writing tests
-- Test runner scripts
-
 ---
 
 ## Example Queries Cheat Sheet
