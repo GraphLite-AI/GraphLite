@@ -65,12 +65,12 @@ GraphLite includes a comprehensive build script that simplifies the build proces
 ```
 
 **Benefits of the build script**:
-- ✅ Automatically detects and adds Rust/Cargo to PATH if needed
-- ✅ Release builds are optimized for production use (significantly faster execution)
-- ✅ Builds both the library and CLI binary in one command
-- ✅ Optional clean build support (`--clean` flag)
-- ✅ Optional test execution after build (`--test` flag)
-- ✅ Colored output with build summary and next steps
+- Automatically detects and adds Rust/Cargo to PATH if needed
+- Release builds are optimized for production use (significantly faster execution)
+- Builds both the library and CLI binary in one command
+- Optional clean build support (`--clean` flag)
+- Optional test execution after build (`--test` flag)
+- Colored output with build summary and next steps
 
 **Build output locations**:
 - **Debug mode**: `target/debug/libgraphlite.rlib` and `target/debug/graphlite`
@@ -83,25 +83,21 @@ GraphLite includes a comprehensive build script that simplifies the build proces
 Create a new GraphLite database with an admin user:
 
 ```bash
-# If installed globally
-graphlite install --path ./my_db --admin-user admin --admin-password secret
-
-# Or run from build directory
 ./target/release/graphlite install --path ./my_db --admin-user admin --admin-password secret
 ```
 
 **What this does:**
-- ✅ Creates the database files in `./my_db` directory
-- ✅ Sets up the admin user with the specified password
-- ✅ Creates default admin and user roles
-- ✅ Initializes the default schema
+- Creates the database files in `./my_db` directory
+- Sets up the admin user with the specified password
+- Creates default admin and user roles
+- Initializes the default schema
 
 **Expected output:**
 ```
-✅ Database installed successfully at ./my_db
-✅ Admin user 'admin' created
-✅ Default roles created: admin, user
-✅ Default schema initialized
+Database installed successfully at ./my_db
+Admin user 'admin' created
+Default roles created: admin, user
+Default schema initialized
 ```
 
 ---
@@ -111,10 +107,6 @@ graphlite install --path ./my_db --admin-user admin --admin-password secret
 Launch the interactive GraphLite console:
 
 ```bash
-# If installed globally
-graphlite gql --path ./my_db -u admin -p secret
-
-# Or run from build directory
 ./target/release/graphlite gql --path ./my_db -u admin -p secret
 ```
 
@@ -208,8 +200,7 @@ RETURN friend.name, friend.city;
 
 ```gql
 -- Find friends of friends (2-hop path)
-MATCH (p:Person {name: 'Alice'})-[:KNOWS]->(friend)
-NEXT MATCH (friend)-[:KNOWS]->(fof)
+MATCH (p:Person {name: 'Alice'})-[:KNOWS]->(friend)-[:KNOWS]->(fof)
 RETURN fof.name AS friend_of_friend;
 ```
 
@@ -253,23 +244,23 @@ ORDER BY population DESC;
 
 ```bash
 # Show help
-graphlite --help
+./target/release/graphlite --help
 
 # Show version
-graphlite version
+./target/release/graphlite version
 
 # Initialize database
-graphlite install --path ./db --admin-user admin --admin-password pwd
+./target/release/graphlite install --path ./db --admin-user admin --admin-password pwd
 
 # Start REPL
-graphlite gql --path ./db -u admin -p pwd
+./target/release/graphlite gql --path ./db -u admin -p pwd
 
 # Execute single query
-graphlite query "MATCH (n) RETURN n" --path ./db -u admin -p pwd
+./target/release/graphlite query "MATCH (n) RETURN n" --path ./db -u admin -p pwd
 
 # Enable debug logging
-graphlite -v gql --path ./db -u admin -p pwd
-graphlite --log-level debug gql --path ./db -u admin -p pwd
+./target/release/graphlite -v gql --path ./db -u admin -p pwd
+./target/release/graphlite --log-level debug gql --path ./db -u admin -p pwd
 ```
 
 ### Global Options
@@ -316,7 +307,7 @@ xcode-select --install
 rm -rf ./my_db
 
 # Or use different path
-graphlite install --path ./new_db --admin-user admin --admin-password secret
+./target/release/graphlite install --path ./new_db --admin-user admin --admin-password secret
 ```
 
 ---
@@ -325,7 +316,7 @@ graphlite install --path ./new_db --admin-user admin --admin-password secret
 
 ### Learn More About GQL
 
-📚 **[Getting Started With GQL.md](docs/Getting%20Started%20With%20GQL.md)** - Comprehensive GQL query language tutorial covering:
+📚 **[Getting Started With GQL.md](Getting%20Started%20With%20GQL.md)** - Comprehensive GQL query language tutorial covering:
 - Pattern matching and graph traversal
 - Aggregations (GROUP BY, HAVING)
 - String and date/time functions
@@ -336,13 +327,13 @@ graphlite install --path ./new_db --admin-user admin --admin-password secret
 
 **For Rust Applications:**
 
-🎯 **[SDK Examples](graphlite-sdk/examples/)** - Recommended high-level API
+🎯 **[SDK Examples](/graphlite-sdk/examples/)** - Recommended high-level API
 - `basic_usage.rs` - Complete SDK walkthrough
 - Transaction management
 - Query builder API
 - Typed result deserialization
 
-🔧 **[Core Library Examples](examples-core/)** - Advanced low-level usage
+🔧 **[Core Library Examples](/examples-core/)** - Advanced low-level usage
 - Direct QueryCoordinator API
 - Fine-grained control
 - Advanced features
@@ -369,14 +360,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
-
-### Advanced Configuration
-
-⚙️ **[Configuration Guide.md](docs/Configuration%20Guide.md)** - Advanced topics:
-- Logging configuration (RUST_LOG, CLI flags)
-- Performance tuning
-- Cache configuration
-- Production deployment
 
 ### For Contributors
 
@@ -444,9 +427,8 @@ HAVING AVG(n.age) > 30;
 ### Multi-hop Queries
 
 ```gql
--- 2-hop path with NEXT
-MATCH (a:Person {name: 'Alice'})-[:KNOWS]->(b)
-NEXT MATCH (b)-[:KNOWS]->(c)
+-- 2-hop path (chained relationships)
+MATCH (a:Person {name: 'Alice'})-[:KNOWS]->(b)-[:KNOWS]->(c)
 RETURN c.name;
 ```
 
@@ -457,10 +439,10 @@ RETURN c.name;
 - **Documentation**: See links in [Next Steps](#next-steps) section above
 - **Issues**: Report bugs on [GitHub Issues](https://github.com/GraphLite-AI/GraphLite/issues)
 - **Questions**: Check existing issues or open a new one
-- **Contributing**: See [Contribution Guide.md](docs/Contribution%20Guide.md)
+- **Contributing**: See [Contribution Guide.md](/CONTRIBUTING.md)
 
 ---
 
-**Congratulations! You now have GraphLite up and running! 🎉**
+**Congratulations! You now have GraphLite up and running!**
 
-Start exploring graph queries with [Getting Started With GQL.md](docs/Getting%20Started%20With%20GQL.md) or integrate GraphLite into your application with our [SDK examples](graphlite-sdk/examples/).
+Start exploring graph queries with [Getting Started With GQL.md](Getting%20Started%20With%20GQL.md) or integrate GraphLite into your application with our [SDK examples](/graphlite-sdk/examples/).
