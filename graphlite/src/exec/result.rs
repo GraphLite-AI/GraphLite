@@ -55,6 +55,12 @@ pub struct QueryResult {
     pub warnings: Vec<String>,
 }
 
+impl Default for QueryResult {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QueryResult {
     /// Create a new empty query result
     pub fn new() -> Self {
@@ -184,7 +190,7 @@ impl Row {
     /// Create a row from positional values with variable names
     pub fn from_positional(values: Vec<Value>, variables: &[String]) -> Self {
         let mut named_values = HashMap::new();
-        for (_i, (value, var_name)) in values.iter().zip(variables.iter()).enumerate() {
+        for (value, var_name) in values.iter().zip(variables.iter()) {
             named_values.insert(var_name.clone(), value.clone());
         }
 

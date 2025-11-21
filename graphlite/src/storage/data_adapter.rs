@@ -16,7 +16,6 @@ use crate::storage::{
     GraphCache,
 };
 use crate::storage::{StorageDriver, StorageTree};
-use bincode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -59,6 +58,12 @@ struct SerializableCatalogData {
 /// Works with any StorageDriver to persist application data structures
 pub struct DataAdapter {}
 
+impl Default for DataAdapter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DataAdapter {
     /// Create a new empty DataAdapter instance
     pub fn new() -> Self {
@@ -75,8 +80,6 @@ impl DataAdapter {
             .trim_start_matches('_')
             .to_string()
     }
-
-    /// Get the storage type being used
 
     /// Load a GraphCache for a specific graph path using provided driver connection
     pub fn load_graph_by_path(

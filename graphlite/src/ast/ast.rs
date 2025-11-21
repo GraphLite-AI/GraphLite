@@ -273,8 +273,10 @@ pub struct MatchClause {
 
 /// Path type constraints for graph traversal
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Default)]
 pub enum PathType {
     /// WALK - allows repeated vertices and edges (most permissive)
+    #[default]
     Walk,
     /// TRAIL - allows repeated vertices but not repeated edges
     Trail,
@@ -284,11 +286,6 @@ pub enum PathType {
     AcyclicPath,
 }
 
-impl Default for PathType {
-    fn default() -> Self {
-        PathType::Walk // Default to most permissive
-    }
-}
 
 impl PathType {
     /// Check if this path type allows repeated vertices
@@ -1784,19 +1781,12 @@ pub enum GraphIndexTypeSpecifier {
 
 /// Index options for CREATE INDEX
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct IndexOptions {
     pub parameters: std::collections::HashMap<String, Value>,
     pub location: Location,
 }
 
-impl Default for IndexOptions {
-    fn default() -> Self {
-        Self {
-            parameters: std::collections::HashMap::new(),
-            location: Location::default(),
-        }
-    }
-}
 
 /// Value type for index parameters
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

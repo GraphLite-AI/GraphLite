@@ -644,14 +644,12 @@ impl SubqueryCache {
                 if add {
                     boolean_index
                         .entry(key.subquery_hash)
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(key.clone());
-                } else {
-                    if let Some(keys) = boolean_index.get_mut(&key.subquery_hash) {
-                        keys.retain(|k| k != key);
-                        if keys.is_empty() {
-                            boolean_index.remove(&key.subquery_hash);
-                        }
+                } else if let Some(keys) = boolean_index.get_mut(&key.subquery_hash) {
+                    keys.retain(|k| k != key);
+                    if keys.is_empty() {
+                        boolean_index.remove(&key.subquery_hash);
                     }
                 }
             }
@@ -660,14 +658,12 @@ impl SubqueryCache {
                 if add {
                     scalar_index
                         .entry(key.subquery_hash)
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(key.clone());
-                } else {
-                    if let Some(keys) = scalar_index.get_mut(&key.subquery_hash) {
-                        keys.retain(|k| k != key);
-                        if keys.is_empty() {
-                            scalar_index.remove(&key.subquery_hash);
-                        }
+                } else if let Some(keys) = scalar_index.get_mut(&key.subquery_hash) {
+                    keys.retain(|k| k != key);
+                    if keys.is_empty() {
+                        scalar_index.remove(&key.subquery_hash);
                     }
                 }
             }

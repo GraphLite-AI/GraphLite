@@ -50,13 +50,6 @@ impl GraphCache {
         }
     }
 
-    /// Create a new graph with catalog identity
-
-    /// Set the catalog identity of this graph
-
-    /// Get the full path of this graph in /<schema>/<graph> format
-    /// Returns None if catalog identity is not set
-
     /// Add a node to the graph
     pub fn add_node(&mut self, node: Node) -> Result<(), GraphError> {
         // Check if node already exists
@@ -68,7 +61,7 @@ impl GraphCache {
         for label in &node.labels {
             self.node_labels
                 .entry(label.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(node.id.clone());
         }
 
@@ -121,7 +114,7 @@ impl GraphCache {
         // Update edge label index
         self.edge_labels
             .entry(edge.label.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(edge.id.clone());
 
         // Update adjacency lists
@@ -377,30 +370,6 @@ impl GraphCache {
     pub fn edge_ids(&self) -> impl Iterator<Item = &String> {
         self.edges.keys()
     }
-
-    /// Create a new empty graph without metadata support (for baseline performance)
-
-    /// Add a metadata-enabled node to the graph
-
-    /// Add a metadata-enabled edge to the graph
-
-    /// Get a metadata node by ID
-
-    /// Get a mutable metadata node by ID
-
-    /// Get a metadata edge by ID
-
-    /// Get a mutable metadata edge by ID
-
-    /// Clean up expired nodes and edges based on TTL
-
-    /// Remove a metadata node and all its connected edges
-
-    /// Remove a metadata edge
-
-    /// Get all metadata nodes
-
-    /// Get all metadata edges
 
     /// Clear all data from the graph
     pub fn clear(&mut self) {

@@ -19,6 +19,7 @@ use std::collections::HashMap;
 /// Target: v0.3.0
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct GraphStatistics {
     /// Number of nodes per label
     pub node_counts: HashMap<String, u64>,
@@ -30,16 +31,6 @@ pub struct GraphStatistics {
     pub pattern_selectivity: HashMap<String, f64>,
 }
 
-impl Default for GraphStatistics {
-    fn default() -> Self {
-        Self {
-            node_counts: HashMap::new(),
-            relationship_counts: HashMap::new(),
-            avg_relationships_per_node: HashMap::new(),
-            pattern_selectivity: HashMap::new(),
-        }
-    }
-}
 
 /// Cost estimates for different execution strategies
 ///

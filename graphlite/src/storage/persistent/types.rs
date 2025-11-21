@@ -14,6 +14,7 @@ use std::fmt::Debug;
 /// Specifies which underlying storage technology to use.
 /// Each type has different performance characteristics and use cases.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Default)]
 pub enum StorageType {
     /// RocksDB - High-performance persistent key-value store
     /// Best for: High write throughput, large datasets, production use
@@ -21,6 +22,7 @@ pub enum StorageType {
 
     /// Sled - Pure Rust embedded database
     /// Best for: Development, testing, pure Rust environments
+    #[default]
     Sled,
 
     /// Memory - In-memory storage for testing
@@ -28,12 +30,6 @@ pub enum StorageType {
     Memory,
 }
 
-impl Default for StorageType {
-    fn default() -> Self {
-        // Sled is default for development convenience
-        StorageType::Sled
-    }
-}
 
 impl std::str::FromStr for StorageType {
     type Err = String;

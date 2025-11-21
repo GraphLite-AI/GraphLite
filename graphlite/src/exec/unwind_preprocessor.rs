@@ -246,7 +246,7 @@ impl UnwindPreprocessor {
 
         // Find the variable name - it's the first word after (
         let var_end = text_after_paren
-            .find(|c: char| c == ':' || c == ')' || c == ' ')
+            .find([':', ')', ' '])
             .ok_or_else(|| {
                 ExecutionError::RuntimeError(
                     "Invalid MATCH clause: cannot find variable name".to_string(),

@@ -194,8 +194,6 @@ impl Default for IndexTreeOptions {
 }
 
 impl IndexTreeOptions {
-    /// Create options optimized for text indexes
-
     /// Create options optimized for graph indexes
     pub fn for_graph_index() -> Self {
         Self {

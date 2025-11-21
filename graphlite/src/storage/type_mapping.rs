@@ -198,7 +198,7 @@ impl TypeMapping {
                 // Infer element type from first element (or default to String)
                 let element_type = arr
                     .first()
-                    .map(|elem| Self::infer_type_from_value(elem))
+                    .map(Self::infer_type_from_value)
                     .unwrap_or(GqlType::String { max_length: None });
 
                 GqlType::List {

@@ -481,10 +481,7 @@ impl TypeValidator {
     /// Check if a type represents a nullable value
     #[allow(dead_code)] // ROADMAP v0.5.0 - Type validation for static analysis (see ROADMAP.md §7)
     fn is_nullable_value(value_type: &GqlType) -> bool {
-        match value_type {
-            GqlType::Reference { target_type: None } => true,
-            _ => false,
-        }
+        matches!(value_type, GqlType::Reference { target_type: None })
     }
 }
 

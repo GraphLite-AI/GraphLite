@@ -83,7 +83,7 @@ impl MatchSetExecutor {
             }
             crate::ast::ast::Literal::List(list) => {
                 let converted: Vec<Value> =
-                    list.iter().map(|lit| Self::literal_to_value(lit)).collect();
+                    list.iter().map(Self::literal_to_value).collect();
                 Value::List(converted)
             }
         }
@@ -105,7 +105,7 @@ impl MatchSetExecutor {
                 Some(PatternElement::Edge(edge_pattern)),
                 Some(PatternElement::Node(target_pattern)),
             ) = (
-                pattern.elements.get(0),
+                pattern.elements.first(),
                 pattern.elements.get(1),
                 pattern.elements.get(2),
             ) {
@@ -115,7 +115,7 @@ impl MatchSetExecutor {
                     let edge_label_matches = if edge_pattern.labels.is_empty() {
                         true
                     } else {
-                        edge_pattern.labels.iter().any(|label| edge.label == *label)
+                        edge_pattern.labels.contains(&edge.label)
                     };
 
                     if !edge_label_matches {
@@ -129,9 +129,9 @@ impl MatchSetExecutor {
                     ) {
                         // Check if source node matches pattern
                         let source_matches =
-                            Self::node_matches_pattern(&source_node, source_pattern);
+                            Self::node_matches_pattern(source_node, source_pattern);
                         let target_matches =
-                            Self::node_matches_pattern(&target_node, target_pattern);
+                            Self::node_matches_pattern(target_node, target_pattern);
 
                         if source_matches && target_matches {
                             let mut node_binding = HashMap::new();
@@ -158,7 +158,7 @@ impl MatchSetExecutor {
             if let Some(PatternElement::Node(node_pattern)) = pattern.elements.first() {
                 let nodes = graph.get_all_nodes();
                 for node in nodes {
-                    if Self::node_matches_pattern(&node, node_pattern) {
+                    if Self::node_matches_pattern(node, node_pattern) {
                         let mut binding = HashMap::new();
                         if let Some(ref identifier) = node_pattern.identifier {
                             binding.insert(identifier.clone(), node.clone());
@@ -280,11 +280,7 @@ impl MatchSetExecutor {
     ) -> Option<Value> {
         match expr {
             Expression::Variable(var) => {
-                if let Some(node) = combination.get(&var.name) {
-                    Some(Value::String(node.id.clone()))
-                } else {
-                    None
-                }
+                combination.get(&var.name).map(|node| Value::String(node.id.clone()))
             }
             Expression::PropertyAccess(prop_access) => {
                 if let Some(node) = combination.get(&prop_access.object) {
@@ -545,7 +541,7 @@ impl DataStatementExecutor for MatchSetExecutor {
                 // Both nodes and edges: zip them together
                 variable_combinations
                     .into_iter()
-                    .zip(edge_combinations.into_iter())
+                    .zip(edge_combinations)
                     .collect()
             };
 
@@ -695,7 +691,7 @@ impl DataStatementExecutor for MatchSetExecutor {
             // Capture old state for all nodes BEFORE making any changes (for rollback)
             let mut node_old_states: HashMap<String, (HashMap<String, Value>, Vec<String>)> =
                 HashMap::new();
-            for (_var_name, matched_node) in combination {
+            for matched_node in combination.values() {
                 if !node_old_states.contains_key(&matched_node.id) {
                     if let Some(node) = graph.get_node(&matched_node.id) {
                         node_old_states.insert(

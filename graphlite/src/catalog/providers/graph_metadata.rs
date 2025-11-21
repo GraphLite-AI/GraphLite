@@ -896,7 +896,7 @@ impl CatalogProvider for GraphMetadataCatalog {
                     Ok(CatalogResponse::List {
                         items: graphs
                             .iter()
-                            .map(|g| serde_json::to_value(g))
+                            .map(serde_json::to_value)
                             .collect::<Result<Vec<_>, _>>()?,
                     })
                 }
@@ -916,7 +916,7 @@ impl CatalogProvider for GraphMetadataCatalog {
                     Ok(CatalogResponse::List {
                         items: graph_types
                             .iter()
-                            .map(|gt| serde_json::to_value(gt))
+                            .map(serde_json::to_value)
                             .collect::<Result<Vec<_>, _>>()?,
                     })
                 }

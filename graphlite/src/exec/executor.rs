@@ -553,8 +553,7 @@ impl QueryExecutor {
                 catalog_path
                     .segments
                     .last()
-                    .ok_or_else(|| ExecutionError::RuntimeError("Invalid catalog path".to_string()))
-                    .map(|s| s.clone())
+                    .ok_or_else(|| ExecutionError::RuntimeError("Invalid catalog path".to_string())).cloned()
             }
             Some(GraphExpression::CurrentGraph) => {
                 // CurrentGraph requires session context - cannot resolve without it
@@ -698,7 +697,7 @@ impl QueryExecutor {
 
                         // Create a mini ExecutionRequest to use resolve_graph_for_execution
                         let mini_request = ExecutionRequest::new(statement.clone())
-                            .with_session(session.map(|s| s.clone()))
+                            .with_session(session.cloned())
                             .with_graph_expr(graph_expr.cloned());
 
                         // Resolve graph with proper session context
@@ -751,7 +750,7 @@ impl QueryExecutor {
                     crate::ast::ast::Query::WithQuery(with_query) => {
                         // Create a mini ExecutionRequest to use resolve_graph_for_execution
                         let mini_request = ExecutionRequest::new(statement.clone())
-                            .with_session(session.map(|s| s.clone()))
+                            .with_session(session.cloned())
                             .with_graph_expr(graph_expr.cloned());
 
                         // Resolve graph with proper session context
@@ -1374,7 +1373,7 @@ impl QueryExecutor {
         // COMPREHENSIVE ROUTING CONSOLIDATION: Route ALL WITH clauses through WithClauseProcessor
         // This eliminates the problematic execute_with_clause_simple path entirely
         // Route through WithClauseProcessor
-        return self.execute_with_clause_via_processor(with_clause, input_rows, context);
+        self.execute_with_clause_via_processor(with_clause, input_rows, context)
     }
 
     /// Execute a WITH clause without aggregation (fallback for simple cases)
@@ -1544,10 +1543,7 @@ impl QueryExecutor {
                 let filtered_rows = result_rows
                     .into_iter()
                     .filter(|row| {
-                        match self.evaluate_where_expression_on_row(where_clause, row, context) {
-                            Ok(passes) => passes,
-                            Err(_) => false,
-                        }
+                        self.evaluate_where_expression_on_row(where_clause, row, context).unwrap_or_default()
                     })
                     .collect();
                 return Ok(filtered_rows);
@@ -1628,12 +1624,12 @@ impl QueryExecutor {
         let mut edges = Vec::new();
 
         // Extract variables for nodes and edges - we need to handle both node references and property accesses
-        for (_row_idx, row) in input_rows.iter().enumerate() {
+        for row in input_rows.iter() {
             // First collect all variables (keys without dots)
             let mut vars = std::collections::HashSet::new();
             let mut edge_vars = std::collections::HashSet::new();
 
-            for (key, _value) in &row.values {
+            for key in row.values.keys() {
                 if !key.contains('.') {
                     // Check if this variable represents an edge (common patterns: t, r, e, rel)
                     // Also check for variables that have an associated .amount property (likely transaction edges)
@@ -3373,11 +3369,13 @@ impl QueryExecutor {
         context.set_current_graph(graph.clone());
 
         // Execute the root operator with the resolved graph
-        let execute_result = self.execute_node_with_graph(&plan.root, context, &graph);
+        let execute_result = self.execute_node_with_graph(&plan.root, context, graph);
 
         let execution_time = start_time.elapsed().as_millis() as u64;
 
-        let result = match execute_result {
+        
+
+        match execute_result {
             Ok(rows) => {
                 // Extract variable names from the physical plan to preserve column order
                 // This ensures RETURN clause order is maintained, especially for GROUP BY queries
@@ -3396,9 +3394,7 @@ impl QueryExecutor {
                 Ok(query_result)
             }
             Err(e) => Err(e),
-        };
-
-        result
+        }
     }
 
     /// Execute a physical node with specific graph and return result rows
@@ -3689,15 +3685,13 @@ impl QueryExecutor {
                     if right_rows
                         .iter()
                         .any(|right_row| self.rows_equal(left_row, right_row))
-                    {
-                        if *all
+                        && (*all
                             || !result
                                 .iter()
-                                .any(|existing| self.rows_equal(left_row, existing))
+                                .any(|existing| self.rows_equal(left_row, existing)))
                         {
                             result.push(left_row.clone());
                         }
-                    }
                 }
                 Ok(result)
             }
@@ -3713,15 +3707,13 @@ impl QueryExecutor {
                     if !right_rows
                         .iter()
                         .any(|right_row| self.rows_equal(left_row, right_row))
-                    {
-                        if *all
+                        && (*all
                             || !result
                                 .iter()
-                                .any(|existing| self.rows_equal(left_row, existing))
+                                .any(|existing| self.rows_equal(left_row, existing)))
                         {
                             result.push(left_row.clone());
                         }
-                    }
                 }
                 Ok(result)
             }
@@ -4424,10 +4416,10 @@ impl QueryExecutor {
                     }
                 } else {
                     // Multiple rows - this is an error for scalar subqueries
-                    return Err(ExecutionError::ExpressionError(format!(
+                    Err(ExecutionError::ExpressionError(format!(
                         "Scalar subquery returned {} rows, expected 0 or 1",
                         subquery_result.rows.len()
-                    )));
+                    )))
                 }
             }
 
@@ -4501,9 +4493,9 @@ impl QueryExecutor {
 
                 // TODO: Execute subquery to get result set
                 // For now, return a placeholder
-                return Err(ExecutionError::RuntimeError(
+                Err(ExecutionError::RuntimeError(
                     "Quantified comparisons not yet fully implemented".to_string(),
-                ));
+                ))
             }
 
             Expression::IsPredicate(is_predicate) => {
@@ -4614,7 +4606,7 @@ impl QueryExecutor {
                     var.name,
                     context.variables.len()
                 );
-                for (key, _) in &context.variables {
+                for key in context.variables.keys() {
                     log::debug!("  Context has variable: '{}'", key);
                 }
                 context.get_variable(&var.name).ok_or_else(|| {
@@ -4734,9 +4726,9 @@ impl QueryExecutor {
 
                 // TODO: Execute subquery to get result set
                 // For now, return a placeholder
-                return Err(ExecutionError::RuntimeError(
+                Err(ExecutionError::RuntimeError(
                     "Quantified comparisons not yet fully implemented in legacy method".to_string(),
-                ));
+                ))
             }
 
             Expression::IsPredicate(is_predicate) => {
@@ -4923,10 +4915,8 @@ impl QueryExecutor {
                             node_id: id_str,
                             edge_id: None,
                         });
-                    } else {
-                        if let Some(last_element) = path_elements.last_mut() {
-                            last_element.edge_id = Some(id_str);
-                        }
+                    } else if let Some(last_element) = path_elements.last_mut() {
+                        last_element.edge_id = Some(id_str);
                     }
                 }
                 _ => {
@@ -5080,7 +5070,7 @@ impl QueryExecutor {
         let int_value = self.cast_to_integer(value)?;
         match int_value {
             Value::Number(n) => {
-                if n >= -32768.0 && n <= 32767.0 {
+                if (-32768.0..=32767.0).contains(&n) {
                     Ok(Value::Number(n))
                 } else {
                     Err(ExecutionError::RuntimeError(format!(
@@ -5417,7 +5407,7 @@ impl QueryExecutor {
                                 }
                                 // If right side is not an array, treat it as single-element array
                                 _ => {
-                                    let is_in = &right == &left;
+                                    let is_in = right == left;
                                     match op {
                                         Operator::In => Ok(Value::Boolean(is_in)),
                                         Operator::NotIn => Ok(Value::Boolean(!is_in)),
@@ -5784,7 +5774,7 @@ impl QueryExecutor {
             group_key_to_values.insert(group_key.clone(), group_key_values);
 
             // Add row to appropriate group
-            groups.entry(group_key).or_insert_with(Vec::new).push(row);
+            groups.entry(group_key).or_default().push(row);
         }
 
         // Process each group
@@ -6187,7 +6177,7 @@ impl QueryExecutor {
     ) -> Result<Vec<Row>, ExecutionError> {
         let mut result_rows = Vec::new();
 
-        for (_idx, input_row) in input_rows.iter().enumerate() {
+        for input_row in input_rows.iter() {
             // Get the from_variable node ID from the input row
             let from_node_id = input_row.get_value(from_variable).ok_or_else(|| {
                 ExecutionError::RuntimeError(format!("Variable not found: {}", from_variable))
@@ -6203,18 +6193,18 @@ impl QueryExecutor {
             {
                 // Find edges based on direction
                 let edges = match direction {
-                    EdgeDirection::Outgoing => graph.get_outgoing_edges(&from_id),
-                    EdgeDirection::Incoming => graph.get_incoming_edges(&from_id),
+                    EdgeDirection::Outgoing => graph.get_outgoing_edges(from_id),
+                    EdgeDirection::Incoming => graph.get_incoming_edges(from_id),
                     EdgeDirection::Both => {
                         // Handle both directions - this is the key fix!
-                        let mut both_edges = graph.get_outgoing_edges(&from_id);
-                        both_edges.extend(graph.get_incoming_edges(&from_id));
+                        let mut both_edges = graph.get_outgoing_edges(from_id);
+                        both_edges.extend(graph.get_incoming_edges(from_id));
                         both_edges
                     }
                     EdgeDirection::Undirected => {
                         // For undirected, treat as both directions
-                        let mut undirected_edges = graph.get_outgoing_edges(&from_id);
-                        undirected_edges.extend(graph.get_incoming_edges(&from_id));
+                        let mut undirected_edges = graph.get_outgoing_edges(from_id);
+                        undirected_edges.extend(graph.get_incoming_edges(from_id));
                         undirected_edges
                     }
                 };
@@ -6266,7 +6256,7 @@ impl QueryExecutor {
                     if let Some(to_node) = graph.get_node(to_node_id) {
                         // Check if target node matches property constraints
                         let node_matches = if let Some(prop_constraints) = properties {
-                            self.node_matches_properties(&to_node, prop_constraints)?
+                            self.node_matches_properties(to_node, prop_constraints)?
                         } else {
                             true // No constraints, all nodes match
                         };
@@ -6848,9 +6838,6 @@ impl QueryExecutor {
         }
     }
 
-    /// Session-related methods are not supported in this execution context
-    /// All session and user management is now handled at the pipeline level
-
     /// Execute set operation (UNION, INTERSECT, EXCEPT)
     fn execute_set_operation(
         &self,
@@ -7046,7 +7033,7 @@ impl QueryExecutor {
 
         for item in &return_query.return_clause.items {
             // Evaluate the expression
-            let value = self.evaluate_expression(&item.expression, &context)?;
+            let value = self.evaluate_expression(&item.expression, context)?;
 
             // Determine column name
             let column_name = item.alias.clone().unwrap_or_else(|| {
@@ -7212,17 +7199,17 @@ impl QueryExecutor {
 
         // Execute MATCH clause
         let mut match_results =
-            self.execute_match_with_context(&first_segment.match_clause, &context)?;
+            self.execute_match_with_context(&first_segment.match_clause, context)?;
 
         // Apply pre-WITH WHERE clause if present
         if let Some(where_clause) = &first_segment.where_clause {
             match_results =
-                self.apply_where_filter_to_rows(match_results, where_clause, &context)?;
+                self.apply_where_filter_to_rows(match_results, where_clause, context)?;
         }
 
         // Execute WITH clause for aggregation (if present)
         let with_results = if let Some(with_clause) = &first_segment.with_clause {
-            self.execute_with_clause(with_clause, match_results, &context)?
+            self.execute_with_clause(with_clause, match_results, context)?
         } else {
             match_results
         };
@@ -7230,12 +7217,12 @@ impl QueryExecutor {
         // Step 2: Apply UNWIND if present
         let mut final_rows = with_results;
         if let Some(unwind_clause) = &first_segment.unwind_clause {
-            final_rows = self.execute_unwind_on_rows(unwind_clause, final_rows, &context)?;
+            final_rows = self.execute_unwind_on_rows(unwind_clause, final_rows, context)?;
         }
 
         // Step 3: Apply post-UNWIND WHERE clause if present
         if let Some(where_clause) = &first_segment.post_unwind_where {
-            final_rows = self.apply_where_filter_to_rows_vec(final_rows, where_clause, &context)?;
+            final_rows = self.apply_where_filter_to_rows_vec(final_rows, where_clause, context)?;
         }
 
         // Step 4: Apply the mutation to each row
@@ -8448,8 +8435,6 @@ impl QueryExecutor {
         Ok(result)
     }
 
-    /// Execute a data statement with specific mutable graph
-
     /// Expand SELECT items, handling wildcard (*) by creating return items for all node properties
     fn expand_select_items(
         &self,
@@ -9007,7 +8992,7 @@ impl QueryExecutor {
                         && simple_case
                             .else_expression
                             .as_ref()
-                            .map_or(true, |e| self.is_scalar_expression(e))
+                            .is_none_or(|e| self.is_scalar_expression(e))
                 }
                 CaseType::Searched(searched_case) => {
                     searched_case.when_branches.iter().all(|when| {
@@ -9016,7 +9001,7 @@ impl QueryExecutor {
                     }) && searched_case
                         .else_expression
                         .as_ref()
-                        .map_or(true, |e| self.is_scalar_expression(e))
+                        .is_none_or(|e| self.is_scalar_expression(e))
                 }
             },
             Expression::Binary(binary_expr) => {
@@ -9169,10 +9154,7 @@ impl QueryExecutor {
                         };
 
                         let result = catalog_manager.execute("graph_metadata", graph_query_op);
-                        match result {
-                            Ok(CatalogResponse::Query { .. }) => true,
-                            _ => false,
-                        }
+                        matches!(result, Ok(CatalogResponse::Query { .. }))
                     } else {
                         false
                     }
@@ -9191,10 +9173,7 @@ impl QueryExecutor {
 
                     if let Ok(mut catalog_manager) = self.catalog_manager.write() {
                         let result = catalog_manager.execute("graph_metadata", query_op);
-                        match result {
-                            Ok(CatalogResponse::Query { .. }) => true,
-                            _ => false,
-                        }
+                        matches!(result, Ok(CatalogResponse::Query { .. }))
                     } else {
                         false
                     }

@@ -156,13 +156,10 @@ impl Function for LabelsFunction {
         // the fallback behavior and return an error instead
         for (var_name, var_value) in &context.variables {
             if var_name == "n" || var_name.starts_with("n.") {
-                match var_value {
-                    Value::String(node_data) => {
-                        if let Some(labels) = self.extract_labels_from_node_string(node_data) {
-                            return Ok(Value::List(labels));
-                        }
+                if let Value::String(node_data) = var_value {
+                    if let Some(labels) = self.extract_labels_from_node_string(node_data) {
+                        return Ok(Value::List(labels));
                     }
-                    _ => {}
                 }
             }
         }
@@ -299,9 +296,9 @@ impl InferredLabelsFunction {
 
         // Collect property names to analyze
         let mut properties = std::collections::HashSet::new();
-        for (var_name, _) in variables {
-            if var_name.starts_with("n.") {
-                let prop_name = &var_name[2..]; // Remove "n." prefix
+        for var_name in variables.keys() {
+            if let Some(prop_name) = var_name.strip_prefix("n.") {
+                // Remove "n." prefix
                 properties.insert(prop_name);
             }
         }
@@ -403,7 +400,7 @@ impl Function for InferredLabelsFunction {
         let inferred_labels = self.infer_labels_from_properties(&context.variables);
         let label_values: Vec<Value> = inferred_labels
             .into_iter()
-            .map(|label| Value::String(label))
+            .map(Value::String)
             .collect();
 
         Ok(Value::List(label_values))
@@ -566,30 +563,27 @@ impl Function for PropertiesFunction {
                     (&context.storage_manager, &context.graph_name)
                 {
                     // Try to get graph from storage manager
-                    match storage_manager.get_graph(graph_name) {
-                        Ok(Some(graph)) => {
-                            // Try node first, then edge
-                            if let Some(node) = graph.get_node(&element_id) {
-                                let properties: Vec<Value> = node
-                                    .properties
-                                    .iter()
-                                    .map(|(key, value)| {
-                                        Value::String(format!("{}: {}", key, value))
-                                    })
-                                    .collect();
-                                return Ok(Value::List(properties));
-                            } else if let Some(edge) = graph.get_edge(&element_id) {
-                                let properties: Vec<Value> = edge
-                                    .properties
-                                    .iter()
-                                    .map(|(key, value)| {
-                                        Value::String(format!("{}: {}", key, value))
-                                    })
-                                    .collect();
-                                return Ok(Value::List(properties));
-                            }
+                    if let Ok(Some(graph)) = storage_manager.get_graph(graph_name) {
+                        // Try node first, then edge
+                        if let Some(node) = graph.get_node(&element_id) {
+                            let properties: Vec<Value> = node
+                                .properties
+                                .iter()
+                                .map(|(key, value)| {
+                                    Value::String(format!("{}: {}", key, value))
+                                })
+                                .collect();
+                            return Ok(Value::List(properties));
+                        } else if let Some(edge) = graph.get_edge(&element_id) {
+                            let properties: Vec<Value> = edge
+                                .properties
+                                .iter()
+                                .map(|(key, value)| {
+                                    Value::String(format!("{}: {}", key, value))
+                                })
+                                .collect();
+                            return Ok(Value::List(properties));
                         }
-                        _ => {}
                     }
                 }
             }

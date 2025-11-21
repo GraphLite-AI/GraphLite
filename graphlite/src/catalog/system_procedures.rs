@@ -642,7 +642,7 @@ impl SystemProcedures {
                             "active".to_string(),
                             user.get("enabled")
                                 .and_then(|v| v.as_bool())
-                                .map(|b| Value::Boolean(b))
+                                .map(Value::Boolean)
                                 .unwrap_or(Value::Boolean(true)),
                         );
                         row_values.insert(

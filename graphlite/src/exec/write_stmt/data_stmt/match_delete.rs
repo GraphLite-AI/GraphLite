@@ -38,7 +38,7 @@ impl MatchDeleteExecutor {
             Literal::Vector(vec) => Value::Vector(vec.iter().map(|&f| f as f32).collect()),
             Literal::List(list) => {
                 let converted: Vec<Value> =
-                    list.iter().map(|lit| Self::literal_to_value(lit)).collect();
+                    list.iter().map(Self::literal_to_value).collect();
                 Value::List(converted)
             }
         }
@@ -60,7 +60,7 @@ impl MatchDeleteExecutor {
                 Some(PatternElement::Edge(edge_pattern)),
                 Some(PatternElement::Node(target_pattern)),
             ) = (
-                pattern.elements.get(0),
+                pattern.elements.first(),
                 pattern.elements.get(1),
                 pattern.elements.get(2),
             ) {
@@ -70,7 +70,7 @@ impl MatchDeleteExecutor {
                     let edge_label_matches = if edge_pattern.labels.is_empty() {
                         true
                     } else {
-                        edge_pattern.labels.iter().any(|label| edge.label == *label)
+                        edge_pattern.labels.contains(&edge.label)
                     };
 
                     if !edge_label_matches {
@@ -84,9 +84,9 @@ impl MatchDeleteExecutor {
                     ) {
                         // Check if source node matches pattern
                         let source_matches =
-                            Self::node_matches_pattern(&source_node, source_pattern);
+                            Self::node_matches_pattern(source_node, source_pattern);
                         let target_matches =
-                            Self::node_matches_pattern(&target_node, target_pattern);
+                            Self::node_matches_pattern(target_node, target_pattern);
 
                         if source_matches && target_matches {
                             let mut node_binding = HashMap::new();
@@ -113,7 +113,7 @@ impl MatchDeleteExecutor {
             if let Some(PatternElement::Node(node_pattern)) = pattern.elements.first() {
                 let nodes = graph.get_all_nodes();
                 for node in nodes {
-                    if Self::node_matches_pattern(&node, node_pattern) {
+                    if Self::node_matches_pattern(node, node_pattern) {
                         let mut binding = HashMap::new();
                         if let Some(ref identifier) = node_pattern.identifier {
                             binding.insert(identifier.clone(), node.clone());
@@ -286,12 +286,7 @@ impl MatchDeleteExecutor {
                 // First check nodes
                 if let Some(node) = node_combination.get(&var.name) {
                     Some(Value::String(node.id.clone()))
-                } else if let Some(edge) = edge_combination.get(&var.name) {
-                    // Then check edges
-                    Some(Value::String(edge.id.clone()))
-                } else {
-                    None
-                }
+                } else { edge_combination.get(&var.name).map(|edge| Value::String(edge.id.clone())) }
             }
             Expression::PropertyAccess(prop_access) => {
                 // First check if the object is a node
@@ -523,7 +518,7 @@ impl DataStatementExecutor for MatchDeleteExecutor {
                 );
             } else {
                 // For non-aggregated queries, use variable_bindings directly
-                for (_var_name, nodes) in &with_result.variable_bindings {
+                for nodes in with_result.variable_bindings.values() {
                     for node in nodes {
                         qualifying_node_ids.insert(node.id.clone());
                     }

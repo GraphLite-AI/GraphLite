@@ -576,7 +576,7 @@ impl PersistentWAL {
 
         let file = OpenOptions::new()
             .create(true)
-            .write(true)
+            
             .truncate(false)
             .append(true)
             .open(&file_path)

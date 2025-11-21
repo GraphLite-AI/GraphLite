@@ -12,6 +12,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TransactionId(u64);
 
+impl Default for TransactionId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TransactionId {
     /// Generate a new unique transaction ID based on system time
     pub fn new() -> Self {

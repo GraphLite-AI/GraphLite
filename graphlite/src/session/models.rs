@@ -399,6 +399,6 @@ impl Session {
     pub fn get_or_create_graph(&mut self, name: &str) -> &mut GraphCache {
         self.graphs
             .entry(name.to_string())
-            .or_insert_with(GraphCache::new)
+            .or_default()
     }
 }

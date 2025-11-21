@@ -102,9 +102,7 @@ impl DDLStatementExecutor for TruncateGraphExecutor {
                             full_path, message
                         )))
                     }
-                    _ => Err(ExecutionError::CatalogError(format!(
-                        "Unexpected response from graph_metadata catalog"
-                    ))),
+                    _ => Err(ExecutionError::CatalogError("Unexpected response from graph_metadata catalog".to_string())),
                 }
             }
             Err(e) => Err(ExecutionError::CatalogError(format!(

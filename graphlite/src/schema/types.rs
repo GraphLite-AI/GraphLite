@@ -120,6 +120,7 @@ pub struct EdgeTypeDefinition {
 
 /// Cardinality constraints for edges
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct EdgeCardinality {
     pub from_min: Option<u32>,
     pub from_max: Option<u32>,
@@ -127,16 +128,6 @@ pub struct EdgeCardinality {
     pub to_max: Option<u32>,
 }
 
-impl Default for EdgeCardinality {
-    fn default() -> Self {
-        Self {
-            from_min: None,
-            from_max: None,
-            to_min: None,
-            to_max: None,
-        }
-    }
-}
 
 /// Definition of a property within a node or edge type
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -262,20 +253,17 @@ pub enum ForeignKeyAction {
 
 /// Schema enforcement modes
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Default)]
 pub enum SchemaEnforcementMode {
     /// Block operations that violate schema
     Strict,
     /// Warn but allow violations
+    #[default]
     Advisory,
     /// No schema validation
     Disabled,
 }
 
-impl Default for SchemaEnforcementMode {
-    fn default() -> Self {
-        SchemaEnforcementMode::Advisory
-    }
-}
 
 /// Schema change for ALTER operations
 #[derive(Debug, Clone, Serialize, Deserialize)]

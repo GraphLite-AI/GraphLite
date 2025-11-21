@@ -497,7 +497,7 @@ impl SecurityCatalog {
                         ));
                     }
                     user.remove_role(role_name)
-                        .map_err(|e| CatalogError::InvalidOperation(e))?;
+                        .map_err(CatalogError::InvalidOperation)?;
                 }
             }
         }
@@ -789,7 +789,7 @@ impl CatalogProvider for SecurityCatalog {
                     Ok(CatalogResponse::List {
                         items: users
                             .iter()
-                            .map(|u| serde_json::to_value(u))
+                            .map(serde_json::to_value)
                             .collect::<Result<Vec<_>, _>>()?,
                     })
                 }
@@ -798,7 +798,7 @@ impl CatalogProvider for SecurityCatalog {
                     Ok(CatalogResponse::List {
                         items: roles
                             .iter()
-                            .map(|r| serde_json::to_value(r))
+                            .map(serde_json::to_value)
                             .collect::<Result<Vec<_>, _>>()?,
                     })
                 }
@@ -807,7 +807,7 @@ impl CatalogProvider for SecurityCatalog {
                     Ok(CatalogResponse::List {
                         items: aces
                             .iter()
-                            .map(|a| serde_json::to_value(a))
+                            .map(serde_json::to_value)
                             .collect::<Result<Vec<_>, _>>()?,
                     })
                 }
@@ -955,7 +955,7 @@ impl CatalogProvider for SecurityCatalog {
                         Ok(CatalogResponse::List {
                             items: users
                                 .iter()
-                                .map(|u| serde_json::to_value(u))
+                                .map(serde_json::to_value)
                                 .collect::<Result<Vec<_>, _>>()?,
                         })
                     }
@@ -964,7 +964,7 @@ impl CatalogProvider for SecurityCatalog {
                         Ok(CatalogResponse::List {
                             items: roles
                                 .iter()
-                                .map(|r| serde_json::to_value(r))
+                                .map(serde_json::to_value)
                                 .collect::<Result<Vec<_>, _>>()?,
                         })
                     }
@@ -1014,7 +1014,7 @@ impl CatalogProvider for SecurityCatalog {
                     Ok(CatalogResponse::List {
                         items: users
                             .iter()
-                            .map(|u| serde_json::to_value(u))
+                            .map(serde_json::to_value)
                             .collect::<Result<Vec<_>, _>>()?,
                     })
                 }
@@ -1023,7 +1023,7 @@ impl CatalogProvider for SecurityCatalog {
                     Ok(CatalogResponse::List {
                         items: roles
                             .iter()
-                            .map(|r| serde_json::to_value(r))
+                            .map(serde_json::to_value)
                             .collect::<Result<Vec<_>, _>>()?,
                     })
                 }
@@ -1032,7 +1032,7 @@ impl CatalogProvider for SecurityCatalog {
                     Ok(CatalogResponse::List {
                         items: aces
                             .iter()
-                            .map(|a| serde_json::to_value(a))
+                            .map(serde_json::to_value)
                             .collect::<Result<Vec<_>, _>>()?,
                     })
                 }

@@ -238,8 +238,6 @@ impl ExecutionContext {
         self.current_transaction = Some(transaction_id);
     }
 
-    /// Start tracking a new query, creating query metadata
-
     /// Evaluate a simple expression (literals and function calls) for INSERT/SET operations
     /// This is a lightweight evaluator for property expressions that don't require full row context
     pub fn evaluate_simple_expression(
@@ -337,7 +335,7 @@ impl ExecutionContext {
             }
             crate::ast::ast::Literal::List(list) => {
                 let converted: Vec<Value> =
-                    list.iter().map(|lit| Self::literal_to_value(lit)).collect();
+                    list.iter().map(Self::literal_to_value).collect();
                 Value::List(converted)
             }
         }
