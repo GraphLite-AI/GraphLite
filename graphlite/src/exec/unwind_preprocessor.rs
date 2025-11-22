@@ -245,13 +245,11 @@ impl UnwindPreprocessor {
         let text_after_paren = &match_clause[open_paren + 1..];
 
         // Find the variable name - it's the first word after (
-        let var_end = text_after_paren
-            .find([':', ')', ' '])
-            .ok_or_else(|| {
-                ExecutionError::RuntimeError(
-                    "Invalid MATCH clause: cannot find variable name".to_string(),
-                )
-            })?;
+        let var_end = text_after_paren.find([':', ')', ' ']).ok_or_else(|| {
+            ExecutionError::RuntimeError(
+                "Invalid MATCH clause: cannot find variable name".to_string(),
+            )
+        })?;
 
         let var_name = text_after_paren[..var_end].trim();
 

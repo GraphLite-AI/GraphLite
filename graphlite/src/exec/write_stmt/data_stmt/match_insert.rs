@@ -38,8 +38,7 @@ impl MatchInsertExecutor {
             Literal::TimeWindow(tw) => Value::String(tw.clone()),
             Literal::Vector(vec) => Value::Vector(vec.iter().map(|&f| f as f32).collect()),
             Literal::List(list) => {
-                let converted: Vec<Value> =
-                    list.iter().map(Self::literal_to_value).collect();
+                let converted: Vec<Value> = list.iter().map(Self::literal_to_value).collect();
                 Value::List(converted)
             }
         }
@@ -481,10 +480,7 @@ impl DataStatementExecutor for MatchInsertExecutor {
                             var_name,
                             node.id
                         );
-                        variable_candidates
-                            .entry(var_name)
-                            .or_default()
-                            .push(node);
+                        variable_candidates.entry(var_name).or_default().push(node);
                     }
                 }
             } else {

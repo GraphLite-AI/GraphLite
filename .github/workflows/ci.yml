@@ -18,9 +18,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --component rustfmt,clippy
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -76,7 +76,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install build dependencies (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
@@ -132,17 +134,6 @@ jobs:
         if: matrix.build-mode == 'release'
         run: ./scripts/run_tests.sh --release
 
-      - name: Upload binary artifact (Release only)
-        if: matrix.build-mode == 'release'
-        uses: actions/upload-artifact@v4
-        with:
-          name: graphlite-${{ matrix.os }}
-          path: |
-            target/release/graphlite
-            target/release/graphlite.exe
-          if-no-files-found: ignore
-          retention-days: 7
-
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
@@ -151,7 +142,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install cargo-audit
         run: cargo install cargo-audit
@@ -183,7 +176,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -217,7 +212,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin
@@ -225,9 +222,7 @@ jobs:
       - name: Generate code coverage
         run: cargo tarpaulin --verbose --all-features --workspace --timeout 300 --out xml
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          files: ./cobertura.xml
-          fail_ci_if_error: false
-          verbose: true
+      - name: Display coverage summary
+        run: |
+          echo "Coverage report generated at ./cobertura.xml"
+          echo "To view coverage locally, install and use a coverage viewer or upload to codecov.io manually"

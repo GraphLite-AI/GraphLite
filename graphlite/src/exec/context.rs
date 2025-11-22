@@ -334,8 +334,7 @@ impl ExecutionContext {
                 Value::Vector(vec.iter().map(|&f| f as f32).collect())
             }
             crate::ast::ast::Literal::List(list) => {
-                let converted: Vec<Value> =
-                    list.iter().map(Self::literal_to_value).collect();
+                let converted: Vec<Value> = list.iter().map(Self::literal_to_value).collect();
                 Value::List(converted)
             }
         }

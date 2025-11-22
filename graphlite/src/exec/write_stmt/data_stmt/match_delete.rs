@@ -37,8 +37,7 @@ impl MatchDeleteExecutor {
             Literal::TimeWindow(tw) => Value::String(tw.clone()),
             Literal::Vector(vec) => Value::Vector(vec.iter().map(|&f| f as f32).collect()),
             Literal::List(list) => {
-                let converted: Vec<Value> =
-                    list.iter().map(Self::literal_to_value).collect();
+                let converted: Vec<Value> = list.iter().map(Self::literal_to_value).collect();
                 Value::List(converted)
             }
         }
@@ -286,7 +285,11 @@ impl MatchDeleteExecutor {
                 // First check nodes
                 if let Some(node) = node_combination.get(&var.name) {
                     Some(Value::String(node.id.clone()))
-                } else { edge_combination.get(&var.name).map(|edge| Value::String(edge.id.clone())) }
+                } else {
+                    edge_combination
+                        .get(&var.name)
+                        .map(|edge| Value::String(edge.id.clone()))
+                }
             }
             Expression::PropertyAccess(prop_access) => {
                 // First check if the object is a node
