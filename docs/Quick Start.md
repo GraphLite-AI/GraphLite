@@ -147,10 +147,10 @@ SESSION SET GRAPH /social/network;
 ### Step 2: Insert Some Data
 
 ```gql
--- Create people
-INSERT (:Person {name: 'Alice', age: 30, city: 'New York'});
-INSERT (:Person {name: 'Bob', age: 25, city: 'San Francisco'});
-INSERT (:Person {name: 'Carol', age: 28, city: 'Chicago'});
+-- Create people (multiple nodes in one INSERT statement)
+INSERT (:Person {name: 'Alice', age: 30, city: 'New York'}),
+       (:Person {name: 'Bob', age: 25, city: 'San Francisco'}),
+       (:Person {name: 'Carol', age: 28, city: 'Chicago'});
 
 -- Create friendships
 MATCH (alice:Person {name: 'Alice'}), (bob:Person {name: 'Bob'})
@@ -375,8 +375,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Data Insertion
 
 ```gql
--- Insert node
+-- Insert single node
 INSERT (:Label {property: 'value'});
+
+-- Insert multiple nodes (comma-separated)
+INSERT (:Person {name: 'Alice'}),
+       (:Person {name: 'Bob'}),
+       (:Person {name: 'Carol'});
 
 -- Insert relationship
 MATCH (a:Label1 {id: 1}), (b:Label2 {id: 2})

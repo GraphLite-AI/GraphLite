@@ -299,7 +299,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Insert data with transaction
     let mut tx = session.transaction()?;
-    tx.execute("CREATE (p:Person {name: 'Alice'})")?;
+    tx.execute("INSERT (:Person {name: 'Alice'})")?;
     tx.commit()?;
 
     // Query data
@@ -327,7 +327,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Insert data
     coordinator.process_query(
-        "CREATE (p:Person {name: 'Alice'})",
+        "INSERT (:Person {name: 'Alice'})",
         &session_id
     )?;
 

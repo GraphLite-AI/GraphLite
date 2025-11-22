@@ -59,8 +59,8 @@ public class Example {
             // Create session
             String session = db.createSession("admin");
 
-            // Execute queries
-            db.execute(session, "CREATE (p:Person {name: 'Alice', age: 30})");
+            // Execute queries (insert single node)
+            db.execute(session, "INSERT (:Person {name: 'Alice', age: 30})");
 
             // Query data
             QueryResult result = db.query(session,
@@ -120,9 +120,9 @@ db.execute(session, "USE SCHEMA myschema");
 db.execute(session, "CREATE GRAPH social");
 db.execute(session, "USE GRAPH social");
 
-// DML statements
-db.execute(session, "CREATE (p:Person {name: 'Alice', age: 30})");
-db.execute(session, "CREATE (p:Person {name: 'Bob', age: 25})");
+// DML statements (multiple nodes in one INSERT statement)
+db.execute(session, "INSERT (:Person {name: 'Alice', age: 30}), " +
+                             "(:Person {name: 'Bob', age: 25})");
 ```
 
 ### Querying Data
@@ -203,7 +203,7 @@ try {
 try (GraphLite db = GraphLite.open("./mydb")) {
     String session = db.createSession("admin");
 
-    db.execute(session, "CREATE (p:Person {name: 'Alice'})");
+    db.execute(session, "INSERT (:Person {name: 'Alice'})");
     QueryResult result = db.query(session, "MATCH (p:Person) RETURN p");
 
     for (Map<String, Object> row : result.getRows()) {
