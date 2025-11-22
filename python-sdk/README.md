@@ -8,13 +8,13 @@ The GraphLite Python SDK provides a developer-friendly API for working with Grap
 
 ## Features
 
-- ✅ **Simple API** - Clean, Pythonic interface following SQLite conventions
-- ✅ **Session Management** - User context and permissions support
-- ✅ **Transactions** - ACID guarantees with automatic rollback (context managers)
-- ✅ **Query Builder** - Fluent API for constructing GQL queries
-- ✅ **Typed Results** - Deserialize query results into Python dataclasses
-- ✅ **Zero External Dependencies** - Fully embedded, no server required
-- ✅ **Type Hints** - Full type annotation support for better IDE integration
+- **Simple API** - Clean, Pythonic interface following SQLite conventions
+- **Session Management** - User context and permissions support
+- **Transactions** - ACID guarantees with automatic rollback (context managers)
+- **Query Builder** - Fluent API for constructing GQL queries
+- **Typed Results** - Deserialize query results into Python dataclasses
+- **Zero External Dependencies** - Fully embedded, no server required
+- **Type Hints** - Full type annotation support for better IDE integration
 
 ## Installation
 
