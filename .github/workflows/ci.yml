@@ -214,6 +214,9 @@ jobs:
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
+    # Only run coverage on main branch or manual dispatch to save CI time
+    # Coverage is expensive (5-15 min) and not needed for every PR
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
