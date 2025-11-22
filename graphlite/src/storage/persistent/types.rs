@@ -13,8 +13,7 @@ use std::fmt::Debug;
 ///
 /// Specifies which underlying storage technology to use.
 /// Each type has different performance characteristics and use cases.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
 pub enum StorageType {
     /// RocksDB - High-performance persistent key-value store
     /// Best for: High write throughput, large datasets, production use
@@ -29,7 +28,6 @@ pub enum StorageType {
     /// Best for: Unit testing, development
     Memory,
 }
-
 
 impl std::str::FromStr for StorageType {
     type Err = String;

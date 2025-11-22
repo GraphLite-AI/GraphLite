@@ -228,7 +228,9 @@ impl DDLStatementExecutor for DropSchemaExecutor {
                             schema_name, message
                         )))
                     }
-                    _ => Err(ExecutionError::CatalogError("Unexpected response from schema catalog".to_string())),
+                    _ => Err(ExecutionError::CatalogError(
+                        "Unexpected response from schema catalog".to_string(),
+                    )),
                 }
             }
             Err(e) => {

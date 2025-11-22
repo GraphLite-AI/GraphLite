@@ -39,8 +39,7 @@ impl MatchRemoveExecutor {
             Literal::TimeWindow(tw) => Value::String(tw.clone()),
             Literal::Vector(vec) => Value::Vector(vec.iter().map(|&f| f as f32).collect()),
             Literal::List(list) => {
-                let converted: Vec<Value> =
-                    list.iter().map(Self::literal_to_value).collect();
+                let converted: Vec<Value> = list.iter().map(Self::literal_to_value).collect();
                 Value::List(converted)
             }
         }
@@ -249,9 +248,9 @@ impl MatchRemoveExecutor {
         expr: &Expression,
     ) -> Option<Value> {
         match expr {
-            Expression::Variable(var) => {
-                combination.get(&var.name).map(|node| Value::String(node.id.clone()))
-            }
+            Expression::Variable(var) => combination
+                .get(&var.name)
+                .map(|node| Value::String(node.id.clone())),
             Expression::PropertyAccess(prop_access) => {
                 if let Some(node) = combination.get(&prop_access.object) {
                     node.properties.get(&prop_access.property).cloned()

@@ -553,7 +553,8 @@ impl QueryExecutor {
                 catalog_path
                     .segments
                     .last()
-                    .ok_or_else(|| ExecutionError::RuntimeError("Invalid catalog path".to_string())).cloned()
+                    .ok_or_else(|| ExecutionError::RuntimeError("Invalid catalog path".to_string()))
+                    .cloned()
             }
             Some(GraphExpression::CurrentGraph) => {
                 // CurrentGraph requires session context - cannot resolve without it
@@ -1543,7 +1544,8 @@ impl QueryExecutor {
                 let filtered_rows = result_rows
                     .into_iter()
                     .filter(|row| {
-                        self.evaluate_where_expression_on_row(where_clause, row, context).unwrap_or_default()
+                        self.evaluate_where_expression_on_row(where_clause, row, context)
+                            .unwrap_or_default()
                     })
                     .collect();
                 return Ok(filtered_rows);
@@ -3373,8 +3375,6 @@ impl QueryExecutor {
 
         let execution_time = start_time.elapsed().as_millis() as u64;
 
-        
-
         match execute_result {
             Ok(rows) => {
                 // Extract variable names from the physical plan to preserve column order
@@ -3689,9 +3689,9 @@ impl QueryExecutor {
                             || !result
                                 .iter()
                                 .any(|existing| self.rows_equal(left_row, existing)))
-                        {
-                            result.push(left_row.clone());
-                        }
+                    {
+                        result.push(left_row.clone());
+                    }
                 }
                 Ok(result)
             }
@@ -3711,9 +3711,9 @@ impl QueryExecutor {
                             || !result
                                 .iter()
                                 .any(|existing| self.rows_equal(left_row, existing)))
-                        {
-                            result.push(left_row.clone());
-                        }
+                    {
+                        result.push(left_row.clone());
+                    }
                 }
                 Ok(result)
             }

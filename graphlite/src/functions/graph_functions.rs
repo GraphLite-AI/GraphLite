@@ -398,10 +398,7 @@ impl Function for InferredLabelsFunction {
 
         // Infer labels from node properties
         let inferred_labels = self.infer_labels_from_properties(&context.variables);
-        let label_values: Vec<Value> = inferred_labels
-            .into_iter()
-            .map(Value::String)
-            .collect();
+        let label_values: Vec<Value> = inferred_labels.into_iter().map(Value::String).collect();
 
         Ok(Value::List(label_values))
     }
@@ -569,18 +566,14 @@ impl Function for PropertiesFunction {
                             let properties: Vec<Value> = node
                                 .properties
                                 .iter()
-                                .map(|(key, value)| {
-                                    Value::String(format!("{}: {}", key, value))
-                                })
+                                .map(|(key, value)| Value::String(format!("{}: {}", key, value)))
                                 .collect();
                             return Ok(Value::List(properties));
                         } else if let Some(edge) = graph.get_edge(&element_id) {
                             let properties: Vec<Value> = edge
                                 .properties
                                 .iter()
-                                .map(|(key, value)| {
-                                    Value::String(format!("{}: {}", key, value))
-                                })
+                                .map(|(key, value)| Value::String(format!("{}: {}", key, value)))
                                 .collect();
                             return Ok(Value::List(properties));
                         }

@@ -378,10 +378,9 @@ impl TypeInferenceEngine {
             // For aggregate functions with polymorphic return type, infer from input
             if signature.return_type == GqlType::Double {
                 // Use Double as polymorphic marker
-                if (name == "MIN" || name == "MAX")
-                    && !arg_types.is_empty() {
-                        return Ok(arg_types[0].clone());
-                    }
+                if (name == "MIN" || name == "MAX") && !arg_types.is_empty() {
+                    return Ok(arg_types[0].clone());
+                }
             }
 
             Ok(signature.return_type.clone())

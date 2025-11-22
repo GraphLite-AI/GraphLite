@@ -1046,10 +1046,8 @@ impl PhysicalPlan {
 
             LogicalNode::Union { inputs, all } => {
                 // Convert all input logical nodes to physical nodes
-                let physical_inputs: Vec<PhysicalNode> = inputs
-                    .iter()
-                    .map(Self::convert_logical_node)
-                    .collect();
+                let physical_inputs: Vec<PhysicalNode> =
+                    inputs.iter().map(Self::convert_logical_node).collect();
 
                 // Calculate estimated rows and cost
                 let estimated_rows: usize = physical_inputs

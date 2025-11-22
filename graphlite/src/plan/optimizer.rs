@@ -798,8 +798,8 @@ impl QueryPlanner {
             self.extract_pattern_variables(pattern, context)?;
 
             // Convert pattern to logical plan
-            let root_node = LogicalPlan::from_path_pattern(pattern)
-                .map_err(PlanningError::InvalidQuery)?;
+            let root_node =
+                LogicalPlan::from_path_pattern(pattern).map_err(PlanningError::InvalidQuery)?;
 
             return Ok(LogicalPlan::new(root_node));
         }
@@ -833,8 +833,8 @@ impl QueryPlanner {
             self.extract_pattern_variables(pattern, context)?;
 
             // Convert pattern to logical plan node
-            let pattern_node = LogicalPlan::from_path_pattern(pattern)
-                .map_err(PlanningError::InvalidQuery)?;
+            let pattern_node =
+                LogicalPlan::from_path_pattern(pattern).map_err(PlanningError::InvalidQuery)?;
             let pattern_plan = LogicalPlan::new(pattern_node);
 
             match current_plan {
@@ -910,8 +910,8 @@ impl QueryPlanner {
 
         // Create base logical plan from first pattern
         let base_pattern = &match_clause.patterns[0];
-        let base_node = LogicalPlan::from_path_pattern(base_pattern)
-            .map_err(PlanningError::InvalidQuery)?;
+        let base_node =
+            LogicalPlan::from_path_pattern(base_pattern).map_err(PlanningError::InvalidQuery)?;
         let base_logical_plan = LogicalPlan::new(base_node);
 
         // Create base physical plan for optimization
@@ -1033,8 +1033,8 @@ impl QueryPlanner {
 
         // Start with the first pattern
         let first_pattern = &match_clause.patterns[0];
-        let first_node = LogicalPlan::from_path_pattern(first_pattern)
-            .map_err(PlanningError::InvalidQuery)?;
+        let first_node =
+            LogicalPlan::from_path_pattern(first_pattern).map_err(PlanningError::InvalidQuery)?;
         let mut current_plan = LogicalPlan::new(first_node);
 
         // 🔧 CRITICAL FIX: Extract variables from the first pattern (separate context)
@@ -1047,8 +1047,8 @@ impl QueryPlanner {
 
         // Add subsequent patterns with intelligent joining
         for pattern in &match_clause.patterns[1..] {
-            let pattern_node = LogicalPlan::from_path_pattern(pattern)
-                .map_err(PlanningError::InvalidQuery)?;
+            let pattern_node =
+                LogicalPlan::from_path_pattern(pattern).map_err(PlanningError::InvalidQuery)?;
             let mut pattern_plan = LogicalPlan::new(pattern_node);
 
             // 🔧 CRITICAL FIX: Extract variables from this pattern (separate context)

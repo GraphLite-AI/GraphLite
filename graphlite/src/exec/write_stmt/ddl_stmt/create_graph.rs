@@ -238,7 +238,9 @@ impl DDLStatementExecutor for CreateGraphExecutor {
                             )))
                         }
                     }
-                    _ => Err(ExecutionError::CatalogError("Unexpected response from graph_metadata catalog".to_string())),
+                    _ => Err(ExecutionError::CatalogError(
+                        "Unexpected response from graph_metadata catalog".to_string(),
+                    )),
                 }
             }
             Err(e) => Err(ExecutionError::CatalogError(format!(

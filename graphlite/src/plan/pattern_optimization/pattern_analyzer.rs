@@ -75,10 +75,7 @@ impl PatternAnalyzer {
             }
 
             for var in vars {
-                var_usage
-                    .entry(var)
-                    .or_default()
-                    .push(pattern_idx);
+                var_usage.entry(var).or_default().push(pattern_idx);
             }
         }
 

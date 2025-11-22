@@ -7,10 +7,11 @@ echo "🔍 Checking rule compliance across entire codebase..."
 echo ""
 
 # Get all Rust files (excluding target, docs, and hooks)
-all_rust_files=$(find src tests -name "*.rs" 2>/dev/null | grep -v "target/" | grep -v "docs/" | grep -v "hooks/" || true)
+# Support both workspace structure (graphlite/src, graphlite-cli/src) and simple structure (src, tests)
+all_rust_files=$(find . -name "*.rs" 2>/dev/null | grep -E "(src/|tests/)" | grep -v "target/" | grep -v "docs/" | grep -v "hooks/" || true)
 
 if [ -z "$all_rust_files" ]; then
-    echo "❌ No Rust files found in src/ or tests/"
+    echo "❌ No Rust files found in src/ or tests/ directories"
     exit 1
 fi
 
@@ -124,7 +125,7 @@ fi
 
 # Rule #9: Test Case Integrity Pattern
 echo "🔍 Rule #9: Test case integrity..."
-test_files=$(find tests -name "*.rs" 2>/dev/null || true)
+test_files=$(find . -path "*/tests/*.rs" 2>/dev/null | grep -v "target/" || true)
 if [ -n "$test_files" ]; then
     # Check for commented test functions
     commented_tests=$(grep -rn "//.*#\[test\]" $test_files 2>/dev/null || true)
