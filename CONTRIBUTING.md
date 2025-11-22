@@ -234,7 +234,7 @@ Would this require breaking changes?
 
 We accept pull requests for:
 - **Bug fixes**: Always welcome!
-- **Documentation improvements**: Typos, clarity, examples
+- **Documentation improvements**: Documentation correction and more examples
 - **Test improvements**: Better coverage, edge cases
 - **Performance optimizations**: With benchmarks showing improvement
 - **New features**: Discuss in an issue first (before coding)
