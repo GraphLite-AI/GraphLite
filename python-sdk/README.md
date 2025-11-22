@@ -82,7 +82,7 @@ result = session.query("MATCH (n:Person) RETURN n")
 Or for statements that don't return results:
 
 ```python
-session.execute("CREATE (p:Person {name: 'Alice'})")
+session.execute("INSERT (p:Person {name: 'Alice'})")
 ```
 
 ### Transactions
@@ -92,13 +92,13 @@ Transactions use Python context managers with automatic rollback:
 ```python
 # Transaction with explicit commit
 with session.transaction() as tx:
-    tx.execute("CREATE (p:Person {name: 'Alice'})")
-    tx.execute("CREATE (p:Person {name: 'Bob'})")
+    tx.execute("INSERT (p:Person {name: 'Alice'})")
+    tx.execute("INSERT (p:Person {name: 'Bob'})")
     tx.commit()  # Persist changes
 
 # Transaction with automatic rollback
 with session.transaction() as tx:
-    tx.execute("CREATE (p:Person {name: 'Charlie'})")
+    tx.execute("INSERT (p:Person {name: 'Charlie'})")
     # tx exits without commit - changes are automatically rolled back
 ```
 
@@ -154,13 +154,13 @@ session.execute("CREATE GRAPH IF NOT EXISTS social")
 session.execute("SESSION SET GRAPH social")
 
 # Create nodes
-session.execute("CREATE (p:Person {name: 'Alice', age: 30})")
-session.execute("CREATE (p:Person {name: 'Bob', age: 25})")
+session.execute("INSERT (p:Person {name: 'Alice', age: 30})")
+session.execute("INSERT (p:Person {name: 'Bob', age: 25})")
 
 # Create relationships
 session.execute("""
     MATCH (a:Person {name: 'Alice'}), (b:Person {name: 'Bob'})
-    CREATE (a)-[:KNOWS]->(b)
+    INSERT (a)-[:KNOWS]->(b)
 """)
 
 # Query
@@ -188,7 +188,7 @@ with session.transaction() as tx:
     # Create new relationship
     tx.execute("""
         MATCH (a {name: 'Alice'}), (c {name: 'Charlie'})
-        CREATE (a)-[:FOLLOWS]->(c)
+        INSERT (a)-[:FOLLOWS]->(c)
     """)
 
     tx.commit()
