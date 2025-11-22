@@ -24,7 +24,7 @@ impl StatementExecutor for DropGraphTypeExecutor {
     }
 
     fn operation_description(&self, _context: &ExecutionContext) -> String {
-        format!("DROP GRAPH TYPE")
+        "DROP GRAPH TYPE".to_string()
     }
 }
 

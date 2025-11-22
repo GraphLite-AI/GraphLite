@@ -519,14 +519,11 @@ fn parse_intersect(tokens: &[Token]) -> IResult<&[Token], Query> {
     // Check for incomplete INTERSECT operations
     if !remaining.is_empty() {
         if let Some(token) = remaining.first() {
-            match token {
-                Token::Intersect => {
-                    return Err(nom::Err::Error(nom::error::Error::new(
-                        remaining,
-                        nom::error::ErrorKind::Alt,
-                    )));
-                }
-                _ => {}
+            if token == &Token::Intersect {
+                return Err(nom::Err::Error(nom::error::Error::new(
+                    remaining,
+                    nom::error::ErrorKind::Alt,
+                )));
             }
         }
     }
@@ -4308,16 +4305,16 @@ fn procedure_body_statement(tokens: &[Token]) -> IResult<&[Token], ProcedureBody
             tuple((
                 many1(variable_declaration_for_procedure_body), // At least one variable definition
                 alt((
-                    map(query, |q| Statement::Query(q)), // Accept any query including LET
-                    map(data_statement, |ds| Statement::DataStatement(ds)),
-                    map(catalog_statement, |cs| Statement::CatalogStatement(cs)),
+                    map(query, Statement::Query), // Accept any query including LET
+                    map(data_statement, Statement::DataStatement),
+                    map(catalog_statement, Statement::CatalogStatement),
                 )),
                 many0(tuple((
                     expect_token(Token::Next),
                     opt(yield_clause),
                     alt((
-                        map(query, |q| Statement::Query(q)), // Accept any query after NEXT
-                        map(data_statement, |ds| Statement::DataStatement(ds)),
+                        map(query, Statement::Query), // Accept any query after NEXT
+                        map(data_statement, Statement::DataStatement),
                     )),
                 ))),
             )),
@@ -4329,17 +4326,17 @@ fn procedure_body_statement(tokens: &[Token]) -> IResult<&[Token], ProcedureBody
         map(
             tuple((
                 alt((
-                    map(query, |q| Statement::Query(q)), // Accept any query including LET
-                    map(data_statement, |ds| Statement::DataStatement(ds)),
-                    map(catalog_statement, |cs| Statement::CatalogStatement(cs)),
+                    map(query, Statement::Query), // Accept any query including LET
+                    map(data_statement, Statement::DataStatement),
+                    map(catalog_statement, Statement::CatalogStatement),
                 )),
                 many1(tuple((
                     // At least one NEXT statement
                     expect_token(Token::Next),
                     opt(yield_clause),
                     alt((
-                        map(query, |q| Statement::Query(q)), // Accept any query after NEXT
-                        map(data_statement, |ds| Statement::DataStatement(ds)),
+                        map(query, Statement::Query), // Accept any query after NEXT
+                        map(data_statement, Statement::DataStatement),
                     )),
                 ))),
             )),
@@ -4540,7 +4537,7 @@ fn at_location_statement(tokens: &[Token]) -> IResult<&[Token], AtLocationStatem
                     alt((
                         map(declare_statement, Statement::Declare),
                         // NEXT statements removed - only allowed in procedure body context
-                        map(basic_query, |q| Statement::Query(q)),
+                        map(basic_query, Statement::Query),
                         map(select_statement, Statement::Select),
                         map(set_statement, |s| {
                             Statement::DataStatement(DataStatement::Set(s))
@@ -5061,8 +5058,8 @@ fn index_options(tokens: &[Token]) -> IResult<&[Token], IndexOptions> {
 fn parse_value(tokens: &[Token]) -> IResult<&[Token], Value> {
     alt((
         map(parse_string_literal, Value::String),
-        map(parse_number, |n| Value::Number(n)),
-        map(parse_integer, |i| Value::Integer(i)),
+        map(parse_number, Value::Number),
+        map(parse_integer, Value::Integer),
         map(expect_identifier("true"), |_| Value::Boolean(true)),
         map(expect_identifier("false"), |_| Value::Boolean(false)),
         map(expect_identifier("null"), |_| Value::Null),

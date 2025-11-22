@@ -689,7 +689,7 @@ pub fn validate_query(
                 for var_decl in &var_def.variable_declarations {
                     if var_decl.variable_name.is_empty() {
                         errors.push(ValidationError {
-                            message: format!("Variable name cannot be empty in procedure body"),
+                            message: "Variable name cannot be empty in procedure body".to_string(),
                             location: Some(var_decl.location.clone()),
                             error_type: ValidationErrorType::Semantic,
                         });
@@ -705,7 +705,7 @@ pub fn validate_query(
                 validate_procedure_statement(&chained.statement, &ctx, &mut errors);
             }
         }
-        &Statement::IndexStatement(ref index_stmt) => {
+        Statement::IndexStatement(index_stmt) => {
             // Validate index DDL statements
             match index_stmt {
                 crate::ast::ast::IndexStatement::CreateIndex(create_idx) => {
@@ -1333,7 +1333,7 @@ fn validate_path_constructor(
     }
 
     // PATH elements should follow node-edge-node pattern (optional validation)
-    if path_constructor.elements.len() % 2 == 0 && path_constructor.elements.len() > 2 {
+    if path_constructor.elements.len().is_multiple_of(2) && path_constructor.elements.len() > 2 {
         // Even number of elements > 2 might indicate incomplete path
         // This is a warning rather than an error since PATH[node, edge] might be valid
         // in some contexts
@@ -1350,13 +1350,9 @@ fn validate_cast_expression(
     validate_expression(&cast_expr.expression, ctx, errors);
 
     // Check if the cast is valid (basic validation - runtime will handle detailed conversion)
-    if let Ok(source_type) = infer_expression_type(&cast_expr.expression, ctx) {
+    if let Ok(_source_type) = infer_expression_type(&cast_expr.expression, ctx) {
         // Check for obviously invalid casts
-        match (&source_type, &cast_expr.target_type) {
-            // Allow most casts - runtime will handle specifics
-            // Add specific validation rules here if needed
-            _ => {} // Most casts are allowed for now
-        }
+        {}
     }
 
     // Validate that the target type is well-formed
@@ -1828,7 +1824,7 @@ fn validate_function_call(
         }
 
         // Validate argument types (simplified - in real implementation, infer types)
-        for (_i, arg) in func_call.arguments.iter().enumerate() {
+        for arg in func_call.arguments.iter() {
             validate_expression(arg, ctx, errors);
         }
     } else {

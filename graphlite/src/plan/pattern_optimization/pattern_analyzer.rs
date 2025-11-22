@@ -77,7 +77,7 @@ impl PatternAnalyzer {
             for var in vars {
                 var_usage
                     .entry(var)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(pattern_idx);
             }
         }

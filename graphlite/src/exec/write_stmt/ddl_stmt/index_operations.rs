@@ -64,23 +64,23 @@ impl IndexStatementCoordinator {
         let (message, affected) = match stmt {
             IndexStatement::CreateIndex(create_index) => {
                 let stmt_executor = CreateIndexExecutor::new(create_index.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)?
+                stmt_executor.execute(context, catalog_manager, &storage)?
             }
             IndexStatement::DropIndex(drop_index) => {
                 let stmt_executor = DropIndexExecutor::new(drop_index.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)?
+                stmt_executor.execute(context, catalog_manager, &storage)?
             }
             IndexStatement::AlterIndex(alter_index) => {
                 let stmt_executor = AlterIndexExecutor::new(alter_index.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)?
+                stmt_executor.execute(context, catalog_manager, &storage)?
             }
             IndexStatement::OptimizeIndex(optimize_index) => {
                 let stmt_executor = OptimizeIndexExecutor::new(optimize_index.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)?
+                stmt_executor.execute(context, catalog_manager, &storage)?
             }
             IndexStatement::ReindexIndex(reindex) => {
                 let stmt_executor = ReindexExecutor::new(reindex.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)?
+                stmt_executor.execute(context, catalog_manager, &storage)?
             }
         };
 

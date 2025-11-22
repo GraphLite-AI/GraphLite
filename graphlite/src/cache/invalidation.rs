@@ -202,7 +202,7 @@ impl InvalidationManager {
             let mut reverse_deps = self.reverse_deps.write().unwrap();
             reverse_deps
                 .entry(dep_key)
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(entry_key);
         }
     }

@@ -1048,7 +1048,7 @@ impl PhysicalPlan {
                 // Convert all input logical nodes to physical nodes
                 let physical_inputs: Vec<PhysicalNode> = inputs
                     .iter()
-                    .map(|input| Self::convert_logical_node(input))
+                    .map(Self::convert_logical_node)
                     .collect();
 
                 // Calculate estimated rows and cost

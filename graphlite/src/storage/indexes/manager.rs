@@ -18,6 +18,12 @@ pub struct IndexManager {
     index_names: Arc<RwLock<HashSet<String>>>,
 }
 
+impl Default for IndexManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IndexManager {
     /// Create a new index manager
     pub fn new() -> Self {

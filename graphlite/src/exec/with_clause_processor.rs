@@ -270,7 +270,7 @@ impl WithClauseProcessor {
             if let Some((_primary_var, nodes)) = variable_bindings.iter().next() {
                 let mut filtered_nodes = Vec::new();
 
-                for (_node_idx, node) in nodes.iter().enumerate() {
+                for node in nodes.iter() {
                     // Create computed values for this specific node
                     let mut node_computed_values = HashMap::new();
 
@@ -306,7 +306,7 @@ impl WithClauseProcessor {
 
                 // Update all variable bindings to only include filtered nodes
                 // Simplified logic: directly copy filtered nodes to all relevant variables
-                for (var, _) in &updated_bindings {
+                for var in updated_bindings.keys() {
                     if let Some(_original_nodes) = variable_bindings.get(var) {
                         if !filtered_nodes.is_empty() {
                             filtered_bindings.insert(var.clone(), filtered_nodes.clone());
@@ -1197,7 +1197,7 @@ impl WithClauseProcessor {
             Literal::Vector(vec) => Value::String(format!("{:?}", vec)),
             Literal::List(list) => {
                 let converted: Vec<Value> =
-                    list.iter().map(|lit| Self::literal_to_value(lit)).collect();
+                    list.iter().map(Self::literal_to_value).collect();
                 Value::List(converted)
             }
         }

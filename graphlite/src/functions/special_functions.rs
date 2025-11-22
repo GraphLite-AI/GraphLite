@@ -225,10 +225,10 @@ impl Function for PropertyExistsFunction {
             }
             _ => {
                 // PROPERTY_EXISTS requires a property reference (string for now)
-                return Err(FunctionError::InvalidArgumentType {
+                Err(FunctionError::InvalidArgumentType {
                     message: "PROPERTY_EXISTS argument must be a property reference (string)"
                         .to_string(),
-                });
+                })
             }
         }
     }

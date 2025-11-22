@@ -39,7 +39,7 @@ impl MatchInsertExecutor {
             Literal::Vector(vec) => Value::Vector(vec.iter().map(|&f| f as f32).collect()),
             Literal::List(list) => {
                 let converted: Vec<Value> =
-                    list.iter().map(|lit| Self::literal_to_value(lit)).collect();
+                    list.iter().map(Self::literal_to_value).collect();
                 Value::List(converted)
             }
         }
@@ -59,7 +59,7 @@ impl MatchInsertExecutor {
                 Some(PatternElement::Edge(edge_pattern)),
                 Some(PatternElement::Node(target_pattern)),
             ) = (
-                pattern.elements.get(0),
+                pattern.elements.first(),
                 pattern.elements.get(1),
                 pattern.elements.get(2),
             ) {
@@ -79,7 +79,7 @@ impl MatchInsertExecutor {
                         if let Some(ref prop_map) = edge_pattern.properties {
                             for property in &prop_map.properties {
                                 if let Expression::Literal(literal) = &property.value {
-                                    let expected_value = Self::literal_to_value(&literal);
+                                    let expected_value = Self::literal_to_value(literal);
                                     if edge.properties.get(&property.key) != Some(&expected_value) {
                                         return false;
                                     }
@@ -138,7 +138,7 @@ impl MatchInsertExecutor {
 
         // Fallback to single node pattern matching for simpler patterns
         if pattern.elements.len() == 1 {
-            if let Some(PatternElement::Node(node_pattern)) = pattern.elements.get(0) {
+            if let Some(PatternElement::Node(node_pattern)) = pattern.elements.first() {
                 if let Some(ref identifier) = node_pattern.identifier {
                     let matching_nodes: Vec<Node> = graph
                         .get_all_nodes()
@@ -175,7 +175,7 @@ impl MatchInsertExecutor {
         if let Some(ref prop_map) = node_pattern.properties {
             for property in &prop_map.properties {
                 if let Expression::Literal(literal) = &property.value {
-                    let expected_value = Self::literal_to_value(&literal);
+                    let expected_value = Self::literal_to_value(literal);
                     if node.properties.get(&property.key) != Some(&expected_value) {
                         return false;
                     }
@@ -340,7 +340,7 @@ impl MatchInsertExecutor {
                     Value::Null
                 }
             }
-            crate::ast::ast::Expression::Literal(literal) => Self::literal_to_value(&literal),
+            crate::ast::ast::Expression::Literal(literal) => Self::literal_to_value(literal),
             _ => {
                 log::warn!("Unsupported expression type in combination evaluation");
                 Value::Null
@@ -483,7 +483,7 @@ impl DataStatementExecutor for MatchInsertExecutor {
                         );
                         variable_candidates
                             .entry(var_name)
-                            .or_insert_with(Vec::new)
+                            .or_default()
                             .push(node);
                     }
                 }
@@ -527,7 +527,7 @@ impl DataStatementExecutor for MatchInsertExecutor {
                                         for property in &prop_map.properties {
                                             if let Expression::Literal(literal) = &property.value {
                                                 let expected_value =
-                                                    Self::literal_to_value(&literal);
+                                                    Self::literal_to_value(literal);
                                                 if node.properties.get(&property.key)
                                                     != Some(&expected_value)
                                                 {
@@ -843,7 +843,7 @@ impl DataStatementExecutor for MatchInsertExecutor {
         // Process each combination
         for mut variable_bindings in processed_combinations {
             // Step 2: Execute INSERT patterns - only insert edges, use matched nodes
-            for (_pattern_idx, pattern) in self.statement.insert_graph_patterns.iter().enumerate() {
+            for pattern in self.statement.insert_graph_patterns.iter() {
                 for (i, element) in pattern.elements.iter().enumerate() {
                     match element {
                         PatternElement::Node(node_pattern) => {

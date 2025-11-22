@@ -622,7 +622,7 @@ impl CatalogProvider for SchemaCatalog {
                     Ok(CatalogResponse::List {
                         items: schemas
                             .iter()
-                            .map(|s| serde_json::to_value(s))
+                            .map(serde_json::to_value)
                             .collect::<Result<Vec<_>, _>>()?,
                     })
                 }

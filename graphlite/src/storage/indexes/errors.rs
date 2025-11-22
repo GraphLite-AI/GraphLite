@@ -71,7 +71,7 @@ impl IndexError {
 
     /// Create an IO error
     pub fn io<S: Into<String>>(msg: S) -> Self {
-        Self::IoError(std::io::Error::new(std::io::ErrorKind::Other, msg.into()))
+        Self::IoError(std::io::Error::other(msg.into()))
     }
 
     /// Create a creation error (alias for config)

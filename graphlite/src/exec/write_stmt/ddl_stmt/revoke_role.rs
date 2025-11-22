@@ -48,16 +48,12 @@ impl DDLStatementExecutor for RevokeRoleExecutor {
         // System role protection rules
         // 1. The "user" role cannot be removed from any user
         if role_name == "user" {
-            return Err(ExecutionError::RuntimeError(format!(
-                "Cannot revoke system role 'user' from any user. The 'user' role is required for all users."
-            )));
+            return Err(ExecutionError::RuntimeError("Cannot revoke system role 'user' from any user. The 'user' role is required for all users.".to_string()));
         }
 
         // 2. The "admin" role cannot be removed from the "admin" user
         if role_name == "admin" && username == "admin" {
-            return Err(ExecutionError::RuntimeError(format!(
-                "Cannot revoke 'admin' role from 'admin' user. The admin user must retain admin privileges."
-            )));
+            return Err(ExecutionError::RuntimeError("Cannot revoke 'admin' role from 'admin' user. The admin user must retain admin privileges.".to_string()));
         }
 
         // First, verify the role exists

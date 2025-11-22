@@ -138,21 +138,21 @@ impl MultiGraphManager {
             for node in graph.get_all_nodes() {
                 let has_node = result_graph
                     .has_node(&node.id)
-                    .map_err(|e| StorageError::Graph(e))?;
+                    .map_err(StorageError::Graph)?;
                 if !has_node {
                     result_graph
                         .add_node(node.clone())
-                        .map_err(|e| StorageError::Graph(e))?;
+                        .map_err(StorageError::Graph)?;
                 }
             }
             for edge in graph.get_all_edges() {
                 let has_edge = result_graph
                     .has_edge(&edge.id)
-                    .map_err(|e| StorageError::Graph(e))?;
+                    .map_err(StorageError::Graph)?;
                 if !has_edge {
                     result_graph
                         .add_edge(edge.clone())
-                        .map_err(|e| StorageError::Graph(e))?;
+                        .map_err(StorageError::Graph)?;
                 }
             }
         }

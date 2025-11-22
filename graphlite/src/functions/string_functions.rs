@@ -220,7 +220,7 @@ impl Function for TrimFunction {
 
             // Check if first argument is a trim mode
             if let Some(mode_str) = first_arg.as_string() {
-                if let Some(mode) = Self::parse_trim_mode(&mode_str) {
+                if let Some(mode) = Self::parse_trim_mode(mode_str) {
                     // TRIM(mode, string) - trim whitespace with specified mode
                     if second_arg.is_null() {
                         return Ok(Value::Null);
@@ -254,13 +254,9 @@ impl Function for TrimFunction {
 
             let string_val = self.value_to_string(string_value)?;
             let trim_chars = self.value_to_string(char_value)?;
-            let mode_str = if let Some(s) = mode_value.as_string() {
-                s
-            } else {
-                "BOTH"
-            };
+            let mode_str = mode_value.as_string().unwrap_or("BOTH");
 
-            let mode = Self::parse_trim_mode(&mode_str).unwrap_or(TrimMode::Both);
+            let mode = Self::parse_trim_mode(mode_str).unwrap_or(TrimMode::Both);
             let result = Self::trim_string(&string_val, &trim_chars, mode);
 
             Ok(Value::String(result))
@@ -339,7 +335,7 @@ impl Function for SubstringFunction {
     fn execute(&self, context: &FunctionContext) -> FunctionResult<Value> {
         // Handle 2 or 3 arguments: SUBSTRING(string, start) or SUBSTRING(string, start, length)
         let arg_count = context.arguments.len();
-        if arg_count < 2 || arg_count > 3 {
+        if !(2..=3).contains(&arg_count) {
             return Err(FunctionError::InvalidArgumentType {
                 message: "SUBSTRING function expects 2 or 3 arguments".to_string(),
             });

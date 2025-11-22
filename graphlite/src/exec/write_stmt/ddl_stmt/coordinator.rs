@@ -46,27 +46,27 @@ impl DDLStatementCoordinator {
         let result = match stmt {
             CatalogStatement::CreateSchema(create_schema) => {
                 let stmt_executor = CreateSchemaExecutor::new(create_schema.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)
+                stmt_executor.execute(context, catalog_manager, &storage)
             }
             CatalogStatement::DropSchema(drop_schema) => {
                 let stmt_executor = DropSchemaExecutor::new(drop_schema.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)
+                stmt_executor.execute(context, catalog_manager, &storage)
             }
             CatalogStatement::CreateGraph(create_graph) => {
                 let stmt_executor = CreateGraphExecutor::new(create_graph.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)
+                stmt_executor.execute(context, catalog_manager, &storage)
             }
             CatalogStatement::DropGraph(drop_graph) => {
                 let stmt_executor = DropGraphExecutor::new(drop_graph.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)
+                stmt_executor.execute(context, catalog_manager, &storage)
             }
             CatalogStatement::CreateGraphType(create_graph_type) => {
                 let stmt_executor = CreateGraphTypeExecutor::new(create_graph_type.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)
+                stmt_executor.execute(context, catalog_manager, &storage)
             }
             CatalogStatement::DropGraphType(drop_graph_type) => {
                 let stmt_executor = DropGraphTypeExecutor::new(drop_graph_type.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)
+                stmt_executor.execute(context, catalog_manager, &storage)
             }
             CatalogStatement::AlterGraphType(alter_graph_type) => {
                 // Convert from ast::ast::AlterGraphTypeStatement to schema::parser::ast::AlterGraphTypeStatement
@@ -76,45 +76,45 @@ impl DDLStatementCoordinator {
                     changes: vec![],
                 };
                 let stmt_executor = AlterGraphTypeExecutor::new(schema_stmt);
-                stmt_executor.execute(&context, catalog_manager, &storage)
+                stmt_executor.execute(context, catalog_manager, &storage)
             }
             CatalogStatement::TruncateGraph(truncate_graph) => {
                 let stmt_executor = TruncateGraphExecutor::new(truncate_graph.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)
+                stmt_executor.execute(context, catalog_manager, &storage)
             }
             CatalogStatement::ClearGraph(clear_graph) => {
                 let stmt_executor = ClearGraphExecutor::new(clear_graph.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)
+                stmt_executor.execute(context, catalog_manager, &storage)
             }
             CatalogStatement::CreateUser(create_user) => {
                 let stmt_executor = CreateUserExecutor::new(create_user.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)
+                stmt_executor.execute(context, catalog_manager, &storage)
             }
             CatalogStatement::DropUser(drop_user) => {
                 let stmt_executor = DropUserExecutor::new(drop_user.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)
+                stmt_executor.execute(context, catalog_manager, &storage)
             }
             CatalogStatement::CreateRole(create_role) => {
                 let stmt_executor = CreateRoleExecutor::new(create_role.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)
+                stmt_executor.execute(context, catalog_manager, &storage)
             }
             CatalogStatement::DropRole(drop_role) => {
                 let stmt_executor = DropRoleExecutor::new(drop_role.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)
+                stmt_executor.execute(context, catalog_manager, &storage)
             }
             CatalogStatement::GrantRole(grant_role) => {
                 let stmt_executor = GrantRoleExecutor::new(grant_role.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)
+                stmt_executor.execute(context, catalog_manager, &storage)
             }
             CatalogStatement::RevokeRole(revoke_role) => {
                 let stmt_executor = RevokeRoleExecutor::new(revoke_role.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)
+                stmt_executor.execute(context, catalog_manager, &storage)
             }
             CatalogStatement::CreateProcedure(create_procedure) => {
                 // Store procedure in catalog
                 DDLStatementCoordinator::execute_create_procedure(
                     create_procedure,
-                    &context,
+                    context,
                     catalog_manager,
                     &storage,
                 )
@@ -123,7 +123,7 @@ impl DDLStatementCoordinator {
                 // Remove procedure from catalog
                 DDLStatementCoordinator::execute_drop_procedure(
                     drop_procedure,
-                    &context,
+                    context,
                     catalog_manager,
                     &storage,
                 )

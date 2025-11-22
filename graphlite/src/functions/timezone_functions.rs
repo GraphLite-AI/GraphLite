@@ -286,15 +286,15 @@ impl Function for ConvertTzFunction {
                 })?
         } else {
             // Convert from source timezone to UTC first
-            let source_dt = datetime_arg.as_datetime_utc().ok_or_else(|| {
-                FunctionError::InvalidArgumentType {
-                    message: "First argument must be a datetime".to_string(),
-                }
-            })?;
+            
 
             // For simplicity, assume input datetime is in the from_timezone and convert to UTC
             // This is a simplified implementation - in practice, you'd need to handle the conversion more carefully
-            source_dt
+            datetime_arg.as_datetime_utc().ok_or_else(|| {
+                FunctionError::InvalidArgumentType {
+                    message: "First argument must be a datetime".to_string(),
+                }
+            })?
         };
 
         // Convert to target timezone

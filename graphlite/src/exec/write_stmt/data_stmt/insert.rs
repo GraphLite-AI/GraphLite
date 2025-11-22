@@ -60,7 +60,7 @@ impl InsertExecutor {
             }
             crate::ast::ast::Literal::List(list) => {
                 let converted: Vec<Value> =
-                    list.iter().map(|lit| Self::literal_to_value(lit)).collect();
+                    list.iter().map(Self::literal_to_value).collect();
                 Value::List(converted)
             }
         }
@@ -263,7 +263,7 @@ impl DataStatementExecutor for InsertExecutor {
                 "INSERT processing pattern {} for nodes (pass 1)",
                 pattern_idx
             );
-            for (_i, element) in pattern.elements.iter().enumerate() {
+            for element in pattern.elements.iter() {
                 if let PatternElement::Node(node_pattern) = element {
                     // Check if this is a reference to an existing node
                     if let Some(ref user_identifier) = node_pattern.identifier {

@@ -27,8 +27,10 @@ use std::sync::Arc;
 
 /// Storage method configuration
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Default)]
 pub enum StorageMethod {
     /// Disk-based storage only (RocksDB/Sled)
+    #[default]
     DiskOnly,
     /// Memory-based storage only (Redis/Valkey)
     MemoryOnly,
@@ -36,11 +38,6 @@ pub enum StorageMethod {
     DiskAndMemory,
 }
 
-impl Default for StorageMethod {
-    fn default() -> Self {
-        StorageMethod::DiskOnly
-    }
-}
 
 /// Storage manager that orchestrates all storage tiers
 #[derive(Clone)]
@@ -65,9 +62,6 @@ pub struct StorageManager {
 }
 
 impl StorageManager {
-    /// Parse a graph path in format /<schema_name>/<graph_name> into catalog IDs
-    /// Returns None if path format is invalid
-
     /// Create a new storage manager with the specified method and configuration
     pub fn new<P: AsRef<Path>>(
         path: P,
