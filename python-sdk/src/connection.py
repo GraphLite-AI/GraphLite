@@ -143,12 +143,6 @@ class Session:
 
         Raises:
             TransactionError: If transaction cannot be started
-
-        Examples:
-            >>> with session.transaction() as tx:
-            ...     tx.execute("CREATE (p:Person {name: 'Alice'})")
-            ...     tx.execute("CREATE (p:Person {name: 'Bob'})")
-            ...     tx.commit()  # Must commit to persist changes
         """
         from .transaction import Transaction
         return Transaction(self)
@@ -159,13 +153,6 @@ class Session:
 
         Returns:
             QueryBuilder instance
-
-        Examples:
-            >>> builder = session.query_builder()
-            >>> result = builder.match_pattern("(p:Person)") \\
-            ...     .where_clause("p.age > 25") \\
-            ...     .return_clause("p.name, p.age") \\
-            ...     .execute()
         """
         from .query import QueryBuilder
         return QueryBuilder(self)

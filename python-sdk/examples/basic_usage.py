@@ -23,14 +23,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.connection import GraphLite
-from src.error import GraphLiteError
-
+from src.error import GraphLiteError, SerializationError, QueryError, TransactionError
+from src.result import TypedResult
 
 @dataclass
 class Person:
     """Person entity for typed deserialization"""
     name: str
-    age: float
+    age: int
 
 
 def main() -> int:
@@ -65,8 +65,11 @@ def main() -> int:
             tx.execute("CREATE (p:Person {name: 'Alice', age: 30})")
             tx.execute("CREATE (p:Person {name: 'Bob', age: 25})")
             tx.execute("CREATE (p:Person {name: 'Charlie', age: 35})")
+            tx.execute("CREATE (p:Person {name: 'David', age: 28})")
+            tx.execute("CREATE (p:Person {name: 'Eve', age: 23})")
+            tx.execute("CREATE (p:Person {name: 'Frank', age: 40})")
             tx.commit()
-        print("   ✓ Inserted 3 persons\n")
+        print("   ✓ Inserted 6 persons\n")
 
         # 5. Query data directly
         print("5. Querying data...")
@@ -95,34 +98,33 @@ def main() -> int:
                 print(f"   - Name: {name}, Age: {age}")
         print()
 
-        # # 7. Typed deserialization
-        # print("7. Using typed deserialization...")
-        # result = session.query("MATCH (p:Person) RETURN p.name as name, p.age as age")
-        # typed_result = result.to_typed()
-        # people = typed_result.deserialize_rows(Person)
-        # print(f"   Deserialized {len(people)} persons:")
-        # for person in people:
-        #     print(f"   - {person}")
-        # print()
+        # 7. Typed deserialization
+        print("7. Using typed deserialization...")
+        result = session.query("MATCH (p:Person) RETURN p.name as name, p.age as age")
+        typed = TypedResult(result)
+        people = typed.deserialize_rows(Person)
+        print(f"   Deserialized {len(people)} persons:")
+        for person in people:
+            print(f"   - {person}")
+        print()
 
-        # # 8. Transaction with rollback
-        # print("8. Demonstrating transaction rollback...")
-        # try:
-        #     with session.transaction() as tx:
-        #         tx.execute("CREATE (p:Person {name: 'David', age: 40})")
-        #         print("   Created person 'David' in transaction")
-        #         # Transaction is NOT committed - will auto-rollback
-        #         # (by not calling tx.commit())
-        # except Exception:
-        #     pass  # Expected - rollback on exception
-        # print("   Transaction rolled back (David not persisted)\n")
+        # 8. Transaction with rollback
+        print("8. Demonstrating transaction rollback...")
+        try:
+            with session.transaction() as tx:
+                tx.execute("CREATE (p:Person {name: 'George', age: 50})")
+                print("   Created person 'George' in transaction")
+                # Transaction is NOT committed - will auto-rollback
+                # (by not calling tx.commit())
+        except Exception:
+            pass  # Expected - rollback on exception
+        print("   Transaction rolled back (George not persisted)\n")
 
-        # # 9. Verify rollback
-        # result = session.query("MATCH (p:Person) RETURN count(p) as count")
-        # if result.rows:
-        #     count = result.rows[0].get("count")
-        #     print(f"   Person count after rollback: {count}\n")
-
+        # 9. Verify rollback
+        result = session.query("MATCH (p:Person) RETURN count(p) as count")
+        if result.rows:
+            count = result.rows[0].get("count")
+        print(f"   Person count after rollback: {count}\n")
         print("=== Example completed successfully ===")
         return 0
 
