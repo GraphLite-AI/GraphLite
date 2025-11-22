@@ -71,6 +71,6 @@ __all__ = [
     "Session",
     "Transaction",
     "QueryBuilder",
-    # "TypedResult",
+    "TypedResult",
     "GraphLiteError",
 ]
