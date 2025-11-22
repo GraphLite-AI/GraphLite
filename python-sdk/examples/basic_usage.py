@@ -62,12 +62,12 @@ def main() -> int:
         # 4. Insert data using transactions
         print("4. Inserting data with transaction...")
         with session.transaction() as tx:
-            tx.execute("CREATE (p:Person {name: 'Alice', age: 30})")
-            tx.execute("CREATE (p:Person {name: 'Bob', age: 25})")
-            tx.execute("CREATE (p:Person {name: 'Charlie', age: 35})")
-            tx.execute("CREATE (p:Person {name: 'David', age: 28})")
-            tx.execute("CREATE (p:Person {name: 'Eve', age: 23})")
-            tx.execute("CREATE (p:Person {name: 'Frank', age: 40})")
+            tx.execute("INSERT (p:Person {name: 'Alice', age: 30})")
+            tx.execute("INSERT (p:Person {name: 'Bob', age: 25})")
+            tx.execute("INSERT (p:Person {name: 'Charlie', age: 35})")
+            tx.execute("INSERT (p:Person {name: 'David', age: 28})")
+            tx.execute("INSERT (p:Person {name: 'Eve', age: 23})")
+            tx.execute("INSERT (p:Person {name: 'Frank', age: 40})")
             tx.commit()
         print("   ✓ Inserted 6 persons\n")
 
@@ -112,8 +112,8 @@ def main() -> int:
         print("8. Demonstrating transaction rollback...")
         try:
             with session.transaction() as tx:
-                tx.execute("CREATE (p:Person {name: 'George', age: 50})")
-                print("   Created person 'George' in transaction")
+                tx.execute("INSERT (p:Person {name: 'George', age: 50})")
+                print("   Inserted person 'George' in transaction")
                 # Transaction is NOT committed - will auto-rollback
                 # (by not calling tx.commit())
         except Exception:

@@ -39,13 +39,13 @@ class Transaction:
         >>>
         >>> # Using as context manager (recommended)
         >>> with session.transaction() as tx:
-        ...     tx.execute("CREATE (p:Person {name: 'Alice'})")
-        ...     tx.execute("CREATE (p:Person {name: 'Bob'})")
+        ...     tx.execute("INSERT (p:Person {name: 'Alice'})")
+        ...     tx.execute("INSERT (p:Person {name: 'Bob'})")
         ...     tx.commit()  # Changes are persisted
         >>>
         >>> # Transaction that rolls back (no commit)
         >>> with session.transaction() as tx:
-        ...     tx.execute("CREATE (p:Person {name: 'Charlie'})")
+        ...     tx.execute("INSERT (p:Person {name: 'Charlie'})")
         ...     # Automatically rolled back on context exit
     """
 
@@ -77,8 +77,8 @@ class Transaction:
 
         Examples:
             >>> with session.transaction() as tx:
-            ...     tx.execute("CREATE (p:Person {name: 'Alice'})")
-            ...     tx.execute("CREATE (p:Person {name: 'Bob'})")
+            ...     tx.execute("INSERT (p:Person {name: 'Alice'})")
+            ...     tx.execute("INSERT (p:Person {name: 'Bob'})")
             ...     tx.commit()
         """
         if self._committed:
@@ -106,7 +106,7 @@ class Transaction:
 
         Examples:
             >>> with session.transaction() as tx:
-            ...     tx.execute("CREATE (p:Person {name: 'Alice', age: 30})")
+            ...     tx.execute("INSERT (p:Person {name: 'Alice', age: 30})")
             ...     result = tx.query("MATCH (p:Person) RETURN p")
             ...     tx.commit()
         """
@@ -132,7 +132,7 @@ class Transaction:
 
         Examples:
             >>> with session.transaction() as tx:
-            ...     tx.execute("CREATE (p:Person {name: 'Alice'})")
+            ...     tx.execute("INSERT (p:Person {name: 'Alice'})")
             ...     tx.commit()  # Changes are now persistent
         """
         if self._committed:
@@ -159,7 +159,7 @@ class Transaction:
 
         Examples:
             >>> with session.transaction() as tx:
-            ...     tx.execute("CREATE (p:Person {name: 'Alice'})")
+            ...     tx.execute("INSERT (p:Person {name: 'Alice'})")
             ...     tx.rollback()  # Explicit rollback (optional, automatic on exit)
         """
         if self._committed:

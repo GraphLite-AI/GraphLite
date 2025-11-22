@@ -22,7 +22,7 @@ result = session.query("MATCH (p:Person) RETURN p.name")
 
 # Use transactions
 with session.transaction() as tx:
-    tx.execute("CREATE (p:Person {name: 'Alice'})")
+    tx.execute("INSERT (p:Person {name: 'Alice'})")
     tx.commit()
 ```
 
