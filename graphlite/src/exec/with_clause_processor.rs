@@ -1196,8 +1196,7 @@ impl WithClauseProcessor {
             Literal::TimeWindow(tw) => Value::String(tw.clone()),
             Literal::Vector(vec) => Value::String(format!("{:?}", vec)),
             Literal::List(list) => {
-                let converted: Vec<Value> =
-                    list.iter().map(Self::literal_to_value).collect();
+                let converted: Vec<Value> = list.iter().map(Self::literal_to_value).collect();
                 Value::List(converted)
             }
         }

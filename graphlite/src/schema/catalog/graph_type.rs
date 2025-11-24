@@ -229,7 +229,9 @@ impl CatalogProvider for GraphTypeCatalog {
                 ))),
             },
 
-            _ => Err(CatalogError::NotSupported("Operation not supported by GraphTypeCatalog".to_string())),
+            _ => Err(CatalogError::NotSupported(
+                "Operation not supported by GraphTypeCatalog".to_string(),
+            )),
         }
     }
 

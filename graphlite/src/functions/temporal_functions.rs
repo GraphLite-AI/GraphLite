@@ -112,8 +112,7 @@ impl TimezoneInfo {
                                     .with_month(12)
                                     .unwrap_or(result);
                             } else {
-                                result =
-                                    result.with_month(result.month() - 1).unwrap_or(result);
+                                result = result.with_month(result.month() - 1).unwrap_or(result);
                             }
                         }
                         result
@@ -159,8 +158,7 @@ impl TimezoneInfo {
                                     .with_month(12)
                                     .unwrap_or(result);
                             } else {
-                                result =
-                                    result.with_month(result.month() - 1).unwrap_or(result);
+                                result = result.with_month(result.month() - 1).unwrap_or(result);
                             }
                         }
                         result

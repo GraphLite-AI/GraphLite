@@ -18,8 +18,7 @@ use std::collections::HashMap;
 /// See ROADMAP.md: "Pattern Optimization System"
 /// Target: v0.3.0
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct GraphStatistics {
     /// Number of nodes per label
     pub node_counts: HashMap<String, u64>,
@@ -30,7 +29,6 @@ pub struct GraphStatistics {
     /// Selectivity estimates for common patterns
     pub pattern_selectivity: HashMap<String, f64>,
 }
-
 
 /// Cost estimates for different execution strategies
 ///

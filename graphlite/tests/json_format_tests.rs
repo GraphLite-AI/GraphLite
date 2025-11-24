@@ -21,8 +21,12 @@ use testutils::test_fixture::TestFixture;
 macro_rules! setup_test_graph {
     ($fixture:expr) => {{
         let graph_name = format!("test_{}", fastrand::u64(..));
-        $fixture.query(&format!("CREATE GRAPH {}", graph_name)).expect("Create graph failed");
-        $fixture.query(&format!("SESSION SET GRAPH {}", graph_name)).expect("Set graph failed");
+        $fixture
+            .query(&format!("CREATE GRAPH {}", graph_name))
+            .expect("Create graph failed");
+        $fixture
+            .query(&format!("SESSION SET GRAPH {}", graph_name))
+            .expect("Set graph failed");
         graph_name
     }};
 }
@@ -33,10 +37,14 @@ fn test_json_format_basic_query() {
     setup_test_graph!(fixture);
 
     // Insert test data
-    fixture.query("INSERT (:Person {name: 'Alice', age: 30});").expect("Insert failed");
+    fixture
+        .query("INSERT (:Person {name: 'Alice', age: 30});")
+        .expect("Insert failed");
 
     // Query and verify result structure
-    let result = fixture.query("MATCH (p:Person) RETURN p.name, p.age;").expect("Query failed");
+    let result = fixture
+        .query("MATCH (p:Person) RETURN p.name, p.age;")
+        .expect("Query failed");
 
     assert_eq!(result.rows.len(), 1);
     assert_eq!(result.variables.len(), 2);
@@ -50,10 +58,14 @@ fn test_json_format_with_null_values() {
     setup_test_graph!(fixture);
 
     // Insert data with some properties missing
-    fixture.query("INSERT (:Person {name: 'Bob'});").expect("Insert failed");
+    fixture
+        .query("INSERT (:Person {name: 'Bob'});")
+        .expect("Insert failed");
 
     // Query with missing property - should return null for age
-    let result = fixture.query("MATCH (p:Person) RETURN p.name, p.age;").expect("Query failed");
+    let result = fixture
+        .query("MATCH (p:Person) RETURN p.name, p.age;")
+        .expect("Query failed");
 
     assert_eq!(result.rows.len(), 1);
     assert_eq!(result.variables.len(), 2);
@@ -69,16 +81,18 @@ fn test_json_format_with_multiple_rows() {
     setup_test_graph!(fixture);
 
     // Insert multiple people
-    fixture.query(
-        "INSERT (:Person {name: 'Alice', age: 30}), \
+    fixture
+        .query(
+            "INSERT (:Person {name: 'Alice', age: 30}), \
                 (:Person {name: 'Bob', age: 25}), \
-                (:Person {name: 'Carol', age: 28});"
-    ).expect("Insert failed");
+                (:Person {name: 'Carol', age: 28});",
+        )
+        .expect("Insert failed");
 
     // Query all with ordering
-    let result = fixture.query(
-        "MATCH (p:Person) RETURN p.name, p.age ORDER BY p.age;"
-    ).expect("Query failed");
+    let result = fixture
+        .query("MATCH (p:Person) RETURN p.name, p.age ORDER BY p.age;")
+        .expect("Query failed");
 
     assert_eq!(result.rows.len(), 3);
     assert_eq!(result.variables.len(), 2);
@@ -95,17 +109,21 @@ fn test_json_format_with_aggregation() {
     setup_test_graph!(fixture);
 
     // Insert test data
-    fixture.query(
-        "INSERT (:Person {name: 'Alice', city: 'NYC', age: 30}), \
+    fixture
+        .query(
+            "INSERT (:Person {name: 'Alice', city: 'NYC', age: 30}), \
                 (:Person {name: 'Bob', city: 'NYC', age: 25}), \
-                (:Person {name: 'Carol', city: 'SF', age: 28});"
-    ).expect("Insert failed");
+                (:Person {name: 'Carol', city: 'SF', age: 28});",
+        )
+        .expect("Insert failed");
 
     // Query with aggregation
-    let result = fixture.query(
-        "MATCH (p:Person) RETURN p.city, COUNT(p) AS count \
-         GROUP BY p.city ORDER BY count DESC;"
-    ).expect("Query failed");
+    let result = fixture
+        .query(
+            "MATCH (p:Person) RETURN p.city, COUNT(p) AS count \
+         GROUP BY p.city ORDER BY count DESC;",
+        )
+        .expect("Query failed");
 
     assert!(result.rows.len() > 0);
     assert_eq!(result.variables.len(), 2);
@@ -122,14 +140,16 @@ fn test_json_format_with_relationships() {
     setup_test_graph!(fixture);
 
     // Insert people and relationship in one query
-    fixture.query(
-        "INSERT (:Person {name: 'Alice'})-[:KNOWS {since: '2020'}]->(:Person {name: 'Bob'});"
-    ).expect("Insert failed");
+    fixture
+        .query(
+            "INSERT (:Person {name: 'Alice'})-[:KNOWS {since: '2020'}]->(:Person {name: 'Bob'});",
+        )
+        .expect("Insert failed");
 
     // Query relationship
-    let result = fixture.query(
-        "MATCH (a:Person)-[r:KNOWS]->(b:Person) RETURN a.name, b.name, r.since;"
-    ).expect("Query failed");
+    let result = fixture
+        .query("MATCH (a:Person)-[r:KNOWS]->(b:Person) RETURN a.name, b.name, r.since;")
+        .expect("Query failed");
 
     assert_eq!(result.rows.len(), 1);
     assert_eq!(result.variables.len(), 3);
@@ -144,12 +164,14 @@ fn test_json_format_with_string_functions() {
     setup_test_graph!(fixture);
 
     // Insert data
-    fixture.query("INSERT (:Person {name: 'alice'});").expect("Insert failed");
+    fixture
+        .query("INSERT (:Person {name: 'alice'});")
+        .expect("Insert failed");
 
     // Query with string function
-    let result = fixture.query(
-        "MATCH (p:Person) RETURN UPPER(p.name) AS upper_name;"
-    ).expect("Query failed");
+    let result = fixture
+        .query("MATCH (p:Person) RETURN UPPER(p.name) AS upper_name;")
+        .expect("Query failed");
 
     assert_eq!(result.rows.len(), 1);
     assert_eq!(result.variables.len(), 1);
@@ -162,12 +184,14 @@ fn test_json_format_with_math_functions() {
     setup_test_graph!(fixture);
 
     // Insert data
-    fixture.query("INSERT (:Number {value: 16});").expect("Insert failed");
+    fixture
+        .query("INSERT (:Number {value: 16});")
+        .expect("Insert failed");
 
     // Query with math function
-    let result = fixture.query(
-        "MATCH (n:Number) RETURN n.value, SQRT(n.value) AS sqrt_value;"
-    ).expect("Query failed");
+    let result = fixture
+        .query("MATCH (n:Number) RETURN n.value, SQRT(n.value) AS sqrt_value;")
+        .expect("Query failed");
 
     assert_eq!(result.rows.len(), 1);
     assert_eq!(result.variables.len(), 2);
@@ -181,7 +205,9 @@ fn test_json_format_empty_result() {
     setup_test_graph!(fixture);
 
     // Query with no results
-    let result = fixture.query("MATCH (p:Person) RETURN p.name;").expect("Query failed");
+    let result = fixture
+        .query("MATCH (p:Person) RETURN p.name;")
+        .expect("Query failed");
 
     // Should return empty rows array but variables should still be present
     assert_eq!(result.rows.len(), 0);
@@ -195,14 +221,14 @@ fn test_json_format_with_boolean_values() {
     setup_test_graph!(fixture);
 
     // Insert data with boolean
-    fixture.query(
-        "INSERT (:Account {active: true, verified: false});"
-    ).expect("Insert failed");
+    fixture
+        .query("INSERT (:Account {active: true, verified: false});")
+        .expect("Insert failed");
 
     // Query boolean values
-    let result = fixture.query(
-        "MATCH (a:Account) RETURN a.active, a.verified;"
-    ).expect("Query failed");
+    let result = fixture
+        .query("MATCH (a:Account) RETURN a.active, a.verified;")
+        .expect("Query failed");
 
     assert_eq!(result.rows.len(), 1);
     assert_eq!(result.variables.len(), 2);
@@ -221,10 +247,12 @@ fn test_json_format_with_multi_hop_query() {
     ).expect("Insert failed");
 
     // Multi-hop query
-    let result = fixture.query(
-        "MATCH (a:Person {name: 'Alice'})-[:KNOWS]->(b)-[:KNOWS]->(c) \
-         RETURN c.name AS friend_of_friend;"
-    ).expect("Query failed");
+    let result = fixture
+        .query(
+            "MATCH (a:Person {name: 'Alice'})-[:KNOWS]->(b)-[:KNOWS]->(c) \
+         RETURN c.name AS friend_of_friend;",
+        )
+        .expect("Query failed");
 
     assert_eq!(result.rows.len(), 1);
     assert_eq!(result.variables.len(), 1);
@@ -237,17 +265,19 @@ fn test_json_format_with_limit() {
     setup_test_graph!(fixture);
 
     // Insert multiple records in one statement
-    fixture.query(
-        "INSERT (:Person {id: 1}), (:Person {id: 2}), (:Person {id: 3}), \
+    fixture
+        .query(
+            "INSERT (:Person {id: 1}), (:Person {id: 2}), (:Person {id: 3}), \
                 (:Person {id: 4}), (:Person {id: 5}), (:Person {id: 6}), \
                 (:Person {id: 7}), (:Person {id: 8}), (:Person {id: 9}), \
-                (:Person {id: 10});"
-    ).expect("Insert failed");
+                (:Person {id: 10});",
+        )
+        .expect("Insert failed");
 
     // Query with LIMIT
-    let result = fixture.query(
-        "MATCH (p:Person) RETURN p.id LIMIT 3;"
-    ).expect("Query failed");
+    let result = fixture
+        .query("MATCH (p:Person) RETURN p.id LIMIT 3;")
+        .expect("Query failed");
 
     // Should return exactly 3 rows
     assert_eq!(result.rows.len(), 3);
@@ -260,16 +290,18 @@ fn test_json_format_with_order_by() {
     setup_test_graph!(fixture);
 
     // Insert data
-    fixture.query(
-        "INSERT (:Person {name: 'Charlie', age: 35}), \
+    fixture
+        .query(
+            "INSERT (:Person {name: 'Charlie', age: 35}), \
                 (:Person {name: 'Alice', age: 30}), \
-                (:Person {name: 'Bob', age: 25});"
-    ).expect("Insert failed");
+                (:Person {name: 'Bob', age: 25});",
+        )
+        .expect("Insert failed");
 
     // Query with ORDER BY
-    let result = fixture.query(
-        "MATCH (p:Person) RETURN p.name, p.age ORDER BY p.age ASC;"
-    ).expect("Query failed");
+    let result = fixture
+        .query("MATCH (p:Person) RETURN p.name, p.age ORDER BY p.age ASC;")
+        .expect("Query failed");
 
     assert_eq!(result.rows.len(), 3);
     assert_eq!(result.variables.len(), 2);
@@ -286,10 +318,14 @@ fn test_json_format_raw_output_structure() {
     setup_test_graph!(fixture);
 
     // Insert data
-    fixture.query("INSERT (:Person {name: 'Alice', age: 30});").expect("Insert failed");
+    fixture
+        .query("INSERT (:Person {name: 'Alice', age: 30});")
+        .expect("Insert failed");
 
     // Execute query
-    let result = fixture.query("MATCH (p:Person) RETURN p.name, p.age;").expect("Query failed");
+    let result = fixture
+        .query("MATCH (p:Person) RETURN p.name, p.age;")
+        .expect("Query failed");
 
     // Verify QueryResult structure (this is what gets serialized to JSON in CLI)
     assert_eq!(result.variables.len(), 2);

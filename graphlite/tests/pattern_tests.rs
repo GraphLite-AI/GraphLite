@@ -902,7 +902,10 @@ fn test_with_and_next_composition() {
             // Verify columns from final RETURN
             if let Some(first_row) = r.rows.first() {
                 eprintln!("DEBUG: Available columns: {:?}", r.variables);
-                eprintln!("DEBUG: First row values: {:?}", first_row.values.keys().collect::<Vec<_>>());
+                eprintln!(
+                    "DEBUG: First row values: {:?}",
+                    first_row.values.keys().collect::<Vec<_>>()
+                );
                 assert!(
                     first_row.values.contains_key("account_id"),
                     "Should have account_id"

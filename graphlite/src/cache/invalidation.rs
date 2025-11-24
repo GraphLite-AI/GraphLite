@@ -200,10 +200,7 @@ impl InvalidationManager {
 
         {
             let mut reverse_deps = self.reverse_deps.write().unwrap();
-            reverse_deps
-                .entry(dep_key)
-                .or_default()
-                .insert(entry_key);
+            reverse_deps.entry(dep_key).or_default().insert(entry_key);
         }
     }
 

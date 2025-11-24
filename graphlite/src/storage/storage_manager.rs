@@ -26,8 +26,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 /// Storage method configuration
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
 pub enum StorageMethod {
     /// Disk-based storage only (RocksDB/Sled)
     #[default]
@@ -37,7 +36,6 @@ pub enum StorageMethod {
     /// Both disk and memory storage for redundancy
     DiskAndMemory,
 }
-
 
 /// Storage manager that orchestrates all storage tiers
 #[derive(Clone)]
