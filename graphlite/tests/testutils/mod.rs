@@ -6,6 +6,8 @@
 //!
 //! Both provide schema isolation for test independence.
 
+#![allow(dead_code)]
+
 pub mod cli_fixture;
 pub mod sample_data_generator;
 pub mod test_fixture;

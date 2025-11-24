@@ -901,6 +901,11 @@ fn test_with_and_next_composition() {
 
             // Verify columns from final RETURN
             if let Some(first_row) = r.rows.first() {
+                eprintln!("DEBUG: Available columns: {:?}", r.variables);
+                eprintln!(
+                    "DEBUG: First row values: {:?}",
+                    first_row.values.keys().collect::<Vec<_>>()
+                );
                 assert!(
                     first_row.values.contains_key("account_id"),
                     "Should have account_id"
@@ -931,7 +936,10 @@ fn test_with_and_next_composition() {
                 );
             }
         }
-        Err(e) => log::debug!("❌ NEXT chaining failed: {:?}", e),
+        Err(e) => {
+            eprintln!("DEBUG: NEXT chaining error: {:?}", e);
+            log::debug!("❌ NEXT chaining failed: {:?}", e);
+        }
     }
 
     // Test 3: Combined WITH and NEXT (both intra-query and inter-query)

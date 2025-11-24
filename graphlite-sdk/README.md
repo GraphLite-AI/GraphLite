@@ -85,7 +85,7 @@ let result = session.query("MATCH (n:Person) RETURN n")?;
 Or for statements that don't return results:
 
 ```rust
-session.execute("CREATE (p:Person {name: 'Alice'})")?;
+session.execute("INSERT (:Person {name: 'Alice'})")?;
 ```
 
 ### Transactions
@@ -95,14 +95,13 @@ Transactions follow the rusqlite pattern with automatic rollback:
 ```rust
 // Transaction with explicit commit
 let mut tx = session.transaction()?;
-tx.execute("CREATE (p:Person {name: 'Alice'})")?;
-tx.execute("CREATE (p:Person {name: 'Bob'})")?;
+tx.execute("INSERT (:Person {name: 'Alice'}), (:Person {name: 'Bob'})")?;
 tx.commit()?;  // Persist changes
 
 // Transaction with automatic rollback
 {
     let mut tx = session.transaction()?;
-    tx.execute("CREATE (p:Person {name: 'Charlie'})")?;
+    tx.execute("INSERT (:Person {name: 'Charlie'})")?;
     // tx is dropped here - changes are automatically rolled back
 }
 ```
@@ -156,9 +155,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     session.execute("CREATE GRAPH social")?;
     session.execute("USE GRAPH social")?;
 
-    // Create nodes
-    session.execute("CREATE (p:Person {name: 'Alice', age: 30})")?;
-    session.execute("CREATE (p:Person {name: 'Bob', age: 25})")?;
+    // Create nodes (multiple in one INSERT statement)
+    session.execute("INSERT (:Person {name: 'Alice', age: 30}), (:Person {name: 'Bob', age: 25})")?;
 
     // Create relationships
     session.execute(
