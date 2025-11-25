@@ -56,11 +56,7 @@ fn print_statement(statement: &Statement, indent: usize) {
         }
         Statement::AtLocation(at_stmt) => {
             debug!("{}{}", get_indent(indent), "At Location Statement");
-            debug!(
-                "{}Path: {}",
-                get_indent(indent + 1),
-                at_stmt.location_path
-            );
+            debug!("{}Path: {}", get_indent(indent + 1), at_stmt.location_path);
             debug!(
                 "{}Statements: {}",
                 get_indent(indent + 1),

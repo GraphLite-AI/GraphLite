@@ -1272,7 +1272,10 @@ impl PhysicalNode {
                 // The execution will be handled specially
             }
 
-            PhysicalNode::Unwind { input: Some(input_node), .. } => {
+            PhysicalNode::Unwind {
+                input: Some(input_node),
+                ..
+            } => {
                 operators.extend(input_node.get_operators());
             }
 

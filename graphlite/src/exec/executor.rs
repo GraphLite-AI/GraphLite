@@ -3142,14 +3142,12 @@ impl QueryExecutor {
                 patterns: vec![crate::ast::PathPattern {
                     assignment: None, // No path assignment
                     path_type: None,  // Default path type
-                    elements: vec![crate::ast::PatternElement::Node(
-                        crate::ast::Node {
-                            identifier: Some("n".to_string()),
-                            labels: vec![],
-                            properties: None,
-                            location: crate::ast::Location::default(),
-                        },
-                    )],
+                    elements: vec![crate::ast::PatternElement::Node(crate::ast::Node {
+                        identifier: Some("n".to_string()),
+                        labels: vec![],
+                        properties: None,
+                        location: crate::ast::Location::default(),
+                    })],
                     location: crate::ast::Location::default(),
                 }],
                 location: crate::ast::Location::default(),
@@ -4087,16 +4085,15 @@ impl QueryExecutor {
                         context.set_variable(temp_var_name.clone(), left_value.clone());
 
                         // Create a temporary expression that uses our computed value instead of count(*)
-                        let temp_condition =
-                            Expression::Binary(crate::ast::BinaryExpression {
-                                left: Box::new(Expression::Variable(Variable {
-                                    name: temp_var_name,
-                                    location: Location::default(),
-                                })),
-                                operator: binary_expr.operator.clone(),
-                                right: binary_expr.right.clone(),
+                        let temp_condition = Expression::Binary(crate::ast::BinaryExpression {
+                            left: Box::new(Expression::Variable(Variable {
+                                name: temp_var_name,
                                 location: Location::default(),
-                            });
+                            })),
+                            operator: binary_expr.operator.clone(),
+                            right: binary_expr.right.clone(),
+                            location: Location::default(),
+                        });
 
                         let result = self.evaluate_expression(&temp_condition, context)?;
                         return Ok(result.as_boolean().unwrap_or(false));
@@ -4581,7 +4578,9 @@ impl QueryExecutor {
                 }
 
                 // If not found, try to access property from the node variable directly
-                if let Some(crate::storage::Value::Node(node)) = context.get_variable(&prop_access.object).as_ref() {
+                if let Some(crate::storage::Value::Node(node)) =
+                    context.get_variable(&prop_access.object).as_ref()
+                {
                     if let Some(prop_value) = node.properties.get(&prop_access.property) {
                         return Ok(prop_value.clone());
                     }
@@ -5124,10 +5123,7 @@ impl QueryExecutor {
     }
 
     /// Evaluate a literal value
-    fn evaluate_literal(
-        &self,
-        literal: &crate::ast::Literal,
-    ) -> Result<Value, ExecutionError> {
+    fn evaluate_literal(&self, literal: &crate::ast::Literal) -> Result<Value, ExecutionError> {
         match literal {
             crate::ast::Literal::String(s) => Ok(Value::String(s.clone())),
             crate::ast::Literal::Integer(i) => Ok(Value::Number(*i as f64)),
@@ -6943,9 +6939,7 @@ impl QueryExecutor {
                 let graph_arc = Arc::new(graph);
                 self.execute_with_graph(&plan, &graph_arc, context)
             }
-            crate::ast::Query::SetOperation(set_op) => {
-                self.execute_set_operation(set_op, context)
-            }
+            crate::ast::Query::SetOperation(set_op) => self.execute_set_operation(set_op, context),
             crate::ast::Query::Limited {
                 query,
                 order_clause,
@@ -6980,10 +6974,7 @@ impl QueryExecutor {
                         limit_clause: with_query.limit_clause.clone(),
                         location: with_query.location.clone(),
                     };
-                    self.execute_query_recursive(
-                        &crate::ast::Query::Basic(basic_query),
-                        context,
-                    )
+                    self.execute_query_recursive(&crate::ast::Query::Basic(basic_query), context)
                 } else {
                     Err(ExecutionError::InvalidQuery(
                         "WITH query has no segments".to_string(),
@@ -7980,10 +7971,7 @@ impl QueryExecutor {
 
     /// Infer the type of a literal value
     #[allow(dead_code)] // ROADMAP v0.5.0 - Literal type inference for static analysis
-    fn infer_literal_type(
-        &self,
-        literal: &crate::ast::Literal,
-    ) -> Result<GqlType, ExecutionError> {
+    fn infer_literal_type(&self, literal: &crate::ast::Literal) -> Result<GqlType, ExecutionError> {
         match literal {
             crate::ast::Literal::String(_) => Ok(GqlType::String { max_length: None }),
             crate::ast::Literal::Integer(_) => Ok(GqlType::BigInt),
@@ -8793,9 +8781,7 @@ impl QueryExecutor {
                 matches!(subject_value, Value::Null)
             }
 
-            crate::ast::IsPredicateType::Normalized => {
-                self.check_normalized(&subject_value)?
-            }
+            crate::ast::IsPredicateType::Normalized => self.check_normalized(&subject_value)?,
 
             crate::ast::IsPredicateType::Directed => {
                 // For now, return false as we don't have full edge representation

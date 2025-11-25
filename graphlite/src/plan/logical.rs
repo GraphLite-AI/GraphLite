@@ -420,14 +420,13 @@ impl LogicalPlan {
                                                 },
                                             );
 
-                                            let filter_condition = Expression::Binary(
-                                                crate::ast::BinaryExpression {
+                                            let filter_condition =
+                                                Expression::Binary(crate::ast::BinaryExpression {
                                                     left: Box::new(property_access),
                                                     operator: crate::ast::Operator::Equal,
                                                     right: Box::new(property.value.clone()),
                                                     location: crate::ast::Location::default(),
-                                                },
-                                            );
+                                                });
 
                                             let filter = LogicalNode::Filter {
                                                 condition: filter_condition,

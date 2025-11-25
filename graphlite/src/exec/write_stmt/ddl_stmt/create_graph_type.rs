@@ -135,9 +135,7 @@ impl CreateGraphTypeExecutor {
                                 crate::ast::TypeSpec::Boolean => DataType::Boolean,
                                 crate::ast::TypeSpec::Date => DataType::Date,
                                 crate::ast::TypeSpec::LocalTime { .. } => DataType::Time,
-                                crate::ast::TypeSpec::LocalDateTime { .. } => {
-                                    DataType::DateTime
-                                }
+                                crate::ast::TypeSpec::LocalDateTime { .. } => DataType::DateTime,
                                 _ => DataType::String, // Default to string for unsupported types
                             };
 
@@ -204,9 +202,7 @@ impl CreateGraphTypeExecutor {
                                 crate::ast::TypeSpec::Boolean => DataType::Boolean,
                                 crate::ast::TypeSpec::Date => DataType::Date,
                                 crate::ast::TypeSpec::LocalTime { .. } => DataType::Time,
-                                crate::ast::TypeSpec::LocalDateTime { .. } => {
-                                    DataType::DateTime
-                                }
+                                crate::ast::TypeSpec::LocalDateTime { .. } => DataType::DateTime,
                                 _ => DataType::String,
                             };
 

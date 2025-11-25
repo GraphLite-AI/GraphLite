@@ -108,8 +108,7 @@ impl DataStatementExecutor for DeleteExecutor {
 
                     // For now, we only support simple node patterns, not full path patterns
                     if pattern.elements.len() == 1 {
-                        if let crate::ast::PatternElement::Node(node_pattern) =
-                            &pattern.elements[0]
+                        if let crate::ast::PatternElement::Node(node_pattern) = &pattern.elements[0]
                         {
                             // Collect nodes that match the pattern
                             let node_ids_to_delete: Vec<String> = graph

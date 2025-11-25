@@ -1419,24 +1419,16 @@ impl QueryPlanner {
                     location: func_call.location.clone(),
                 })
             }
-            Expression::Binary(binary_expr) => {
-                Expression::Binary(crate::ast::BinaryExpression {
-                    left: Box::new(
-                        self.resolve_having_expression_with_aliases(
-                            &binary_expr.left,
-                            return_clause,
-                        ),
-                    ),
-                    operator: binary_expr.operator.clone(),
-                    right: Box::new(
-                        self.resolve_having_expression_with_aliases(
-                            &binary_expr.right,
-                            return_clause,
-                        ),
-                    ),
-                    location: binary_expr.location.clone(),
-                })
-            }
+            Expression::Binary(binary_expr) => Expression::Binary(crate::ast::BinaryExpression {
+                left: Box::new(
+                    self.resolve_having_expression_with_aliases(&binary_expr.left, return_clause),
+                ),
+                operator: binary_expr.operator.clone(),
+                right: Box::new(
+                    self.resolve_having_expression_with_aliases(&binary_expr.right, return_clause),
+                ),
+                location: binary_expr.location.clone(),
+            }),
             Expression::Unary(unary_expr) => {
                 Expression::Unary(crate::ast::UnaryExpression {
                     operator: unary_expr.operator.clone(),
@@ -2750,12 +2742,10 @@ impl QueryPlanner {
                 return_clause: crate::ast::ReturnClause {
                     distinct: crate::ast::DistinctQualifier::None,
                     items: vec![crate::ast::ReturnItem {
-                        expression: crate::ast::Expression::Variable(
-                            crate::ast::Variable {
-                                name: "*".to_string(),
-                                location: Default::default(),
-                            },
-                        ),
+                        expression: crate::ast::Expression::Variable(crate::ast::Variable {
+                            name: "*".to_string(),
+                            location: Default::default(),
+                        }),
                         alias: None,
                         location: Default::default(),
                     }],

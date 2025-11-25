@@ -849,9 +849,8 @@ impl DataStatementExecutor for MatchSetExecutor {
                                     // Extract labels from LabelExpression
                                     for term in &labels.terms {
                                         for factor in &term.factors {
-                                            if let crate::ast::LabelFactor::Identifier(
-                                                new_label,
-                                            ) = factor
+                                            if let crate::ast::LabelFactor::Identifier(new_label) =
+                                                factor
                                             {
                                                 if !node_mut.labels.contains(new_label) {
                                                     node_mut.labels.push(new_label.clone());

@@ -1177,8 +1177,7 @@ fn validate_expression(
             }
 
             // Validate label expression if it's a label predicate
-            if let crate::ast::IsPredicateType::Label(ref label_expr) =
-                is_predicate.predicate_type
+            if let crate::ast::IsPredicateType::Label(ref label_expr) = is_predicate.predicate_type
             {
                 // Label expressions are already validated as part of their structure
                 // but we can add specific label validation here if needed
@@ -1357,7 +1356,9 @@ fn validate_cast_expression(
 
     // Validate that the target type is well-formed
     match &cast_expr.target_type {
-        GqlType::String { max_length: Some(len) } => {
+        GqlType::String {
+            max_length: Some(len),
+        } => {
             if *len == 0 {
                 errors.push(ValidationError {
                     message: "String type cannot have max_length of 0".to_string(),

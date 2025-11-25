@@ -320,8 +320,9 @@ impl InferredLabelsFunction {
         }
 
         // Project indicators
-        if (properties.contains("budget") && properties.contains("status")) ||
-            (properties.contains("start_date") && properties.contains("budget")) {
+        if (properties.contains("budget") && properties.contains("status"))
+            || (properties.contains("start_date") && properties.contains("budget"))
+        {
             labels.push("Project".to_string());
         }
 

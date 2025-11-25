@@ -361,7 +361,6 @@ pub struct SecurityCatalog {
 
 impl SecurityCatalog {
     /// Create a new security catalog provider
-    #[allow(clippy::new_ret_no_self)]
     pub fn new() -> Box<dyn CatalogProvider> {
         let mut catalog = Self {
             users: HashMap::new(),
