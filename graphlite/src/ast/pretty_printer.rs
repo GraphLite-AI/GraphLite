@@ -5,7 +5,7 @@
 
 use log::debug;
 
-use crate::ast::ast::*;
+use crate::ast::*;
 
 /// Pretty print an AST Document with indented tree structure and debug logging
 pub fn pretty_print_ast(document: &Document) {
@@ -56,11 +56,7 @@ fn print_statement(statement: &Statement, indent: usize) {
         }
         Statement::AtLocation(at_stmt) => {
             debug!("{}{}", get_indent(indent), "At Location Statement");
-            debug!(
-                "{}Path: {}",
-                get_indent(indent + 1),
-                at_stmt.location_path.to_string()
-            );
+            debug!("{}Path: {}", get_indent(indent + 1), at_stmt.location_path);
             debug!(
                 "{}Statements: {}",
                 get_indent(indent + 1),
@@ -93,27 +89,27 @@ fn print_statement(statement: &Statement, indent: usize) {
         Statement::IndexStatement(index_stmt) => {
             debug!("{}{}", get_indent(indent), "Index Statement");
             match index_stmt {
-                crate::ast::ast::IndexStatement::CreateIndex(create_idx) => {
+                crate::ast::IndexStatement::Create(create_idx) => {
                     debug!(
                         "{}CREATE INDEX: {}",
                         get_indent(indent + 1),
                         create_idx.name
                     );
                 }
-                crate::ast::ast::IndexStatement::DropIndex(drop_idx) => {
+                crate::ast::IndexStatement::Drop(drop_idx) => {
                     debug!("{}DROP INDEX: {}", get_indent(indent + 1), drop_idx.name);
                 }
-                crate::ast::ast::IndexStatement::AlterIndex(alter_idx) => {
+                crate::ast::IndexStatement::Alter(alter_idx) => {
                     debug!("{}ALTER INDEX: {}", get_indent(indent + 1), alter_idx.name);
                 }
-                crate::ast::ast::IndexStatement::OptimizeIndex(optimize_idx) => {
+                crate::ast::IndexStatement::Optimize(optimize_idx) => {
                     debug!(
                         "{}OPTIMIZE INDEX: {}",
                         get_indent(indent + 1),
                         optimize_idx.name
                     );
                 }
-                crate::ast::ast::IndexStatement::ReindexIndex(reindex) => {
+                crate::ast::IndexStatement::Reindex(reindex) => {
                     debug!("{}REINDEX: {}", get_indent(indent + 1), reindex.name);
                 }
             }
@@ -466,7 +462,7 @@ fn print_expression(expr: &Expression, indent: usize) {
         Expression::Case(case_expr) => {
             debug!("{}CaseExpression", get_indent(indent));
             match &case_expr.case_type {
-                crate::ast::ast::CaseType::Simple(simple) => {
+                crate::ast::CaseType::Simple(simple) => {
                     debug!("{}Simple CASE", get_indent(indent + 1));
                     debug!("{}Test Expression:", get_indent(indent + 2));
                     print_expression(&simple.test_expression, indent + 3);
@@ -494,7 +490,7 @@ fn print_expression(expr: &Expression, indent: usize) {
                         print_expression(else_expr, indent + 3);
                     }
                 }
-                crate::ast::ast::CaseType::Searched(searched) => {
+                crate::ast::CaseType::Searched(searched) => {
                     debug!("{}Searched CASE", get_indent(indent + 1));
                     debug!(
                         "{}WHEN branches: {}",
@@ -689,7 +685,7 @@ fn print_from_graph_expression(graph_expr: &FromGraphExpression, indent: usize) 
 fn print_graph_expression(graph_expr: &GraphExpression, indent: usize) {
     match graph_expr {
         GraphExpression::Reference(path) => {
-            debug!("{}Reference: {}", get_indent(indent), path.to_string());
+            debug!("{}Reference: {}", get_indent(indent), path);
         }
         GraphExpression::Union { left, right, all } => {
             debug!("{}Union (ALL: {})", get_indent(indent), all);

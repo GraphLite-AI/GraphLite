@@ -166,10 +166,8 @@ impl UnwindPreprocessor {
             let mut prices = vec![];
             for item in &items {
                 if let Value::Node(node_ref) = item {
-                    if let Some(price_value) = node_ref.properties.get("price") {
-                        if let Value::Number(price) = price_value {
-                            prices.push(*price);
-                        }
+                    if let Some(Value::Number(price)) = node_ref.properties.get("price") {
+                        prices.push(*price);
                     }
                 }
             }

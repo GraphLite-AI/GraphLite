@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // TODO: Implement DropGraphTypeExecutor
-use crate::ast::ast::DropGraphTypeStatement;
+use crate::ast::DropGraphTypeStatement;
 use crate::catalog::manager::CatalogManager;
 use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
 use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};

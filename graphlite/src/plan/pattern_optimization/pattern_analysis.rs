@@ -10,7 +10,7 @@ use petgraph::Graph;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::ast::ast::{Edge, PathPattern};
+use crate::ast::{Edge, PathPattern};
 
 /// Analysis result for a set of patterns, capturing their connectivity
 ///
@@ -182,14 +182,14 @@ impl LinearPath {
         // Add variables from start pattern
         for element in &start_pattern.elements {
             match element {
-                crate::ast::ast::PatternElement::Node(node) => {
+                crate::ast::PatternElement::Node(node) => {
                     if let Some(ref id) = node.identifier {
                         if !variables.contains(id) {
                             variables.push(id.clone());
                         }
                     }
                 }
-                crate::ast::ast::PatternElement::Edge(edge) => {
+                crate::ast::PatternElement::Edge(edge) => {
                     if let Some(ref id) = edge.identifier {
                         if !variables.contains(id) {
                             variables.push(id.clone());
@@ -326,7 +326,7 @@ impl JoinType {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::ast::{Location, Node};
+    use crate::ast::{Location, Node};
 
     #[test]
     fn test_pattern_connectivity_creation() {
@@ -339,7 +339,7 @@ mod tests {
 
     #[test]
     fn test_linear_path_variables() {
-        use crate::ast::ast::{Location, PatternElement};
+        use crate::ast::{Location, PatternElement};
 
         // Create a simple pattern: (a)-[:R]->(b)
         let start_pattern = PathPattern {
@@ -356,7 +356,7 @@ mod tests {
                     identifier: Some("r".to_string()),
                     labels: vec!["R".to_string()],
                     properties: None,
-                    direction: crate::ast::ast::EdgeDirection::Outgoing,
+                    direction: crate::ast::EdgeDirection::Outgoing,
                     quantifier: None,
                     location: Location::default(),
                 }),
@@ -376,7 +376,7 @@ mod tests {
                 identifier: Some("r2".to_string()),
                 labels: vec!["R2".to_string()],
                 properties: None,
-                direction: crate::ast::ast::EdgeDirection::Outgoing,
+                direction: crate::ast::EdgeDirection::Outgoing,
                 quantifier: None,
                 location: Location::default(),
             },
@@ -419,7 +419,7 @@ mod tests {
                     identifier: Some("r".to_string()),
                     labels: vec![],
                     properties: None,
-                    direction: crate::ast::ast::EdgeDirection::Outgoing,
+                    direction: crate::ast::EdgeDirection::Outgoing,
                     quantifier: None,
                     location: Location::default(),
                 },

@@ -117,7 +117,7 @@ impl RecoveryManager {
                     break;
                 }
                 Err(e) => {
-                    return Err(RecoveryError::WALReadError(e.to_string()));
+                    return Err(RecoveryError::WALRead(e.to_string()));
                 }
             }
         }
@@ -151,7 +151,7 @@ impl RecoveryManager {
         let txn_id = entry.transaction_id;
 
         match entry.entry_type {
-            WALEntryType::TransactionBegin => {
+            WALEntryType::Begin => {
                 let state = TransactionRecoveryState {
                     transaction_id: txn_id,
                     status: RecoveryStatus::InProgress,
@@ -162,21 +162,21 @@ impl RecoveryManager {
                 self.recovered_transactions.insert(txn_id, state);
             }
 
-            WALEntryType::TransactionCommit => {
+            WALEntryType::Commit => {
                 if let Some(state) = self.recovered_transactions.get_mut(&txn_id) {
                     state.status = RecoveryStatus::Committed;
                     state.end_time = Some(DateTime::<Utc>::from(entry.timestamp));
                 }
             }
 
-            WALEntryType::TransactionRollback => {
+            WALEntryType::Rollback => {
                 if let Some(state) = self.recovered_transactions.get_mut(&txn_id) {
                     state.status = RecoveryStatus::RolledBack;
                     state.end_time = Some(DateTime::<Utc>::from(entry.timestamp));
                 }
             }
 
-            WALEntryType::TransactionOperation => {
+            WALEntryType::Operation => {
                 if let Some(state) = self.recovered_transactions.get_mut(&txn_id) {
                     state.operations.push(entry);
                 }
@@ -353,23 +353,23 @@ impl RecoveryReport {
 /// Recovery-specific errors
 #[derive(Debug)]
 pub enum RecoveryError {
-    WALReadError(String),
+    WALRead(String),
     #[allow(dead_code)]
     // ROADMAP v0.3.0 - ARIES-style crash recovery error handling (see ROADMAP.md §3)
-    OperationReplayError(String),
+    OperationReplay(String),
     #[allow(dead_code)]
     // ROADMAP v0.3.0 - ARIES-style crash recovery error handling (see ROADMAP.md §3)
-    StorageError(String),
+    Storage(String),
 }
 
 impl std::fmt::Display for RecoveryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RecoveryError::WALReadError(msg) => write!(f, "WAL Read Error: {}", msg),
-            RecoveryError::OperationReplayError(msg) => {
+            RecoveryError::WALRead(msg) => write!(f, "WAL Read Error: {}", msg),
+            RecoveryError::OperationReplay(msg) => {
                 write!(f, "Operation Replay Error: {}", msg)
             }
-            RecoveryError::StorageError(msg) => write!(f, "Storage Error: {}", msg),
+            RecoveryError::Storage(msg) => write!(f, "Storage Error: {}", msg),
         }
     }
 }

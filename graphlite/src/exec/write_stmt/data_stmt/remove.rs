@@ -3,7 +3,7 @@
 //
 use std::collections::HashMap;
 
-use crate::ast::ast::{LabelFactor, RemoveItem, RemoveStatement};
+use crate::ast::{LabelFactor, RemoveItem, RemoveStatement};
 use crate::exec::write_stmt::data_stmt::DataStatementExecutor;
 use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
 use crate::exec::ExecutionError;

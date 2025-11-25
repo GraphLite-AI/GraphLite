@@ -3,7 +3,7 @@
 //
 use std::collections::HashMap;
 
-use crate::ast::ast::{SetItem, SetStatement};
+use crate::ast::{SetItem, SetStatement};
 use crate::exec::write_stmt::data_stmt::DataStatementExecutor;
 use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
 use crate::exec::ExecutionError;
@@ -49,18 +49,15 @@ impl DataStatementExecutor for SetExecutor {
         // This ensures that if any expression fails, we fail the entire SET operation atomically
         let mut evaluated_properties = Vec::new();
         for item in &self.statement.items {
-            match item {
-                SetItem::PropertyAssignment { property, value } => {
-                    // Evaluate the value - fail immediately if invalid (no partial updates!)
-                    let new_value = context.evaluate_simple_expression(value).map_err(|e| {
-                        ExecutionError::ExpressionError(format!(
-                            "Failed to evaluate SET property '{}': {}. Transaction aborted.",
-                            property.property, e
-                        ))
-                    })?;
-                    evaluated_properties.push((property.clone(), new_value));
-                }
-                _ => {} // Handle other item types separately
+            if let SetItem::Property { property, value } = item {
+                // Evaluate the value - fail immediately if invalid (no partial updates!)
+                let new_value = context.evaluate_simple_expression(value).map_err(|e| {
+                    ExecutionError::ExpressionError(format!(
+                        "Failed to evaluate SET property '{}': {}. Transaction aborted.",
+                        property.property, e
+                    ))
+                })?;
+                evaluated_properties.push((property.clone(), new_value));
             }
         }
 
@@ -110,17 +107,17 @@ impl DataStatementExecutor for SetExecutor {
         // Handle other SET item types (TODO: these should also be transactional)
         for item in &self.statement.items {
             match item {
-                SetItem::PropertyAssignment { .. } => {
+                SetItem::Property { .. } => {
                     // Already handled above
                 }
-                SetItem::VariableAssignment { variable, value } => {
+                SetItem::Variable { variable, value } => {
                     log::warn!(
                         "Variable assignment in SET not yet fully supported: {} = {:?}",
                         variable,
                         value
                     );
                 }
-                SetItem::LabelAssignment { variable, labels } => {
+                SetItem::Label { variable, labels } => {
                     log::warn!(
                         "Label assignment in SET not yet fully supported: {} {:?}",
                         variable,

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // DropUserExecutor - Implements DROP USER statement execution
-use crate::ast::ast::DropUserStatement;
+use crate::ast::DropUserStatement;
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::{CatalogOperation, EntityType};
 use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;

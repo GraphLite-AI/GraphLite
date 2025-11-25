@@ -20,7 +20,7 @@ pub use self::inference::TypeInferenceEngine as TypeInference;
 pub use self::validation::TypeValidator;
 
 // Re-export TypeSpec as the main type for the type system
-pub use crate::ast::ast::{GraphTypeSpec, TypeSpec as GqlType};
+pub use crate::ast::{GraphTypeSpec, TypeSpec as GqlType};
 
 /// Type error for type system operations
 #[derive(Debug, Clone)]

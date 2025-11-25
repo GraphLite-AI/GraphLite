@@ -74,8 +74,8 @@ impl CatalogRegistry {
     /// # Returns
     /// * `Some(&Box<dyn CatalogProvider>)` if catalog exists
     /// * `None` if catalog not found
-    pub fn get(&self, name: &str) -> Option<&Box<dyn CatalogProvider>> {
-        self.catalogs.get(name)
+    pub fn get(&self, name: &str) -> Option<&dyn CatalogProvider> {
+        self.catalogs.get(name).map(|b| b.as_ref())
     }
 
     /// Get mutable reference to a catalog provider

@@ -6,7 +6,7 @@
 //! This module provides cost estimation functionality for different pattern execution strategies.
 //! It helps the query planner choose between path traversal, joins, and Cartesian products.
 
-use crate::ast::ast::PathPattern;
+use crate::ast::PathPattern;
 use crate::plan::pattern_optimization::pattern_analysis::{
     JoinStep, LinearPath, PatternPlanStrategy,
 };
@@ -388,7 +388,7 @@ mod tests {
         let mut estimator = PlanCostEstimator::new(stats);
 
         // Test with a Cartesian product strategy (simpler to create)
-        use crate::ast::ast::{Location, PathPattern};
+        use crate::ast::{Location, PathPattern};
 
         let pattern = PathPattern {
             assignment: None,

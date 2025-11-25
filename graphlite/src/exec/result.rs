@@ -3,7 +3,7 @@
 //
 //! Query execution results for graph databases
 
-use crate::ast::ast::{CatalogPath, GraphExpression};
+use crate::ast::{CatalogPath, GraphExpression};
 use crate::storage::Value;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

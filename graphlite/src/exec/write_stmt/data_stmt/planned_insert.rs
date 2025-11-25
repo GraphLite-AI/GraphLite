@@ -3,7 +3,7 @@
 //
 use std::collections::HashMap;
 
-use crate::ast::ast::InsertStatement;
+use crate::ast::InsertStatement;
 use crate::exec::write_stmt::data_stmt::DataStatementExecutor;
 use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
 use crate::exec::ExecutionError;
@@ -78,8 +78,8 @@ impl StatementExecutor for PlannedInsertExecutor {
         for pattern in &self.statement.graph_patterns {
             for element in &pattern.elements {
                 match element {
-                    crate::ast::ast::PatternElement::Node(_) => node_count += 1,
-                    crate::ast::ast::PatternElement::Edge(_) => edge_count += 1,
+                    crate::ast::PatternElement::Node(_) => node_count += 1,
+                    crate::ast::PatternElement::Edge(_) => edge_count += 1,
                 }
             }
         }
@@ -87,9 +87,9 @@ impl StatementExecutor for PlannedInsertExecutor {
         // Generate meaningful message based on what's being created
         match (node_count, edge_count) {
             (0, 0) => "INSERT 0".to_string(),
-            (n, 0) if n == 1 => "Created 1 node".to_string(),
+            (1, 0) => "Created 1 node".to_string(),
             (n, 0) => format!("Created {} nodes", n),
-            (0, e) if e == 1 => "Created 1 relationship".to_string(),
+            (0, 1) => "Created 1 relationship".to_string(),
             (0, e) => format!("Created {} relationships", e),
             (1, 1) => "Created 1 node, 1 relationship".to_string(),
             (1, e) => format!("Created 1 node, {} relationships", e),

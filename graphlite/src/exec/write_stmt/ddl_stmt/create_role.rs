@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // CreateRoleExecutor - Implements CREATE ROLE statement execution
-use crate::ast::ast::CreateRoleStatement;
+use crate::ast::CreateRoleStatement;
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::{CatalogOperation, EntityType};
 use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;

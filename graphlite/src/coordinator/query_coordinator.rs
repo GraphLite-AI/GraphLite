@@ -174,7 +174,7 @@ impl QueryCoordinator {
         session_result: &crate::exec::SessionResult,
         session_id: &str,
     ) -> Result<(), String> {
-        use crate::ast::ast::GraphExpression;
+        use crate::ast::GraphExpression;
 
         match session_result {
             crate::exec::SessionResult::SetGraph {
@@ -548,11 +548,11 @@ impl QueryCoordinator {
 
         // Analyze the statement type
         let query_type = match &document.statement {
-            crate::ast::ast::Statement::Query(_) => QueryType::Match,
-            crate::ast::ast::Statement::Select(_) => QueryType::Select,
-            crate::ast::ast::Statement::Call(_) => QueryType::Call,
-            crate::ast::ast::Statement::CatalogStatement(cat) => {
-                use crate::ast::ast::CatalogStatement;
+            crate::ast::Statement::Query(_) => QueryType::Match,
+            crate::ast::Statement::Select(_) => QueryType::Select,
+            crate::ast::Statement::Call(_) => QueryType::Call,
+            crate::ast::Statement::CatalogStatement(cat) => {
+                use crate::ast::CatalogStatement;
                 match cat {
                     CatalogStatement::CreateSchema { .. } => QueryType::CreateSchema,
                     CatalogStatement::DropSchema { .. } => QueryType::DropSchema,
@@ -573,8 +573,8 @@ impl QueryCoordinator {
                     CatalogStatement::TruncateGraph { .. } => QueryType::TruncateGraph,
                 }
             }
-            crate::ast::ast::Statement::DataStatement(data) => {
-                use crate::ast::ast::DataStatement;
+            crate::ast::Statement::DataStatement(data) => {
+                use crate::ast::DataStatement;
                 match data {
                     DataStatement::Insert { .. } => QueryType::Insert,
                     DataStatement::Set { .. } => QueryType::Set,
@@ -586,20 +586,20 @@ impl QueryCoordinator {
                     DataStatement::MatchDelete { .. } => QueryType::MatchDelete,
                 }
             }
-            crate::ast::ast::Statement::SessionStatement(session) => {
-                use crate::ast::ast::{SessionSetClause, SessionStatement};
+            crate::ast::Statement::SessionStatement(session) => {
+                use crate::ast::{SessionSetClause, SessionStatement};
                 match session {
-                    SessionStatement::SessionSet(set_stmt) => match &set_stmt.clause {
+                    SessionStatement::Set(set_stmt) => match &set_stmt.clause {
                         SessionSetClause::Graph { .. } => QueryType::SessionSetGraph,
                         SessionSetClause::Schema { .. } => QueryType::SessionSetSchema,
                         _ => QueryType::SessionSet,
                     },
-                    SessionStatement::SessionReset(_) => QueryType::SessionReset,
-                    SessionStatement::SessionClose(_) => QueryType::SessionClose,
+                    SessionStatement::Reset(_) => QueryType::SessionReset,
+                    SessionStatement::Close(_) => QueryType::SessionClose,
                 }
             }
-            crate::ast::ast::Statement::TransactionStatement(txn) => {
-                use crate::ast::ast::TransactionStatement;
+            crate::ast::Statement::TransactionStatement(txn) => {
+                use crate::ast::TransactionStatement;
                 match txn {
                     TransactionStatement::StartTransaction(_) => QueryType::StartTransaction,
                     TransactionStatement::Commit(_) => QueryType::Commit,
@@ -609,21 +609,21 @@ impl QueryCoordinator {
                     }
                 }
             }
-            crate::ast::ast::Statement::IndexStatement(idx) => {
-                use crate::ast::ast::IndexStatement;
+            crate::ast::Statement::IndexStatement(idx) => {
+                use crate::ast::IndexStatement;
                 match idx {
-                    IndexStatement::CreateIndex { .. } => QueryType::CreateIndex,
-                    IndexStatement::DropIndex { .. } => QueryType::DropIndex,
-                    IndexStatement::AlterIndex(_) => QueryType::AlterIndex,
-                    IndexStatement::OptimizeIndex(_) => QueryType::OptimizeIndex,
-                    IndexStatement::ReindexIndex(_) => QueryType::ReindexIndex,
+                    IndexStatement::Create { .. } => QueryType::CreateIndex,
+                    IndexStatement::Drop { .. } => QueryType::DropIndex,
+                    IndexStatement::Alter(_) => QueryType::AlterIndex,
+                    IndexStatement::Optimize(_) => QueryType::OptimizeIndex,
+                    IndexStatement::Reindex(_) => QueryType::ReindexIndex,
                 }
             }
-            crate::ast::ast::Statement::Declare(_) => QueryType::Declare,
-            crate::ast::ast::Statement::Let(_) => QueryType::Let,
-            crate::ast::ast::Statement::Next(_) => QueryType::Next,
-            crate::ast::ast::Statement::AtLocation(_) => QueryType::AtLocation,
-            crate::ast::ast::Statement::ProcedureBody(_) => QueryType::ProcedureBody,
+            crate::ast::Statement::Declare(_) => QueryType::Declare,
+            crate::ast::Statement::Let(_) => QueryType::Let,
+            crate::ast::Statement::Next(_) => QueryType::Next,
+            crate::ast::Statement::AtLocation(_) => QueryType::AtLocation,
+            crate::ast::Statement::ProcedureBody(_) => QueryType::ProcedureBody,
         };
 
         // Determine if query is read-only
@@ -671,7 +671,7 @@ impl QueryCoordinator {
 
         // Only MATCH/SELECT queries can be explained (not DDL/DML)
         match &document.statement {
-            crate::ast::ast::Statement::Query(_) | crate::ast::ast::Statement::Select(_) => {
+            crate::ast::Statement::Query(_) | crate::ast::Statement::Select(_) => {
                 // Good - these can be explained
             }
             _ => {

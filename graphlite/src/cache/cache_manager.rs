@@ -152,8 +152,8 @@ impl CacheManager {
             super::cache_config::InvalidationStrategy::Manual => {
                 super::invalidation::InvalidationStrategy::Manual
             }
-            super::cache_config::InvalidationStrategy::TTL => {
-                super::invalidation::InvalidationStrategy::TTL {
+            super::cache_config::InvalidationStrategy::Ttl => {
+                super::invalidation::InvalidationStrategy::Ttl {
                     default_ttl: Duration::from_secs(3600),
                     max_ttl: Duration::from_secs(7200),
                 }

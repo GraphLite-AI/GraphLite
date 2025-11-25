@@ -489,9 +489,9 @@ impl TypeInferenceEngine {
     pub fn infer_unary_operation_type(
         &self,
         operand_type: &GqlType,
-        operator: &crate::ast::ast::Operator,
+        operator: &crate::ast::Operator,
     ) -> TypeResult<GqlType> {
-        use crate::ast::ast::Operator;
+        use crate::ast::Operator;
 
         match operator {
             Operator::Not => {

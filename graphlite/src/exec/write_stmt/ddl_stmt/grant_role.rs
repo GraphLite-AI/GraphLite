@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // GrantRoleExecutor - Implements GRANT ROLE statement execution
-use crate::ast::ast::GrantRoleStatement;
+use crate::ast::GrantRoleStatement;
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::{CatalogOperation, CatalogResponse, EntityType, QueryType};
 use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // DropRoleExecutor - Implements DROP ROLE statement execution
-use crate::ast::ast::DropRoleStatement;
+use crate::ast::DropRoleStatement;
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::{CatalogOperation, EntityType};
 use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
