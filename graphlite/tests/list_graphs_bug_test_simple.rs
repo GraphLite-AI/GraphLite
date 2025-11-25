@@ -42,6 +42,6 @@ fn test_list_graphs_bug_fix_simple() {
     );
 
     // Print the values to show they're real
-    if let graphlite::Value::String(name) = graph_name {}
-    if let graphlite::Value::String(schema) = schema_name {}
+    if let graphlite::Value::String(_name) = graph_name {}
+    if let graphlite::Value::String(_schema) = schema_name {}
 }

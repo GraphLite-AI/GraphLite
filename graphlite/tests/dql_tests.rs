@@ -556,7 +556,7 @@ fn test_performance_queries() {
     // Test large result set handling
     let start = std::time::Instant::now();
 
-    let result = fixture.assert_query_succeeds(
+    let _result = fixture.assert_query_succeeds(
         "MATCH (a:Account)-[t:Transaction]->(m:Merchant)
          RETURN a.id, m.name, t.amount, t.timestamp
          ORDER BY t.amount DESC",
