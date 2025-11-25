@@ -185,11 +185,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-**When to use the SDK:**
-- Building applications that need simple, clean API
-- You want automatic session and transaction management
-- You prefer SQLite-like ergonomics
-- You don't need fine-grained control over internal components
 
 **See also:** [SDK Examples](../graphlite-sdk/examples/) and [SDK README](../graphlite-sdk/README.md)
 
@@ -233,11 +228,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-**When to use the core library:**
-- You need fine-grained control over database internals
-- Building custom abstractions on top of GraphLite
-- Performance-critical applications requiring manual optimization
-- Advanced features not exposed in the SDK
 
 **See also:** [Core Library Examples](../examples-core/)
 
@@ -373,7 +363,7 @@ graphlite gql --path ./my_db -u admin -p secret
 
 ### Learn GQL Query Language
 
-📚 **[Getting Started With GQL.md](Getting%20Started%20With%20GQL.md)** - Complete GQL tutorial covering:
+**[Getting Started With GQL.md](Getting%20Started%20With%20GQL.md)** - Complete GQL tutorial covering:
 - Advanced pattern matching
 - Aggregations and grouping
 - String and date/time functions
@@ -384,106 +374,14 @@ graphlite gql --path ./my_db -u admin -p secret
 
 **SDK Examples (Recommended):**
 - [basic_usage.rs](../graphlite-sdk/examples/basic_usage.rs) - Complete SDK walkthrough
-- [transactions.rs](../graphlite-sdk/examples/transactions.rs) - Transaction management
 - [query_builder.rs](../graphlite-sdk/examples/query_builder.rs) - Query builder patterns
 
 **Core Library Examples (Advanced):**
 - [simple_graph.rs](../examples-core/simple_graph.rs) - Basic graph operations
 - [complex_queries.rs](../examples-core/complex_queries.rs) - Advanced querying
 
-### Use the CLI for Development
-
-For interactive development and testing, you can still use the GraphLite CLI:
-
-```bash
-# Clone and build to get the CLI tool
-git clone https://github.com/GraphLite-AI/GraphLite.git
-cd GraphLite
-cargo build --release
-
-# Use the interactive REPL for development
-./target/release/graphlite gql --path ./my_db -u admin -p secret
-```
-
-See [Quick Start.md](Quick%20Start.md) for CLI installation and usage.
-
----
-
-## Benefits of Using the Crate
-
-- **No build required** - Just add as a dependency
-- **Automatic updates** - Use `cargo update` to get latest version
-- **Smaller footprint** - Only compile what you need
-- **Standard Rust workflow** - Works like any other crate
-- **Version pinning** - Control exactly which version you use
-
----
-
-## Comparison: Crate vs Clone & Build
-
-| Aspect | Using Crate | Clone & Build |
-|--------|-------------|---------------|
-| **Setup Time** | ~30 seconds | ~5 minutes |
-| **Disk Space** | Minimal (only dependencies) | Full repository |
-| **Updates** | `cargo update` or `cargo install -f` | `git pull` + rebuild |
-| **Best For** | Application embedding, CLI install | Development, contributing |
-| **Requires** | Just `Cargo.toml` change or `cargo install` | Git clone + build |
-
-**Recommendation:**
-- Use `graphlite-rust-sdk` crate when embedding GraphLite in your Rust application (recommended)
-- Use `graphlite` crate for advanced/low-level usage in applications
-- Use `cargo install graphlite-cli` to get the CLI tool without cloning
-- Clone and build when contributing to GraphLite or need latest development features
-
----
-
-## Troubleshooting
-
-### Crate Version Not Found
-
-**Problem**: `cargo add graphlite` fails with "no matching package"
-
-**Solution**: Check that you have the latest cargo index:
-```bash
-cargo update
-cargo add graphlite
-```
-
-### Build Errors
-
-**Problem**: Compilation fails with linker errors
-
-**Solution**: Install build essentials (same as building from source):
-```bash
-# macOS
-xcode-select --install
-
-# Ubuntu/Debian
-sudo apt-get install build-essential
-
-# Fedora/RHEL
-sudo dnf groupinstall "Development Tools"
-```
-
-### Runtime Errors
-
-**Problem**: Database initialization fails
-
-**Solution**: Ensure the database directory path is writable:
-```rust
-// Use absolute paths for clarity
-let coordinator = QueryCoordinator::from_path("/absolute/path/to/db")?;
-
-// Or ensure relative path exists
-std::fs::create_dir_all("./my_db")?;
-let coordinator = QueryCoordinator::from_path("./my_db")?;
-```
-
----
 
 ## Getting Help
 
-- **Documentation**: [Getting Started With GQL.md](Getting%20Started%20With%20GQL.md)
-- **Examples**: [SDK Examples](../graphlite-sdk/examples/) | [Core Examples](../examples-core/)
 - **Issues**: [GitHub Issues](https://github.com/GraphLite-AI/GraphLite/issues)
 - **Contributing**: [CONTRIBUTING.md](../CONTRIBUTING.md)
