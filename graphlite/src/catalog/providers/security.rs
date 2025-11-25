@@ -238,8 +238,8 @@ pub enum Permission {
     AlterGraphType,
 
     // Administrative permissions
-    GrantPermission,
-    RevokePermission,
+    Grant,
+    Revoke,
 
     // Special permissions
     All, // Grants all permissions
@@ -247,7 +247,7 @@ pub enum Permission {
 
 /// Access Control Entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ACE {
+pub struct Ace {
     pub id: Uuid,
     pub principal_name: String,
     pub principal_type: PrincipalType,
@@ -258,7 +258,7 @@ pub struct ACE {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-impl ACE {
+impl Ace {
     pub fn new(
         principal_name: String,
         principal_type: PrincipalType,
@@ -340,7 +340,7 @@ impl ACE {
 struct SecurityCatalogState {
     users: HashMap<String, User>,
     roles: HashMap<String, Role>,
-    aces: HashMap<Uuid, ACE>,
+    aces: HashMap<Uuid, Ace>,
 }
 
 /// Security catalog provider
@@ -353,7 +353,7 @@ pub struct SecurityCatalog {
     roles: HashMap<String, Role>,
 
     /// Map of ACE ID to ACE
-    aces: HashMap<Uuid, ACE>,
+    aces: HashMap<Uuid, Ace>,
 
     /// Storage manager reference
     storage: Option<Arc<StorageManager>>,
@@ -361,6 +361,7 @@ pub struct SecurityCatalog {
 
 impl SecurityCatalog {
     /// Create a new security catalog provider
+    #[allow(clippy::new_ret_no_self)]
     pub fn new() -> Box<dyn CatalogProvider> {
         let mut catalog = Self {
             users: HashMap::new(),
@@ -418,7 +419,7 @@ impl SecurityCatalog {
     }
 
     /// Add an ACE to the catalog
-    fn add_ace(&mut self, ace: ACE) -> CatalogResult<()> {
+    fn add_ace(&mut self, ace: Ace) -> CatalogResult<()> {
         self.aces.insert(ace.id, ace);
         Ok(())
     }
@@ -538,7 +539,7 @@ impl SecurityCatalog {
     }
 
     /// Get ACEs for a resource
-    fn get_aces_for_resource(&self, resource_path: &str) -> Vec<&ACE> {
+    fn get_aces_for_resource(&self, resource_path: &str) -> Vec<&Ace> {
         self.aces
             .values()
             .filter(|ace| ace.resource_path == resource_path)
@@ -546,7 +547,7 @@ impl SecurityCatalog {
     }
 
     /// Get ACEs for a principal
-    fn get_aces_for_principal(&self, principal_name: &str) -> Vec<&ACE> {
+    fn get_aces_for_principal(&self, principal_name: &str) -> Vec<&Ace> {
         self.aces
             .values()
             .filter(|ace| ace.principal_name == principal_name)
@@ -612,7 +613,7 @@ impl CatalogProvider for SecurityCatalog {
                     })
                 }
                 EntityType::Ace => {
-                    let ace = ACE::from_params(&params)?;
+                    let ace = Ace::from_params(&params)?;
                     self.add_ace(ace)?;
                     Ok(CatalogResponse::Success {
                         data: Some(json!({ "message": "Access control entry created" })),
@@ -803,7 +804,7 @@ impl CatalogProvider for SecurityCatalog {
                     })
                 }
                 EntityType::Ace => {
-                    let aces: Vec<&ACE> = self.aces.values().collect();
+                    let aces: Vec<&Ace> = self.aces.values().collect();
                     Ok(CatalogResponse::List {
                         items: aces
                             .iter()
@@ -1028,7 +1029,7 @@ impl CatalogProvider for SecurityCatalog {
                     })
                 }
                 EntityType::Ace => {
-                    let aces: Vec<&ACE> = self.aces.values().collect();
+                    let aces: Vec<&Ace> = self.aces.values().collect();
                     Ok(CatalogResponse::List {
                         items: aces
                             .iter()

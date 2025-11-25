@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 DeepGraph Inc.
 // SPDX-License-Identifier: Apache-2.0
 //
-use crate::ast::ast::CreateGraphStatement;
+use crate::ast::CreateGraphStatement;
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::{CatalogOperation, CatalogResponse, EntityType, QueryType};
 use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;

@@ -124,7 +124,7 @@ impl DDLStatementExecutor for AlterGraphTypeExecutor {
             format!(
                 "Successfully altered graph type '{}' to version {}",
                 self.statement.name,
-                new_version.to_string()
+                new_version
             ),
             0,
         ))

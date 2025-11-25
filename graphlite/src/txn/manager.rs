@@ -159,7 +159,7 @@ impl TransactionManager {
         };
 
         let wal_entry = WALEntry::new(
-            WALEntryType::TransactionBegin,
+            WALEntryType::Begin,
             transaction_id,
             self.wal.next_global_sequence(),
             0,    // BEGIN is sequence 0
@@ -213,7 +213,7 @@ impl TransactionManager {
 
             // Write COMMIT entry to WAL
             let wal_entry = WALEntry::new(
-                WALEntryType::TransactionCommit,
+                WALEntryType::Commit,
                 transaction_id,
                 self.wal.next_global_sequence(),
                 final_sequence,
@@ -270,7 +270,7 @@ impl TransactionManager {
 
             // Write ROLLBACK entry to WAL
             let wal_entry = WALEntry::new(
-                WALEntryType::TransactionRollback,
+                WALEntryType::Rollback,
                 transaction_id,
                 self.wal.next_global_sequence(),
                 final_sequence,
@@ -411,7 +411,7 @@ impl TransactionManager {
 
             // Write operation entry to WAL
             let wal_entry = WALEntry::new(
-                WALEntryType::TransactionOperation,
+                WALEntryType::Operation,
                 transaction_id,
                 self.wal.next_global_sequence(),
                 txn_sequence,

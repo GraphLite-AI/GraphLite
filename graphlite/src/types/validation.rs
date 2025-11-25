@@ -430,24 +430,20 @@ impl TypeValidator {
         // Check size constraints for collections
         if let Some(max_size) = constraints.max_collection_size {
             match value_type {
-                GqlType::List { max_length, .. } => {
-                    if let Some(list_max) = max_length {
-                        if *list_max > max_size {
-                            return Err(TypeError::CollectionTypeMismatch(format!(
-                                "List max size {} exceeds constraint {}",
-                                list_max, max_size
-                            )));
-                        }
+                GqlType::List { max_length: Some(list_max), .. } => {
+                    if *list_max > max_size {
+                        return Err(TypeError::CollectionTypeMismatch(format!(
+                            "List max size {} exceeds constraint {}",
+                            list_max, max_size
+                        )));
                     }
                 }
-                GqlType::String { max_length } => {
-                    if let Some(str_max) = max_length {
-                        if *str_max > max_size {
-                            return Err(TypeError::InvalidTypeSpecification(format!(
-                                "String max length {} exceeds constraint {}",
-                                str_max, max_size
-                            )));
-                        }
+                GqlType::String { max_length: Some(str_max) } => {
+                    if *str_max > max_size {
+                        return Err(TypeError::InvalidTypeSpecification(format!(
+                            "String max length {} exceeds constraint {}",
+                            str_max, max_size
+                        )));
                     }
                 }
                 _ => {}

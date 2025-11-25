@@ -1,5 +1,6 @@
 // Copyright (c) 2024-2025 DeepGraph Inc.
 // SPDX-License-Identifier: Apache-2.0
+#![allow(clippy::only_used_in_recursion)]
 //
 //! GraphLite - A lightweight ISO GQL Graph Database
 //!

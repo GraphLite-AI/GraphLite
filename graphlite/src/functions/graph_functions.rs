@@ -83,15 +83,13 @@ impl Function for LabelsFunction {
                 if !context.rows.is_empty() {
                     // Try to find the variable in the first row to get a sample value
                     for row in &context.rows {
-                        if let Some(node_value) = row.get_value(variable_name) {
-                            if let Value::Node(node) = node_value {
-                                let labels: Vec<Value> = node
-                                    .labels
-                                    .iter()
-                                    .map(|label| Value::String(label.clone()))
-                                    .collect();
-                                return Ok(Value::List(labels));
-                            }
+                        if let Some(Value::Node(node)) = row.get_value(variable_name) {
+                            let labels: Vec<Value> = node
+                                .labels
+                                .iter()
+                                .map(|label| Value::String(label.clone()))
+                                .collect();
+                            return Ok(Value::List(labels));
                         }
                     }
                 }
@@ -322,9 +320,8 @@ impl InferredLabelsFunction {
         }
 
         // Project indicators
-        if properties.contains("budget") && properties.contains("status") {
-            labels.push("Project".to_string());
-        } else if properties.contains("start_date") && properties.contains("budget") {
+        if (properties.contains("budget") && properties.contains("status")) ||
+            (properties.contains("start_date") && properties.contains("budget")) {
             labels.push("Project".to_string());
         }
 

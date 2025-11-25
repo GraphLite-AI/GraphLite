@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 DeepGraph Inc.
 // SPDX-License-Identifier: Apache-2.0
 //
-use crate::ast::ast::{DataStatement, GraphExpression};
+use crate::ast::{DataStatement, GraphExpression};
 use crate::exec::write_stmt::data_stmt::{
     planned_insert::PlannedInsertExecutor, DataStatementExecutor, DeleteExecutor,
     MatchDeleteExecutor, MatchInsertExecutor, MatchRemoveExecutor, MatchSetExecutor,

@@ -224,6 +224,7 @@ pub struct SchemaCatalog {
 
 impl SchemaCatalog {
     /// Create a new schema catalog provider
+    #[allow(clippy::new_ret_no_self)]
     pub fn new() -> Box<dyn CatalogProvider> {
         Box::new(Self {
             schemas: HashMap::new(),

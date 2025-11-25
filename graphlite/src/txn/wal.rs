@@ -25,10 +25,10 @@ const MAX_WAL_FILE_SIZE: u64 = 64 * 1024 * 1024;
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WALEntryType {
-    TransactionBegin = 1,
-    TransactionOperation = 2,
-    TransactionCommit = 3,
-    TransactionRollback = 4,
+    Begin = 1,
+    Operation = 2,
+    Commit = 3,
+    Rollback = 4,
 }
 
 /// A single WAL entry that gets written to disk
@@ -221,10 +221,10 @@ impl WALEntry {
 
         // Entry type
         let entry_type = match data[offset] {
-            1 => WALEntryType::TransactionBegin,
-            2 => WALEntryType::TransactionOperation,
-            3 => WALEntryType::TransactionCommit,
-            4 => WALEntryType::TransactionRollback,
+            1 => WALEntryType::Begin,
+            2 => WALEntryType::Operation,
+            3 => WALEntryType::Commit,
+            4 => WALEntryType::Rollback,
             _ => return Err(WALError::CorruptedEntry("Invalid entry type".to_string())),
         };
         offset += 1;
@@ -434,24 +434,22 @@ impl PersistentWAL {
 
         // Scan existing WAL files
         if let Ok(entries) = std::fs::read_dir(&self.wal_dir) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    if let Some(filename) = entry.file_name().to_str() {
-                        if filename.starts_with("wal_") && filename.ends_with(".log") {
-                            // Extract file number from filename (wal_NNNNNN.log)
-                            if let Some(number_str) = filename
-                                .strip_prefix("wal_")
-                                .and_then(|s| s.strip_suffix(".log"))
-                            {
-                                if let Ok(file_number) = number_str.parse::<u64>() {
-                                    max_file_number = max_file_number.max(file_number);
+            for entry in entries.flatten() {
+                if let Some(filename) = entry.file_name().to_str() {
+                    if filename.starts_with("wal_") && filename.ends_with(".log") {
+                        // Extract file number from filename (wal_NNNNNN.log)
+                        if let Some(number_str) = filename
+                            .strip_prefix("wal_")
+                            .and_then(|s| s.strip_suffix(".log"))
+                        {
+                            if let Ok(file_number) = number_str.parse::<u64>() {
+                                max_file_number = max_file_number.max(file_number);
 
-                                    // Scan this file for the highest sequence number
-                                    if let Ok(entries) = self.read_wal_file(file_number) {
-                                        for entry in entries {
-                                            max_global_sequence =
-                                                max_global_sequence.max(entry.global_sequence);
-                                        }
+                                // Scan this file for the highest sequence number
+                                if let Ok(entries) = self.read_wal_file(file_number) {
+                                    for entry in entries {
+                                        max_global_sequence =
+                                            max_global_sequence.max(entry.global_sequence);
                                     }
                                 }
                             }
@@ -524,7 +522,7 @@ impl PersistentWAL {
     pub fn mark_committed(&self, transaction_id: TransactionId) -> Result<(), WALError> {
         let seq = self.next_global_sequence();
         let entry = WALEntry::new(
-            WALEntryType::TransactionCommit,
+            WALEntryType::Commit,
             transaction_id,
             seq,
             0, // Commit doesn't have a txn sequence
@@ -540,7 +538,7 @@ impl PersistentWAL {
     pub fn mark_rolled_back(&self, transaction_id: TransactionId) -> Result<(), WALError> {
         let seq = self.next_global_sequence();
         let entry = WALEntry::new(
-            WALEntryType::TransactionRollback,
+            WALEntryType::Rollback,
             transaction_id,
             seq,
             0, // Rollback doesn't have a txn sequence

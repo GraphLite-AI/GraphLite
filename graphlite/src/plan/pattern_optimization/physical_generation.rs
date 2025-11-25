@@ -6,7 +6,7 @@
 //! This module generates optimized physical plans for comma-separated patterns,
 //! integrating with existing physical operators (HashJoin, NestedLoopJoin, PathTraversal).
 
-use crate::ast::ast::{Expression, PathPattern, PathType, Variable};
+use crate::ast::{Expression, PathPattern, PathType, Variable};
 use crate::plan::logical::{JoinType, PathElement};
 use crate::plan::pattern_optimization::{
     logical_integration::PatternOptimizationResult,
@@ -308,7 +308,7 @@ impl PhysicalPatternPlanGenerator {
             // Create a variable reference expression
             let variable = Variable {
                 name: var.clone(),
-                location: crate::ast::ast::Location::default(),
+                location: crate::ast::Location::default(),
             };
             let key_expr = Expression::Variable(variable);
             keys.push(key_expr);

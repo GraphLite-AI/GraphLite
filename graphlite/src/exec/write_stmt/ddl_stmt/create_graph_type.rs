@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // CREATE GRAPH TYPE executor implementation
-use crate::ast::ast::CreateGraphTypeStatement;
+use crate::ast::CreateGraphTypeStatement;
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::{CatalogOperation, EntityType};
 use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
@@ -106,7 +106,7 @@ impl CreateGraphTypeExecutor {
     /// Parse vertex types from GraphTypeSpec into NodeTypeDefinition
     fn parse_vertex_types(
         &self,
-        spec: &crate::ast::ast::GraphTypeSpec,
+        spec: &crate::ast::GraphTypeSpec,
     ) -> Vec<crate::schema::types::NodeTypeDefinition> {
         use crate::schema::types::{DataType, NodeTypeDefinition, PropertyDefinition};
 
@@ -127,15 +127,15 @@ impl CreateGraphTypeExecutor {
                         .map(|prop_decl| {
                             // Convert AST TypeSpec to schema DataType
                             let data_type = match &prop_decl.type_spec {
-                                crate::ast::ast::TypeSpec::String { .. } => DataType::String,
-                                crate::ast::ast::TypeSpec::Integer => DataType::Integer,
-                                crate::ast::ast::TypeSpec::BigInt => DataType::BigInt,
-                                crate::ast::ast::TypeSpec::Float { .. } => DataType::Float,
-                                crate::ast::ast::TypeSpec::Double => DataType::Double,
-                                crate::ast::ast::TypeSpec::Boolean => DataType::Boolean,
-                                crate::ast::ast::TypeSpec::Date => DataType::Date,
-                                crate::ast::ast::TypeSpec::LocalTime { .. } => DataType::Time,
-                                crate::ast::ast::TypeSpec::LocalDateTime { .. } => {
+                                crate::ast::TypeSpec::String { .. } => DataType::String,
+                                crate::ast::TypeSpec::Integer => DataType::Integer,
+                                crate::ast::TypeSpec::BigInt => DataType::BigInt,
+                                crate::ast::TypeSpec::Float { .. } => DataType::Float,
+                                crate::ast::TypeSpec::Double => DataType::Double,
+                                crate::ast::TypeSpec::Boolean => DataType::Boolean,
+                                crate::ast::TypeSpec::Date => DataType::Date,
+                                crate::ast::TypeSpec::LocalTime { .. } => DataType::Time,
+                                crate::ast::TypeSpec::LocalDateTime { .. } => {
                                     DataType::DateTime
                                 }
                                 _ => DataType::String, // Default to string for unsupported types
@@ -174,7 +174,7 @@ impl CreateGraphTypeExecutor {
     /// Parse edge types from GraphTypeSpec into EdgeTypeDefinition
     fn parse_edge_types(
         &self,
-        spec: &crate::ast::ast::GraphTypeSpec,
+        spec: &crate::ast::GraphTypeSpec,
     ) -> Vec<crate::schema::types::EdgeTypeDefinition> {
         use crate::schema::types::{
             DataType, EdgeCardinality, EdgeTypeDefinition, PropertyDefinition,
@@ -196,15 +196,15 @@ impl CreateGraphTypeExecutor {
                         .iter()
                         .map(|prop_decl| {
                             let data_type = match &prop_decl.type_spec {
-                                crate::ast::ast::TypeSpec::String { .. } => DataType::String,
-                                crate::ast::ast::TypeSpec::Integer => DataType::Integer,
-                                crate::ast::ast::TypeSpec::BigInt => DataType::BigInt,
-                                crate::ast::ast::TypeSpec::Float { .. } => DataType::Float,
-                                crate::ast::ast::TypeSpec::Double => DataType::Double,
-                                crate::ast::ast::TypeSpec::Boolean => DataType::Boolean,
-                                crate::ast::ast::TypeSpec::Date => DataType::Date,
-                                crate::ast::ast::TypeSpec::LocalTime { .. } => DataType::Time,
-                                crate::ast::ast::TypeSpec::LocalDateTime { .. } => {
+                                crate::ast::TypeSpec::String { .. } => DataType::String,
+                                crate::ast::TypeSpec::Integer => DataType::Integer,
+                                crate::ast::TypeSpec::BigInt => DataType::BigInt,
+                                crate::ast::TypeSpec::Float { .. } => DataType::Float,
+                                crate::ast::TypeSpec::Double => DataType::Double,
+                                crate::ast::TypeSpec::Boolean => DataType::Boolean,
+                                crate::ast::TypeSpec::Date => DataType::Date,
+                                crate::ast::TypeSpec::LocalTime { .. } => DataType::Time,
+                                crate::ast::TypeSpec::LocalDateTime { .. } => {
                                     DataType::DateTime
                                 }
                                 _ => DataType::String,

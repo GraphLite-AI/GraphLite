@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 DeepGraph Inc.
 // SPDX-License-Identifier: Apache-2.0
 //
-use crate::ast::ast::CatalogStatement;
+use crate::ast::CatalogStatement;
 use crate::catalog::manager::CatalogManager;
 use crate::exec::write_stmt::ddl_stmt::*;
 use crate::exec::write_stmt::ExecutionContext;
@@ -211,7 +211,7 @@ impl DDLStatementCoordinator {
 
     /// Execute CREATE PROCEDURE statement
     fn execute_create_procedure(
-        create_procedure: &crate::ast::ast::CreateProcedureStatement,
+        create_procedure: &crate::ast::CreateProcedureStatement,
         _context: &crate::exec::ExecutionContext,
         catalog_manager: &mut crate::catalog::manager::CatalogManager,
         _storage: &std::sync::Arc<crate::storage::StorageManager>,
@@ -273,7 +273,7 @@ impl DDLStatementCoordinator {
 
     /// Execute DROP PROCEDURE statement
     fn execute_drop_procedure(
-        drop_procedure: &crate::ast::ast::DropProcedureStatement,
+        drop_procedure: &crate::ast::DropProcedureStatement,
         _context: &crate::exec::ExecutionContext,
         catalog_manager: &mut crate::catalog::manager::CatalogManager,
         _storage: &std::sync::Arc<crate::storage::StorageManager>,

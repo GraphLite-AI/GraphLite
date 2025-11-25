@@ -288,7 +288,7 @@ pub enum Token {
     Comment(String),
 
     // End of file
-    EOF,
+    Eof,
 }
 
 /// Lexer state
@@ -350,7 +350,7 @@ impl Lexer {
                 }
             }
         }
-        tokens.push(Token::EOF);
+        tokens.push(Token::Eof);
         self.tokens = tokens.clone();
         Ok(tokens)
     }
@@ -421,6 +421,7 @@ fn token(input: &str) -> IResult<&str, Token> {
 /// 1. `!=` pattern matches first
 /// 2. Remaining input: "" (empty)
 /// 3. Lexer completes successfully
+///
 /// Check if character is a word boundary (not alphanumeric or underscore)
 fn is_word_boundary(c: char) -> bool {
     !c.is_alphanumeric() && c != '_'
@@ -1645,6 +1646,7 @@ fn comment(input: &str) -> IResult<&str, &str> {
 /// 1. function_call() called on "(a:User {id: 123})"
 /// 2. Function validates: does it start with identifier + '('?
 /// 3. No, it starts with '(' directly, so returns Error
+///
 /// Parse property access like user.risk_score
 fn property_access(input: &str) -> IResult<&str, &str> {
     recognize(tuple((

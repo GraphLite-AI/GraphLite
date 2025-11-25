@@ -6,7 +6,7 @@
 //! This module integrates pattern optimization into the logical planning phase,
 //! providing the main entry point for comma-separated pattern optimization.
 
-use crate::ast::ast::{MatchClause, PathPattern};
+use crate::ast::{MatchClause, PathPattern};
 use crate::plan::logical::LogicalPlan;
 use crate::plan::pattern_optimization::{
     cost_estimation::{ExecutionCost, StatisticsManager},
@@ -489,7 +489,7 @@ pub fn apply_optimization_to_logical_plan(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::ast::Location;
+    use crate::ast::Location;
 
     #[test]
     fn test_pattern_optimizer_creation() {

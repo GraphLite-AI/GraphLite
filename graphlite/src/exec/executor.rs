@@ -10,7 +10,7 @@ use crate::catalog::system_procedures::{is_system_procedure, SystemProcedures};
 use crate::plan::logical::PathElement;
 use crate::plan::physical::{PhysicalNode, PhysicalPlan, ProjectionItem, SortItem};
 
-use crate::ast::ast::{
+use crate::ast::{
     AtLocationStatement, BasicQuery, CaseType, CatalogPath, CatalogStatement, DeclareStatement,
     EdgeDirection, Expression, FunctionCall, GraphExpression, Location, MatchClause, NextStatement,
     PathQuantifier, PathType, ProcedureBodyStatement, PropertyAccess, ReturnClause, ReturnItem,
@@ -632,7 +632,7 @@ impl QueryExecutor {
     /// Set current graph using unified session management
     pub fn set_current_graph(
         &self,
-        graph_expr: crate::ast::ast::GraphExpression,
+        graph_expr: crate::ast::GraphExpression,
     ) -> Result<(), ExecutionError> {
         // Extract graph name from expression
         let graph_name = match &graph_expr {
@@ -693,7 +693,7 @@ impl QueryExecutor {
             Statement::Query(query) => {
                 // Handle basic queries, set operations, and limited queries
                 match query {
-                    crate::ast::ast::Query::Basic(basic_query) => {
+                    crate::ast::Query::Basic(basic_query) => {
                         // Use session-aware graph resolution instead of legacy execute_basic_query
 
                         // Create a mini ExecutionRequest to use resolve_graph_for_execution
@@ -705,14 +705,14 @@ impl QueryExecutor {
                         let graph = self.resolve_graph_for_execution(&mini_request)?;
 
                         // Create physical plan
-                        use crate::ast::ast::{Document, Query, Statement as AstStatement};
+                        use crate::ast::{Document, Query, Statement as AstStatement};
                         use crate::plan::optimizer::QueryPlanner;
 
                         let query = Query::Basic(basic_query.clone());
                         let statement_ast = AstStatement::Query(query);
                         let document = Document {
                             statement: statement_ast,
-                            location: crate::ast::ast::Location {
+                            location: crate::ast::Location {
                                 line: 1,
                                 column: 1,
                                 offset: 0,
@@ -725,10 +725,10 @@ impl QueryExecutor {
                         })?;
                         self.execute_with_provided_graph_and_audit(&planned_query, &graph, context)
                     }
-                    crate::ast::ast::Query::SetOperation(set_op) => {
+                    crate::ast::Query::SetOperation(set_op) => {
                         self.execute_set_operation(set_op, context)
                     }
-                    crate::ast::ast::Query::Limited {
+                    crate::ast::Query::Limited {
                         query,
                         order_clause,
                         limit_clause,
@@ -748,7 +748,7 @@ impl QueryExecutor {
 
                         Ok(result)
                     }
-                    crate::ast::ast::Query::WithQuery(with_query) => {
+                    crate::ast::Query::WithQuery(with_query) => {
                         // Create a mini ExecutionRequest to use resolve_graph_for_execution
                         let mini_request = ExecutionRequest::new(statement.clone())
                             .with_session(session.cloned())
@@ -764,22 +764,22 @@ impl QueryExecutor {
                         // Execute WITH query using the proper execution method
                         self.execute_with_query_with_context(with_query, context)
                     }
-                    crate::ast::ast::Query::Let(let_stmt) => {
+                    crate::ast::Query::Let(let_stmt) => {
                         self.execute_let_statement(let_stmt, context)
                     }
-                    crate::ast::ast::Query::For(for_stmt) => {
+                    crate::ast::Query::For(for_stmt) => {
                         self.execute_for_statement(for_stmt, context)
                     }
-                    crate::ast::ast::Query::Filter(filter_stmt) => {
+                    crate::ast::Query::Filter(filter_stmt) => {
                         self.execute_filter_statement(filter_stmt, context)
                     }
-                    crate::ast::ast::Query::Return(return_query) => {
+                    crate::ast::Query::Return(return_query) => {
                         self.execute_return_query(return_query, context)
                     }
-                    crate::ast::ast::Query::Unwind(unwind_stmt) => {
+                    crate::ast::Query::Unwind(unwind_stmt) => {
                         self.execute_unwind_statement(unwind_stmt, context)
                     }
-                    crate::ast::ast::Query::MutationPipeline(pipeline) => {
+                    crate::ast::Query::MutationPipeline(pipeline) => {
                         self.execute_mutation_pipeline(pipeline, context, session)
                     }
                 }
@@ -956,7 +956,7 @@ impl QueryExecutor {
         graph_expr: Option<&GraphExpression>,
         context: &mut ExecutionContext,
     ) -> Result<QueryResult, ExecutionError> {
-        use crate::ast::ast::{Document, Query, Statement};
+        use crate::ast::{Document, Query, Statement};
         use crate::plan::optimizer::QueryPlanner;
 
         // Resolve graph expression to actual graph
@@ -990,7 +990,7 @@ impl QueryExecutor {
         basic_query: &BasicQuery,
         outer_context: &ExecutionContext,
     ) -> Result<QueryResult, ExecutionError> {
-        use crate::ast::ast::{Document, Query, Statement};
+        use crate::ast::{Document, Query, Statement};
         use crate::plan::optimizer::QueryPlanner;
 
         log::debug!(
@@ -1032,7 +1032,7 @@ impl QueryExecutor {
     /// Execute a subquery within the current execution context
     fn execute_subquery(
         &self,
-        query: &crate::ast::ast::Query,
+        query: &crate::ast::Query,
         context: &ExecutionContext,
     ) -> Result<QueryResult, ExecutionError> {
         self.execute_subquery_with_context(query, context)
@@ -1042,10 +1042,10 @@ impl QueryExecutor {
     /// Returns true as soon as the first result is found, without materializing all results
     fn check_subquery_exists(
         &self,
-        query: &crate::ast::ast::Query,
+        query: &crate::ast::Query,
         context: &ExecutionContext,
     ) -> Result<bool, ExecutionError> {
-        use crate::ast::ast::Query;
+        use crate::ast::Query;
         match query {
             Query::Basic(basic_query) => {
                 // For basic queries, check existence with early termination
@@ -1077,10 +1077,10 @@ impl QueryExecutor {
     /// Execute a subquery with correlated variable support
     fn execute_subquery_with_context(
         &self,
-        query: &crate::ast::ast::Query,
+        query: &crate::ast::Query,
         outer_context: &ExecutionContext,
     ) -> Result<QueryResult, ExecutionError> {
-        use crate::ast::ast::Query;
+        use crate::ast::Query;
         match query {
             Query::Basic(basic_query) => {
                 // For basic queries, execute with correlated variable support
@@ -1271,12 +1271,12 @@ impl QueryExecutor {
         for pattern in &match_clause.patterns {
             for element in &pattern.elements {
                 match element {
-                    crate::ast::ast::PatternElement::Node(node) => {
+                    crate::ast::PatternElement::Node(node) => {
                         if let Some(ref var) = node.identifier {
                             variables.insert(var.clone());
                         }
                     }
-                    crate::ast::ast::PatternElement::Edge(edge) => {
+                    crate::ast::PatternElement::Edge(edge) => {
                         if let Some(ref var) = edge.identifier {
                             variables.insert(var.clone());
                         }
@@ -1308,7 +1308,7 @@ impl QueryExecutor {
             match_clause: match_clause.clone(),
             where_clause: None,
             return_clause: ReturnClause {
-                distinct: crate::ast::ast::DistinctQualifier::None,
+                distinct: crate::ast::DistinctQualifier::None,
                 items: return_items,
                 location: Location::default(),
             },
@@ -1586,7 +1586,7 @@ impl QueryExecutor {
     /// Evaluate a WHERE expression on a single row
     fn evaluate_where_expression_on_row(
         &self,
-        where_clause: &crate::ast::ast::WhereClause,
+        where_clause: &crate::ast::WhereClause,
         row: &Row,
         context: &ExecutionContext,
     ) -> Result<bool, ExecutionError> {
@@ -2089,7 +2089,7 @@ impl QueryExecutor {
                     match func_call.name.to_uppercase().as_str() {
                         "COUNT" => {
                             // COUNT(*), COUNT(variable), or COUNT(DISTINCT variable)
-                            use crate::ast::ast::DistinctQualifier;
+                            use crate::ast::DistinctQualifier;
                             match func_call.distinct {
                                 DistinctQualifier::Distinct => {
                                     // COUNT DISTINCT - count unique values
@@ -2167,7 +2167,7 @@ impl QueryExecutor {
                         }
                         "SUM" => {
                             // Calculate sum of the specified column across all rows
-                            use crate::ast::ast::DistinctQualifier;
+                            use crate::ast::DistinctQualifier;
                             if let Some(arg_expr) = func_call.arguments.first() {
                                 let mut sum = 0.0;
                                 let mut has_values = false;
@@ -2262,7 +2262,7 @@ impl QueryExecutor {
                         }
                         "COLLECT" => {
                             // Collect values from the specified column into a list
-                            use crate::ast::ast::DistinctQualifier;
+                            use crate::ast::DistinctQualifier;
                             if let Some(arg_expr) = func_call.arguments.first() {
                                 let mut collected_values = Vec::new();
 
@@ -2670,7 +2670,7 @@ impl QueryExecutor {
     /// Internal method for deferred graph resolution
     fn execute_call_statement_with_graph_deferred(
         &self,
-        call_stmt: &crate::ast::ast::CallStatement,
+        call_stmt: &crate::ast::CallStatement,
         context: &mut ExecutionContext,
         graph_expr: Option<&GraphExpression>,
         session: Option<&Arc<std::sync::RwLock<crate::session::models::UserSession>>>,
@@ -2699,8 +2699,8 @@ impl QueryExecutor {
 
     /// Single consolidated method to check if a statement requires graph context
     /// This replaces all the scattered *_needs_graph_context methods for a clean PostgreSQL-style approach
-    fn statement_needs_graph_context(&self, statement: &crate::ast::ast::Statement) -> bool {
-        use crate::ast::ast::Statement;
+    fn statement_needs_graph_context(&self, statement: &crate::ast::Statement) -> bool {
+        use crate::ast::Statement;
 
         match statement {
             Statement::Query(_) => {
@@ -2838,7 +2838,7 @@ impl QueryExecutor {
     /// Check if a SELECT statement needs graph context
     fn select_statement_needs_graph_context(
         &self,
-        select_stmt: &crate::ast::ast::SelectStatement,
+        select_stmt: &crate::ast::SelectStatement,
     ) -> bool {
         // Check if FROM clause exists (implies graph operations)
         if select_stmt.from_clause.is_some() {
@@ -2847,8 +2847,8 @@ impl QueryExecutor {
 
         // Check expressions in return items
         match &select_stmt.return_items {
-            crate::ast::ast::SelectItems::Wildcard { .. } => return true, // Wildcard implies graph data
-            crate::ast::ast::SelectItems::Explicit { items, .. } => {
+            crate::ast::SelectItems::Wildcard { .. } => return true, // Wildcard implies graph data
+            crate::ast::SelectItems::Explicit { items, .. } => {
                 for item in items {
                     if self.expression_needs_graph_context(&item.expression) {
                         return true;
@@ -2893,8 +2893,8 @@ impl QueryExecutor {
     }
 
     /// Check if an expression needs graph context
-    fn expression_needs_graph_context(&self, expr: &crate::ast::ast::Expression) -> bool {
-        use crate::ast::ast::Expression;
+    fn expression_needs_graph_context(&self, expr: &crate::ast::Expression) -> bool {
+        use crate::ast::Expression;
 
         match expr {
             Expression::Variable(_var) => {
@@ -2922,7 +2922,7 @@ impl QueryExecutor {
             }
             Expression::Unary(unary) => self.expression_needs_graph_context(&unary.expression),
             Expression::Case(case_expr) => {
-                use crate::ast::ast::CaseType;
+                use crate::ast::CaseType;
                 match &case_expr.case_type {
                     CaseType::Simple(simple_case) => {
                         if self.expression_needs_graph_context(&simple_case.test_expression) {
@@ -3012,7 +3012,7 @@ impl QueryExecutor {
     /// Internal method for call statements without graph
     fn execute_call_statement_without_graph(
         &self,
-        call_stmt: &crate::ast::ast::CallStatement,
+        call_stmt: &crate::ast::CallStatement,
         context: &ExecutionContext,
         session_id: Option<&str>,
     ) -> Result<QueryResult, ExecutionError> {
@@ -3098,7 +3098,7 @@ impl QueryExecutor {
     /// Internal method for call statements with graph
     fn execute_call_statement_with_graph(
         &self,
-        call_stmt: &crate::ast::ast::CallStatement,
+        call_stmt: &crate::ast::CallStatement,
         context: &mut ExecutionContext,
         _graph: &Arc<GraphCache>,
         session_id: Option<&str>,
@@ -3111,7 +3111,7 @@ impl QueryExecutor {
     /// Internal method for select statements with graph
     fn execute_select_statement_with_graph(
         &self,
-        select_stmt: &crate::ast::ast::SelectStatement,
+        select_stmt: &crate::ast::SelectStatement,
         graph: &Arc<GraphCache>,
         context: &mut ExecutionContext,
     ) -> Result<QueryResult, ExecutionError> {
@@ -3138,44 +3138,44 @@ impl QueryExecutor {
 
         // If no MATCH clause in FROM, we need to create a simple MATCH for all nodes
         let match_clause = match_clause.unwrap_or_else(|| {
-            crate::ast::ast::MatchClause {
-                patterns: vec![crate::ast::ast::PathPattern {
+            crate::ast::MatchClause {
+                patterns: vec![crate::ast::PathPattern {
                     assignment: None, // No path assignment
                     path_type: None,  // Default path type
-                    elements: vec![crate::ast::ast::PatternElement::Node(
-                        crate::ast::ast::Node {
+                    elements: vec![crate::ast::PatternElement::Node(
+                        crate::ast::Node {
                             identifier: Some("n".to_string()),
                             labels: vec![],
                             properties: None,
-                            location: crate::ast::ast::Location::default(),
+                            location: crate::ast::Location::default(),
                         },
                     )],
-                    location: crate::ast::ast::Location::default(),
+                    location: crate::ast::Location::default(),
                 }],
-                location: crate::ast::ast::Location::default(),
+                location: crate::ast::Location::default(),
             }
         });
 
         // Create a Query from the SELECT statement components
-        let query = crate::ast::ast::Query::Basic(crate::ast::ast::BasicQuery {
+        let query = crate::ast::Query::Basic(crate::ast::BasicQuery {
             match_clause,
             where_clause: select_stmt.where_clause.clone(),
-            return_clause: crate::ast::ast::ReturnClause {
+            return_clause: crate::ast::ReturnClause {
                 distinct: select_stmt.distinct.clone(),
                 items: self.expand_select_items(&select_stmt.return_items, graph)?,
-                location: crate::ast::ast::Location::default(),
+                location: crate::ast::Location::default(),
             },
             group_clause: select_stmt.group_clause.clone(),
             having_clause: select_stmt.having_clause.clone(),
             order_clause: select_stmt.order_clause.clone(),
             limit_clause: select_stmt.limit_clause.clone(),
-            location: crate::ast::ast::Location::default(),
+            location: crate::ast::Location::default(),
         });
 
         // Create a document and plan the query
-        let document = crate::ast::ast::Document {
-            statement: crate::ast::ast::Statement::Query(query),
-            location: crate::ast::ast::Location::default(),
+        let document = crate::ast::Document {
+            statement: crate::ast::Statement::Query(query),
+            location: crate::ast::Location::default(),
         };
 
         // Use the planner to create a physical plan
@@ -3192,7 +3192,7 @@ impl QueryExecutor {
     /// Internal method for select statements without graph
     fn execute_select_statement_without_graph(
         &self,
-        select_stmt: &crate::ast::ast::SelectStatement,
+        select_stmt: &crate::ast::SelectStatement,
         context: &ExecutionContext,
     ) -> Result<QueryResult, ExecutionError> {
         // Validate that this SELECT can run without graph context
@@ -3204,12 +3204,12 @@ impl QueryExecutor {
 
         // Only support simple SELECT expressions (no wildcards, no graph references)
         let items = match &select_stmt.return_items {
-            crate::ast::ast::SelectItems::Wildcard { .. } => {
+            crate::ast::SelectItems::Wildcard { .. } => {
                 return Err(ExecutionError::RuntimeError(
                     "Wildcard SELECT (*) requires graph context".to_string(),
                 ));
             }
-            crate::ast::ast::SelectItems::Explicit { items, .. } => items,
+            crate::ast::SelectItems::Explicit { items, .. } => items,
         };
 
         // Evaluate each return item
@@ -3226,10 +3226,10 @@ impl QueryExecutor {
             } else {
                 // Generate a default column name based on expression type
                 match &item.expression {
-                    crate::ast::ast::Expression::FunctionCall(func_call) => {
+                    crate::ast::Expression::FunctionCall(func_call) => {
                         format!("{}(...)", func_call.name)
                     }
-                    crate::ast::ast::Expression::Literal(_) => "literal".to_string(),
+                    crate::ast::Expression::Literal(_) => "literal".to_string(),
                     _ => "expression".to_string(),
                 }
             };
@@ -3856,20 +3856,20 @@ impl QueryExecutor {
     }
 
     /// Convert AST literal to storage value
-    fn literal_to_value(&self, literal: &crate::ast::ast::Literal) -> Value {
+    fn literal_to_value(&self, literal: &crate::ast::Literal) -> Value {
         match literal {
-            crate::ast::ast::Literal::String(s) => Value::String(s.clone()),
-            crate::ast::ast::Literal::Integer(i) => Value::Number(*i as f64),
-            crate::ast::ast::Literal::Float(f) => Value::Number(*f),
-            crate::ast::ast::Literal::Boolean(b) => Value::Boolean(*b),
-            crate::ast::ast::Literal::Null => Value::Null,
-            crate::ast::ast::Literal::DateTime(dt) => Value::String(dt.clone()),
-            crate::ast::ast::Literal::Duration(dur) => Value::String(dur.clone()),
-            crate::ast::ast::Literal::TimeWindow(tw) => Value::String(tw.clone()),
-            crate::ast::ast::Literal::Vector(vec) => {
+            crate::ast::Literal::String(s) => Value::String(s.clone()),
+            crate::ast::Literal::Integer(i) => Value::Number(*i as f64),
+            crate::ast::Literal::Float(f) => Value::Number(*f),
+            crate::ast::Literal::Boolean(b) => Value::Boolean(*b),
+            crate::ast::Literal::Null => Value::Null,
+            crate::ast::Literal::DateTime(dt) => Value::String(dt.clone()),
+            crate::ast::Literal::Duration(dur) => Value::String(dur.clone()),
+            crate::ast::Literal::TimeWindow(tw) => Value::String(tw.clone()),
+            crate::ast::Literal::Vector(vec) => {
                 Value::Vector(vec.iter().map(|&f| f as f32).collect())
             }
-            crate::ast::ast::Literal::List(list) => {
+            crate::ast::Literal::List(list) => {
                 let converted: Vec<Value> =
                     list.iter().map(|lit| self.literal_to_value(lit)).collect();
                 Value::List(converted)
@@ -4088,7 +4088,7 @@ impl QueryExecutor {
 
                         // Create a temporary expression that uses our computed value instead of count(*)
                         let temp_condition =
-                            Expression::Binary(crate::ast::ast::BinaryExpression {
+                            Expression::Binary(crate::ast::BinaryExpression {
                                 left: Box::new(Expression::Variable(Variable {
                                     name: temp_var_name,
                                     location: Location::default(),
@@ -4581,11 +4581,9 @@ impl QueryExecutor {
                 }
 
                 // If not found, try to access property from the node variable directly
-                if let Some(node_value) = context.get_variable(&prop_access.object) {
-                    if let crate::storage::Value::Node(node) = &node_value {
-                        if let Some(prop_value) = node.properties.get(&prop_access.property) {
-                            return Ok(prop_value.clone());
-                        }
+                if let Some(crate::storage::Value::Node(node)) = context.get_variable(&prop_access.object).as_ref() {
+                    if let Some(prop_value) = node.properties.get(&prop_access.property) {
+                        return Ok(prop_value.clone());
                     }
                 }
 
@@ -4791,10 +4789,10 @@ impl QueryExecutor {
     /// Evaluate a CASE expression
     fn evaluate_case_expression(
         &self,
-        case_expr: &crate::ast::ast::CaseExpression,
+        case_expr: &crate::ast::CaseExpression,
         context: &ExecutionContext,
     ) -> Result<Value, ExecutionError> {
-        use crate::ast::ast::CaseType;
+        use crate::ast::CaseType;
 
         match &case_expr.case_type {
             CaseType::Simple(simple_case) => self.evaluate_simple_case(simple_case, context),
@@ -4880,7 +4878,7 @@ impl QueryExecutor {
     /// Evaluate a PATH constructor: PATH[expr1, expr2, ...]
     fn evaluate_path_constructor(
         &self,
-        path_constructor: &crate::ast::ast::PathConstructor,
+        path_constructor: &crate::ast::PathConstructor,
         context: &ExecutionContext,
     ) -> Result<Value, ExecutionError> {
         use crate::storage::value::{PathElement, PathValue};
@@ -4935,7 +4933,7 @@ impl QueryExecutor {
     /// Evaluate a CAST expression: CAST(expr AS type-spec)
     fn evaluate_cast_expression(
         &self,
-        cast_expr: &crate::ast::ast::CastExpression,
+        cast_expr: &crate::ast::CastExpression,
         context: &ExecutionContext,
     ) -> Result<Value, ExecutionError> {
         // First evaluate the source expression
@@ -4949,9 +4947,9 @@ impl QueryExecutor {
     fn cast_value(
         &self,
         value: Value,
-        target_type: &crate::ast::ast::TypeSpec,
+        target_type: &crate::ast::TypeSpec,
     ) -> Result<Value, ExecutionError> {
-        use crate::ast::ast::TypeSpec;
+        use crate::ast::TypeSpec;
 
         match target_type {
             TypeSpec::Boolean => self.cast_to_boolean(value),
@@ -5128,21 +5126,21 @@ impl QueryExecutor {
     /// Evaluate a literal value
     fn evaluate_literal(
         &self,
-        literal: &crate::ast::ast::Literal,
+        literal: &crate::ast::Literal,
     ) -> Result<Value, ExecutionError> {
         match literal {
-            crate::ast::ast::Literal::String(s) => Ok(Value::String(s.clone())),
-            crate::ast::ast::Literal::Integer(i) => Ok(Value::Number(*i as f64)),
-            crate::ast::ast::Literal::Float(f) => Ok(Value::Number(*f)),
-            crate::ast::ast::Literal::Boolean(b) => Ok(Value::Boolean(*b)),
-            crate::ast::ast::Literal::Null => Ok(Value::Null),
-            crate::ast::ast::Literal::DateTime(dt) => Ok(Value::String(dt.clone())),
-            crate::ast::ast::Literal::Duration(dur) => Ok(Value::String(dur.clone())),
-            crate::ast::ast::Literal::TimeWindow(tw) => Ok(Value::String(tw.clone())),
-            crate::ast::ast::Literal::Vector(vec) => {
+            crate::ast::Literal::String(s) => Ok(Value::String(s.clone())),
+            crate::ast::Literal::Integer(i) => Ok(Value::Number(*i as f64)),
+            crate::ast::Literal::Float(f) => Ok(Value::Number(*f)),
+            crate::ast::Literal::Boolean(b) => Ok(Value::Boolean(*b)),
+            crate::ast::Literal::Null => Ok(Value::Null),
+            crate::ast::Literal::DateTime(dt) => Ok(Value::String(dt.clone())),
+            crate::ast::Literal::Duration(dur) => Ok(Value::String(dur.clone())),
+            crate::ast::Literal::TimeWindow(tw) => Ok(Value::String(tw.clone())),
+            crate::ast::Literal::Vector(vec) => {
                 Ok(Value::Vector(vec.iter().map(|&f| f as f32).collect()))
             }
-            crate::ast::ast::Literal::List(list) => {
+            crate::ast::Literal::List(list) => {
                 let converted: Vec<Value> = list
                     .iter()
                     .map(|lit| self.evaluate_literal(lit))
@@ -5155,11 +5153,11 @@ impl QueryExecutor {
     /// Evaluate a binary operation
     fn evaluate_binary_op(
         &self,
-        op: &crate::ast::ast::Operator,
+        op: &crate::ast::Operator,
         left: Value,
         right: Value,
     ) -> Result<Value, ExecutionError> {
-        use crate::ast::ast::Operator;
+        use crate::ast::Operator;
 
         match (op, &left, &right) {
             // Arithmetic operators
@@ -5570,14 +5568,14 @@ impl QueryExecutor {
                     "{}_{}_{}",
                     self.expression_to_string(&binary.left),
                     match &binary.operator {
-                        crate::ast::ast::Operator::Plus => "plus",
-                        crate::ast::ast::Operator::Minus => "minus",
-                        crate::ast::ast::Operator::Star => "times",
-                        crate::ast::ast::Operator::Slash => "div",
-                        crate::ast::ast::Operator::Percent => "mod",
-                        crate::ast::ast::Operator::And => "and",
-                        crate::ast::ast::Operator::Or => "or",
-                        crate::ast::ast::Operator::Xor => "xor",
+                        crate::ast::Operator::Plus => "plus",
+                        crate::ast::Operator::Minus => "minus",
+                        crate::ast::Operator::Star => "times",
+                        crate::ast::Operator::Slash => "div",
+                        crate::ast::Operator::Percent => "mod",
+                        crate::ast::Operator::And => "and",
+                        crate::ast::Operator::Or => "or",
+                        crate::ast::Operator::Xor => "xor",
                         _ => "op",
                     },
                     self.expression_to_string(&binary.right)
@@ -5840,7 +5838,7 @@ impl QueryExecutor {
                             // so the function can process it across all rows in the group
                             evaluated_args.push(Value::String(var.name.clone()));
                         }
-                        Expression::Literal(crate::ast::ast::Literal::Integer(1)) => {
+                        Expression::Literal(crate::ast::Literal::Integer(1)) => {
                             // COUNT(*) case - pass a dummy value
                             evaluated_args.push(Value::String("*".to_string()));
                         }
@@ -6768,11 +6766,11 @@ impl QueryExecutor {
         &self,
         stmt: &SessionStatement,
     ) -> Result<QueryResult, ExecutionError> {
-        use crate::ast::ast::SessionSetClause;
+        use crate::ast::SessionSetClause;
         use crate::exec::result::SessionResult;
 
         match stmt {
-            SessionStatement::SessionSet(set_stmt) => {
+            SessionStatement::Set(set_stmt) => {
                 match &set_stmt.clause {
                     SessionSetClause::Graph { graph_expression } => {
                         // Validate graph exists in catalog
@@ -6808,7 +6806,7 @@ impl QueryExecutor {
                         if !validated {
                             return Err(ExecutionError::CatalogError(format!(
                                 "Schema does not exist: {}",
-                                schema_reference.to_string()
+                                schema_reference
                             )));
                         }
 
@@ -6833,15 +6831,15 @@ impl QueryExecutor {
                     }
                 }
             }
-            SessionStatement::SessionReset(_) => Ok(QueryResult::for_session(SessionResult::Reset)),
-            SessionStatement::SessionClose(_) => Ok(QueryResult::for_session(SessionResult::Close)),
+            SessionStatement::Reset(_) => Ok(QueryResult::for_session(SessionResult::Reset)),
+            SessionStatement::Close(_) => Ok(QueryResult::for_session(SessionResult::Close)),
         }
     }
 
     /// Execute set operation (UNION, INTERSECT, EXCEPT)
     fn execute_set_operation(
         &self,
-        set_op: &crate::ast::ast::SetOperation,
+        set_op: &crate::ast::SetOperation,
         context: &mut ExecutionContext,
     ) -> Result<QueryResult, ExecutionError> {
         log::debug!("=== EXECUTE_SET_OPERATION CALLED");
@@ -6862,22 +6860,22 @@ impl QueryExecutor {
 
         // Execute the appropriate set operation
         let mut result = match set_op.operation {
-            crate::ast::ast::SetOperationType::Union => {
+            crate::ast::SetOperationType::Union => {
                 self.execute_union(left_result, right_result, false)
             } // UNION removes duplicates
-            crate::ast::ast::SetOperationType::UnionAll => {
+            crate::ast::SetOperationType::UnionAll => {
                 self.execute_union(left_result, right_result, true)
             } // UNION ALL keeps duplicates
-            crate::ast::ast::SetOperationType::Intersect => {
+            crate::ast::SetOperationType::Intersect => {
                 self.execute_intersect(left_result, right_result, true)
             }
-            crate::ast::ast::SetOperationType::IntersectAll => {
+            crate::ast::SetOperationType::IntersectAll => {
                 self.execute_intersect(left_result, right_result, false)
             }
-            crate::ast::ast::SetOperationType::Except => {
+            crate::ast::SetOperationType::Except => {
                 self.execute_except(left_result, right_result, true)
             }
-            crate::ast::ast::SetOperationType::ExceptAll => {
+            crate::ast::SetOperationType::ExceptAll => {
                 self.execute_except(left_result, right_result, false)
             }
         }?;
@@ -6905,19 +6903,19 @@ impl QueryExecutor {
     /// Execute query recursively (handles basic queries, set operations, and limited queries)
     fn execute_query_recursive(
         &self,
-        query: &crate::ast::ast::Query,
+        query: &crate::ast::Query,
         context: &mut ExecutionContext,
     ) -> Result<QueryResult, ExecutionError> {
         log::debug!("=== EXECUTE_QUERY_RECURSIVE");
         log::debug!("Query type: {:?}", std::mem::discriminant(query));
         match query {
-            crate::ast::ast::Query::Basic(basic_query) => {
+            crate::ast::Query::Basic(basic_query) => {
                 // Convert basic query to document and plan it
-                let document = crate::ast::ast::Document {
-                    statement: crate::ast::ast::Statement::Query(crate::ast::ast::Query::Basic(
+                let document = crate::ast::Document {
+                    statement: crate::ast::Statement::Query(crate::ast::Query::Basic(
                         basic_query.clone(),
                     )),
-                    location: crate::ast::ast::Location::default(),
+                    location: crate::ast::Location::default(),
                 };
 
                 // Use the planner to create a physical plan
@@ -6945,10 +6943,10 @@ impl QueryExecutor {
                 let graph_arc = Arc::new(graph);
                 self.execute_with_graph(&plan, &graph_arc, context)
             }
-            crate::ast::ast::Query::SetOperation(set_op) => {
+            crate::ast::Query::SetOperation(set_op) => {
                 self.execute_set_operation(set_op, context)
             }
-            crate::ast::ast::Query::Limited {
+            crate::ast::Query::Limited {
                 query,
                 order_clause,
                 limit_clause,
@@ -6968,11 +6966,11 @@ impl QueryExecutor {
 
                 Ok(result)
             }
-            crate::ast::ast::Query::WithQuery(with_query) => {
+            crate::ast::Query::WithQuery(with_query) => {
                 // TODO: For now, convert WITH query to basic query and execute
                 // This is a simplification until proper WITH query execution is fully integrated
                 if let Some(first_segment) = with_query.segments.first() {
-                    let basic_query = crate::ast::ast::BasicQuery {
+                    let basic_query = crate::ast::BasicQuery {
                         match_clause: first_segment.match_clause.clone(),
                         where_clause: first_segment.where_clause.clone(),
                         return_clause: with_query.final_return.clone(),
@@ -6983,7 +6981,7 @@ impl QueryExecutor {
                         location: with_query.location.clone(),
                     };
                     self.execute_query_recursive(
-                        &crate::ast::ast::Query::Basic(basic_query),
+                        &crate::ast::Query::Basic(basic_query),
                         context,
                     )
                 } else {
@@ -6992,27 +6990,27 @@ impl QueryExecutor {
                     ))
                 }
             }
-            crate::ast::ast::Query::Let(let_stmt) => {
+            crate::ast::Query::Let(let_stmt) => {
                 // Use the existing context passed to execute_query_recursive
                 self.execute_let_statement(let_stmt, context)
             }
-            crate::ast::ast::Query::For(for_stmt) => {
+            crate::ast::Query::For(for_stmt) => {
                 // Use the existing context passed to execute_query_recursive
                 self.execute_for_statement(for_stmt, context)
             }
-            crate::ast::ast::Query::Filter(filter_stmt) => {
+            crate::ast::Query::Filter(filter_stmt) => {
                 // Use the existing context passed to execute_query_recursive
                 self.execute_filter_statement(filter_stmt, context)
             }
-            crate::ast::ast::Query::Return(return_query) => {
+            crate::ast::Query::Return(return_query) => {
                 // Use the existing context passed to execute_query_recursive
                 self.execute_return_query(return_query, context)
             }
-            crate::ast::ast::Query::Unwind(unwind_stmt) => {
+            crate::ast::Query::Unwind(unwind_stmt) => {
                 // Use the existing context passed to execute_query_recursive
                 self.execute_unwind_statement(unwind_stmt, context)
             }
-            crate::ast::ast::Query::MutationPipeline(_) => {
+            crate::ast::Query::MutationPipeline(_) => {
                 // Mutation pipelines require special handling with sessions
                 Err(ExecutionError::RuntimeError(
                     "Mutation pipelines require session-aware execution".to_string(),
@@ -7024,7 +7022,7 @@ impl QueryExecutor {
     /// Execute standalone RETURN query: RETURN [DISTINCT|ALL] items [GROUP BY] [HAVING] [ORDER BY] [LIMIT]
     fn execute_return_query(
         &self,
-        return_query: &crate::ast::ast::ReturnQuery,
+        return_query: &crate::ast::ReturnQuery,
         context: &mut ExecutionContext,
     ) -> Result<QueryResult, ExecutionError> {
         // Process return items
@@ -7039,14 +7037,14 @@ impl QueryExecutor {
             let column_name = item.alias.clone().unwrap_or_else(|| {
                 // Generate a default column name based on the expression
                 match &item.expression {
-                    crate::ast::ast::Expression::Literal(literal) => match literal {
-                        crate::ast::ast::Literal::String(_) => "string_literal".to_string(),
-                        crate::ast::ast::Literal::Integer(_) => "integer_literal".to_string(),
-                        crate::ast::ast::Literal::Float(_) => "float_literal".to_string(),
-                        crate::ast::ast::Literal::Boolean(_) => "boolean_literal".to_string(),
+                    crate::ast::Expression::Literal(literal) => match literal {
+                        crate::ast::Literal::String(_) => "string_literal".to_string(),
+                        crate::ast::Literal::Integer(_) => "integer_literal".to_string(),
+                        crate::ast::Literal::Float(_) => "float_literal".to_string(),
+                        crate::ast::Literal::Boolean(_) => "boolean_literal".to_string(),
                         _ => "literal".to_string(),
                     },
-                    crate::ast::ast::Expression::Binary(_) => "expression".to_string(),
+                    crate::ast::Expression::Binary(_) => "expression".to_string(),
                     _ => "column".to_string(),
                 }
             });
@@ -7065,7 +7063,7 @@ impl QueryExecutor {
     /// Execute LET statement: LET variable = expression [, variable = expression]*
     fn execute_let_statement(
         &self,
-        let_stmt: &crate::ast::ast::LetStatement,
+        let_stmt: &crate::ast::LetStatement,
         context: &mut ExecutionContext,
     ) -> Result<QueryResult, ExecutionError> {
         // LET statements create variables in the context for use in subsequent queries
@@ -7098,7 +7096,7 @@ impl QueryExecutor {
     /// Execute FOR statement: FOR [alias:] variable IN expression
     fn execute_for_statement(
         &self,
-        for_stmt: &crate::ast::ast::ForStatement,
+        for_stmt: &crate::ast::ForStatement,
         context: &mut ExecutionContext,
     ) -> Result<QueryResult, ExecutionError> {
         // FOR statements iterate over a collection
@@ -7140,7 +7138,7 @@ impl QueryExecutor {
     /// Execute FILTER statement: FILTER [WHERE] expression
     fn execute_filter_statement(
         &self,
-        _filter_stmt: &crate::ast::ast::FilterStatement,
+        _filter_stmt: &crate::ast::FilterStatement,
         _context: &mut ExecutionContext,
     ) -> Result<QueryResult, ExecutionError> {
         // FILTER statements filter the current result set
@@ -7174,11 +7172,11 @@ impl QueryExecutor {
     /// Execute mutation pipeline: MATCH ... WITH ... [UNWIND ...] REMOVE/SET/DELETE
     fn execute_mutation_pipeline(
         &self,
-        pipeline: &crate::ast::ast::MutationPipeline,
+        pipeline: &crate::ast::MutationPipeline,
         context: &mut ExecutionContext,
         _session: Option<&Arc<std::sync::RwLock<UserSession>>>,
     ) -> Result<QueryResult, ExecutionError> {
-        use crate::ast::ast::FinalMutation;
+        use crate::ast::FinalMutation;
         use crate::storage::Value;
 
         log::debug!(
@@ -7248,7 +7246,7 @@ impl QueryExecutor {
                     // Apply SET operations to entities in this row
                     for set_item in set_items {
                         match set_item {
-                            crate::ast::ast::SetItem::PropertyAssignment { property, value } => {
+                            crate::ast::SetItem::Property { property, value } => {
                                 log::debug!(
                                     "Processing PropertyAssignment: {}.{} = {:?}",
                                     property.object,
@@ -7327,7 +7325,7 @@ impl QueryExecutor {
     /// Apply a property assignment to entities in a row using proper storage mutation flow
     fn apply_property_assignment(
         &self,
-        property: &crate::ast::ast::PropertyAccess,
+        property: &crate::ast::PropertyAccess,
         new_value: crate::storage::Value,
         row: &Row,
         context: &ExecutionContext,
@@ -7401,7 +7399,7 @@ impl QueryExecutor {
     /// Execute UNWIND on a set of rows
     fn execute_unwind_on_rows(
         &self,
-        unwind_clause: &crate::ast::ast::UnwindClause,
+        unwind_clause: &crate::ast::UnwindClause,
         input_rows: Vec<Row>,
         context: &ExecutionContext,
     ) -> Result<Vec<Row>, ExecutionError> {
@@ -7462,9 +7460,8 @@ impl QueryExecutor {
                 self.evaluate_expression(&where_clause.condition, &row_context)?;
 
             // Keep row if condition evaluates to true
-            match condition_result.as_boolean() {
-                Some(true) => filtered_rows.push(row),
-                _ => {} // Skip row if false or not a boolean
+            if let Some(true) = condition_result.as_boolean() {
+                filtered_rows.push(row);
             }
         }
 
@@ -7474,7 +7471,7 @@ impl QueryExecutor {
     /// Execute UNWIND statement: UNWIND expression AS variable
     fn execute_unwind_statement(
         &self,
-        unwind_stmt: &crate::ast::ast::UnwindStatement,
+        unwind_stmt: &crate::ast::UnwindStatement,
         context: &mut ExecutionContext,
     ) -> Result<QueryResult, ExecutionError> {
         use crate::storage::Value;
@@ -7985,22 +7982,22 @@ impl QueryExecutor {
     #[allow(dead_code)] // ROADMAP v0.5.0 - Literal type inference for static analysis
     fn infer_literal_type(
         &self,
-        literal: &crate::ast::ast::Literal,
+        literal: &crate::ast::Literal,
     ) -> Result<GqlType, ExecutionError> {
         match literal {
-            crate::ast::ast::Literal::String(_) => Ok(GqlType::String { max_length: None }),
-            crate::ast::ast::Literal::Integer(_) => Ok(GqlType::BigInt),
-            crate::ast::ast::Literal::Float(_) => Ok(GqlType::Double),
-            crate::ast::ast::Literal::Boolean(_) => Ok(GqlType::Boolean),
-            crate::ast::ast::Literal::Null => Ok(GqlType::String { max_length: None }), // Null can be any type
-            crate::ast::ast::Literal::DateTime(_) => Ok(GqlType::ZonedDateTime { precision: None }),
-            crate::ast::ast::Literal::Duration(_) => Ok(GqlType::Duration { precision: None }),
-            crate::ast::ast::Literal::TimeWindow(_) => Ok(GqlType::Duration { precision: None }),
-            crate::ast::ast::Literal::Vector(_) => Ok(GqlType::List {
+            crate::ast::Literal::String(_) => Ok(GqlType::String { max_length: None }),
+            crate::ast::Literal::Integer(_) => Ok(GqlType::BigInt),
+            crate::ast::Literal::Float(_) => Ok(GqlType::Double),
+            crate::ast::Literal::Boolean(_) => Ok(GqlType::Boolean),
+            crate::ast::Literal::Null => Ok(GqlType::String { max_length: None }), // Null can be any type
+            crate::ast::Literal::DateTime(_) => Ok(GqlType::ZonedDateTime { precision: None }),
+            crate::ast::Literal::Duration(_) => Ok(GqlType::Duration { precision: None }),
+            crate::ast::Literal::TimeWindow(_) => Ok(GqlType::Duration { precision: None }),
+            crate::ast::Literal::Vector(_) => Ok(GqlType::List {
                 element_type: Box::new(GqlType::Double),
                 max_length: None,
             }),
-            crate::ast::ast::Literal::List(_) => Ok(GqlType::List {
+            crate::ast::Literal::List(_) => Ok(GqlType::List {
                 element_type: Box::new(GqlType::String { max_length: None }),
                 max_length: None,
             }),
@@ -8316,17 +8313,17 @@ impl QueryExecutor {
     /// Evaluate a unary operation
     fn evaluate_unary_op(
         &self,
-        operator: &crate::ast::ast::Operator,
+        operator: &crate::ast::Operator,
         operand: Value,
     ) -> Result<Value, ExecutionError> {
         match operator {
-            crate::ast::ast::Operator::Not => match operand {
+            crate::ast::Operator::Not => match operand {
                 Value::Boolean(b) => Ok(Value::Boolean(!b)),
                 _ => Err(ExecutionError::RuntimeError(
                     "NOT operator requires boolean operand".to_string(),
                 )),
             },
-            crate::ast::ast::Operator::Minus => match operand {
+            crate::ast::Operator::Minus => match operand {
                 Value::Number(n) => Ok(Value::Number(-n)),
                 _ => Err(ExecutionError::RuntimeError(
                     "Unary minus requires numeric operand".to_string(),
@@ -8358,7 +8355,7 @@ impl QueryExecutor {
     fn apply_order_by(
         &self,
         mut result: QueryResult,
-        order_clause: &crate::ast::ast::OrderClause,
+        order_clause: &crate::ast::OrderClause,
         context: &ExecutionContext,
     ) -> Result<QueryResult, ExecutionError> {
         use std::cmp::Ordering;
@@ -8395,8 +8392,8 @@ impl QueryExecutor {
                 };
 
                 let final_ordering = match order_item.direction {
-                    crate::ast::ast::OrderDirection::Ascending => ordering,
-                    crate::ast::ast::OrderDirection::Descending => ordering.reverse(),
+                    crate::ast::OrderDirection::Ascending => ordering,
+                    crate::ast::OrderDirection::Descending => ordering.reverse(),
                 };
 
                 if final_ordering != Ordering::Equal {
@@ -8413,7 +8410,7 @@ impl QueryExecutor {
     fn apply_limit(
         &self,
         mut result: QueryResult,
-        limit_clause: &crate::ast::ast::LimitClause,
+        limit_clause: &crate::ast::LimitClause,
     ) -> Result<QueryResult, ExecutionError> {
         let offset = limit_clause.offset.unwrap_or(0);
         let count = limit_clause.count;
@@ -8773,49 +8770,49 @@ impl QueryExecutor {
     /// Evaluate IS predicate expressions
     fn evaluate_is_predicate(
         &self,
-        predicate: &crate::ast::ast::IsPredicateExpression,
+        predicate: &crate::ast::IsPredicateExpression,
         context: &ExecutionContext,
     ) -> Result<Value, ExecutionError> {
         let subject_value = self.evaluate_expression(&predicate.subject, context)?;
 
         let result = match &predicate.predicate_type {
-            crate::ast::ast::IsPredicateType::Null => {
+            crate::ast::IsPredicateType::Null => {
                 matches!(subject_value, Value::Null)
             }
 
-            crate::ast::ast::IsPredicateType::True => {
+            crate::ast::IsPredicateType::True => {
                 matches!(subject_value, Value::Boolean(true))
             }
 
-            crate::ast::ast::IsPredicateType::False => {
+            crate::ast::IsPredicateType::False => {
                 matches!(subject_value, Value::Boolean(false))
             }
 
-            crate::ast::ast::IsPredicateType::Unknown => {
+            crate::ast::IsPredicateType::Unknown => {
                 // Three-valued logic: UNKNOWN is neither TRUE nor FALSE
                 matches!(subject_value, Value::Null)
             }
 
-            crate::ast::ast::IsPredicateType::Normalized => {
+            crate::ast::IsPredicateType::Normalized => {
                 self.check_normalized(&subject_value)?
             }
 
-            crate::ast::ast::IsPredicateType::Directed => {
+            crate::ast::IsPredicateType::Directed => {
                 // For now, return false as we don't have full edge representation
                 false
             }
 
-            crate::ast::ast::IsPredicateType::Source => {
+            crate::ast::IsPredicateType::Source => {
                 // For now, return false as we don't have full topology support
                 false
             }
 
-            crate::ast::ast::IsPredicateType::Destination => {
+            crate::ast::IsPredicateType::Destination => {
                 // For now, return false as we don't have full topology support
                 false
             }
 
-            crate::ast::ast::IsPredicateType::Typed => {
+            crate::ast::IsPredicateType::Typed => {
                 if let Some(ref type_spec) = predicate.type_spec {
                     self.check_type_match(&subject_value, type_spec)?
                 } else {
@@ -8823,7 +8820,7 @@ impl QueryExecutor {
                 }
             }
 
-            crate::ast::ast::IsPredicateType::Label(label_expr) => {
+            crate::ast::IsPredicateType::Label(label_expr) => {
                 // Check if the subject value is a node and has the specified label
                 if let Some(node) = subject_value.as_node() {
                     // For simple case, check if any label term matches
@@ -8831,12 +8828,12 @@ impl QueryExecutor {
                     for term in &label_expr.terms {
                         for factor in &term.factors {
                             match factor {
-                                crate::ast::ast::LabelFactor::Identifier(label_name) => {
+                                crate::ast::LabelFactor::Identifier(label_name) => {
                                     if node.has_label(label_name) {
                                         return Ok(Value::Boolean(!predicate.negated));
                                     }
                                 }
-                                crate::ast::ast::LabelFactor::Wildcard => {
+                                crate::ast::LabelFactor::Wildcard => {
                                     // Wildcard matches any node with at least one label
                                     if !node.labels.is_empty() {
                                         return Ok(Value::Boolean(!predicate.negated));
@@ -8877,14 +8874,14 @@ impl QueryExecutor {
     fn check_type_match(
         &self,
         value: &Value,
-        type_spec: &crate::ast::ast::TypeSpec,
+        type_spec: &crate::ast::TypeSpec,
     ) -> Result<bool, ExecutionError> {
         match (value, type_spec) {
-            (Value::Number(_), crate::ast::ast::TypeSpec::Integer) => Ok(true),
-            (Value::Number(_), crate::ast::ast::TypeSpec::Double) => Ok(true),
-            (Value::Number(_), crate::ast::ast::TypeSpec::Float { .. }) => Ok(true),
-            (Value::String(_), crate::ast::ast::TypeSpec::String { .. }) => Ok(true),
-            (Value::Boolean(_), crate::ast::ast::TypeSpec::Boolean) => Ok(true),
+            (Value::Number(_), crate::ast::TypeSpec::Integer) => Ok(true),
+            (Value::Number(_), crate::ast::TypeSpec::Double) => Ok(true),
+            (Value::Number(_), crate::ast::TypeSpec::Float { .. }) => Ok(true),
+            (Value::String(_), crate::ast::TypeSpec::String { .. }) => Ok(true),
+            (Value::Boolean(_), crate::ast::TypeSpec::Boolean) => Ok(true),
             // Add more type checking logic as needed
             _ => Ok(false),
         }
@@ -9315,8 +9312,8 @@ impl QueryExecutor {
     }
 
     /// Derive a variable name from an expression
-    fn derive_variable_name_from_expression(&self, expr: &crate::ast::ast::Expression) -> String {
-        use crate::ast::ast::Expression;
+    fn derive_variable_name_from_expression(&self, expr: &crate::ast::Expression) -> String {
+        use crate::ast::Expression;
 
         match expr {
             Expression::Variable(var) => var.name.clone(),
@@ -9345,7 +9342,7 @@ impl QueryExecutor {
     /// Evaluate a pattern expression in WHERE clauses
     fn evaluate_pattern_expression(
         &self,
-        pattern_expr: &crate::ast::ast::PatternExpression,
+        pattern_expr: &crate::ast::PatternExpression,
         context: &ExecutionContext,
     ) -> Result<Value, ExecutionError> {
         // For now, we'll implement a simplified pattern matching
@@ -9370,13 +9367,13 @@ impl QueryExecutor {
             .pattern
             .elements
             .iter()
-            .any(|elem| matches!(elem, crate::ast::ast::PatternElement::Node(_)));
+            .any(|elem| matches!(elem, crate::ast::PatternElement::Node(_)));
 
         let has_edges = pattern_expr
             .pattern
             .elements
             .iter()
-            .any(|elem| matches!(elem, crate::ast::ast::PatternElement::Edge(_)));
+            .any(|elem| matches!(elem, crate::ast::PatternElement::Edge(_)));
 
         // For now, return true if we have both nodes and edges (indicating a valid relationship pattern)
         // In a real implementation, this would execute the pattern against the graph

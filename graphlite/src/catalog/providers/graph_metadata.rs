@@ -422,6 +422,7 @@ pub struct GraphMetadataCatalog {
 
 impl GraphMetadataCatalog {
     /// Create a new graph metadata catalog provider
+    #[allow(clippy::new_ret_no_self)]
     pub fn new() -> Box<dyn CatalogProvider> {
         Box::new(Self {
             graphs: HashMap::new(),

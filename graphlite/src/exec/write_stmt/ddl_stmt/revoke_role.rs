@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // RevokeRoleExecutor - Implements REVOKE ROLE statement execution
-use crate::ast::ast::RevokeRoleStatement;
+use crate::ast::RevokeRoleStatement;
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::{CatalogOperation, CatalogResponse, EntityType, QueryType};
 use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;

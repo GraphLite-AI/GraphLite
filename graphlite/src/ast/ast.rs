@@ -733,13 +733,15 @@ impl CatalogPath {
         Self { segments, location }
     }
 
-    pub fn to_string(&self) -> String {
-        format!("/{}", self.segments.join("/"))
-    }
-
     /// Get the last segment as the name
     pub fn name(&self) -> Option<&String> {
         self.segments.last()
+    }
+}
+
+impl std::fmt::Display for CatalogPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "/{}", self.segments.join("/"))
     }
 }
 
@@ -915,15 +917,15 @@ pub struct SetStatement {
 /// SET item
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SetItem {
-    PropertyAssignment {
+    Property {
         property: PropertyAccess,
         value: Expression,
     },
-    VariableAssignment {
+    Variable {
         variable: String,
         value: Expression,
     },
-    LabelAssignment {
+    Label {
         variable: String,
         labels: LabelExpression,
     },
@@ -989,9 +991,9 @@ pub struct MatchDeleteStatement {
 /// Session statements for managing session state and variables
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SessionStatement {
-    SessionSet(SessionSetStatement),
-    SessionReset(SessionResetStatement),
-    SessionClose(SessionCloseStatement),
+    Set(SessionSetStatement),
+    Reset(SessionResetStatement),
+    Close(SessionCloseStatement),
 }
 
 /// SESSION SET statement
@@ -1705,11 +1707,11 @@ impl AccessMode {
 /// Index DDL statement types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IndexStatement {
-    CreateIndex(CreateIndexStatement),
-    DropIndex(DropIndexStatement),
-    AlterIndex(AlterIndexStatement),
-    OptimizeIndex(OptimizeIndexStatement),
-    ReindexIndex(ReindexStatement),
+    Create(CreateIndexStatement),
+    Drop(DropIndexStatement),
+    Alter(AlterIndexStatement),
+    Optimize(OptimizeIndexStatement),
+    Reindex(ReindexStatement),
 }
 
 /// CREATE GRAPH INDEX statement

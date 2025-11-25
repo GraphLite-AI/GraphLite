@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
 
-use crate::ast::ast::{
+use crate::ast::{
     BasicQuery, BinaryExpression, Document, Expression, LetStatement, MatchClause, Operator,
     OrderClause, OrderDirection, PathPattern, PatternElement, Query, ReturnClause, SetOperation,
     SetOperationType, Variable,
@@ -155,7 +155,7 @@ impl QueryPlanner {
     pub fn plan_query(&mut self, document: &Document) -> Result<PhysicalPlan, PlanningError> {
         // Extract query from document
         let query = match &document.statement {
-            crate::ast::ast::Statement::Query(q) => q,
+            crate::ast::Statement::Query(q) => q,
             _ => {
                 return Err(PlanningError::InvalidQuery(
                     "Document does not contain a query statement".to_string(),
@@ -201,7 +201,7 @@ impl QueryPlanner {
 
         // Extract query from document
         let query = match &document.statement {
-            crate::ast::ast::Statement::Query(q) => q,
+            crate::ast::Statement::Query(q) => q,
             _ => {
                 return Err(PlanningError::InvalidQuery(
                     "Document does not contain a query statement".to_string(),
@@ -317,7 +317,7 @@ impl QueryPlanner {
 
         // Extract query from document
         let query = match &document.statement {
-            crate::ast::ast::Statement::Query(q) => q,
+            crate::ast::Statement::Query(q) => q,
             _ => {
                 return Err(PlanningError::InvalidQuery(
                     "Document does not contain a query statement".to_string(),
@@ -383,7 +383,7 @@ impl QueryPlanner {
                             expression: item.expression.clone(),
                             ascending: matches!(
                                 item.direction,
-                                crate::ast::ast::OrderDirection::Ascending
+                                crate::ast::OrderDirection::Ascending
                             ),
                         })
                         .collect();
@@ -417,7 +417,7 @@ impl QueryPlanner {
                     for pattern in &segment.match_clause.patterns {
                         for element in &pattern.elements {
                             match element {
-                                crate::ast::ast::PatternElement::Node(node) => {
+                                crate::ast::PatternElement::Node(node) => {
                                     if let Some(var_name) = &node.identifier {
                                         variables.insert(
                                             var_name.clone(),
@@ -430,7 +430,7 @@ impl QueryPlanner {
                                         );
                                     }
                                 }
-                                crate::ast::ast::PatternElement::Edge(edge) => {
+                                crate::ast::PatternElement::Edge(edge) => {
                                     if let Some(var_name) = &edge.identifier {
                                         variables.insert(
                                             var_name.clone(),
@@ -573,7 +573,7 @@ impl QueryPlanner {
             }
 
             // Apply DISTINCT if specified
-            if query.return_clause.distinct == crate::ast::ast::DistinctQualifier::Distinct {
+            if query.return_clause.distinct == crate::ast::DistinctQualifier::Distinct {
                 logical_plan = logical_plan.apply_distinct();
             }
         }
@@ -666,7 +666,7 @@ impl QueryPlanner {
     /// Create logical plan for standalone RETURN query
     fn create_return_logical_plan(
         &self,
-        return_query: &crate::ast::ast::ReturnQuery,
+        return_query: &crate::ast::ReturnQuery,
     ) -> Result<LogicalPlan, PlanningError> {
         let context = PlanningContext {
             variables: HashMap::new(),
@@ -703,7 +703,7 @@ impl QueryPlanner {
         }
 
         // Apply DISTINCT if specified
-        if return_query.return_clause.distinct == crate::ast::ast::DistinctQualifier::Distinct {
+        if return_query.return_clause.distinct == crate::ast::DistinctQualifier::Distinct {
             logical_plan = logical_plan.apply_distinct();
         }
 
@@ -724,7 +724,7 @@ impl QueryPlanner {
                 .iter()
                 .map(|item| SortExpression {
                     expression: item.expression.clone(),
-                    ascending: matches!(item.direction, crate::ast::ast::OrderDirection::Ascending),
+                    ascending: matches!(item.direction, crate::ast::OrderDirection::Ascending),
                 })
                 .collect();
             logical_plan = logical_plan.apply_sort(sort_expressions);
@@ -764,7 +764,7 @@ impl QueryPlanner {
                 .iter()
                 .map(|item| SortExpression {
                     expression: item.expression.clone(),
-                    ascending: matches!(item.direction, crate::ast::ast::OrderDirection::Ascending),
+                    ascending: matches!(item.direction, crate::ast::OrderDirection::Ascending),
                 })
                 .collect();
             plan = plan.apply_sort(sort_expressions);
@@ -873,7 +873,6 @@ impl QueryPlanner {
         // ⚡ CRITICAL BUG FIX: Apply pattern optimization at ALL levels since this fixes incorrect results
         // The comma-separated pattern bug creates wrong results, not just inefficient ones
         // This is a correctness fix, not just a performance optimization
-        true &&
         // Only optimize if we have multiple patterns (the bug condition)
         match_clause.patterns.len() > 1 &&
         // Don't optimize too many patterns (avoid exponential complexity)
@@ -897,15 +896,15 @@ impl QueryPlanner {
             match_clause: match_clause.clone(),
             where_clause: None,
             return_clause: ReturnClause {
-                distinct: crate::ast::ast::DistinctQualifier::None,
+                distinct: crate::ast::DistinctQualifier::None,
                 items: vec![],
-                location: crate::ast::ast::Location::default(),
+                location: crate::ast::Location::default(),
             },
             group_clause: None,
             having_clause: None,
             order_clause: None,
             limit_clause: None,
-            location: crate::ast::ast::Location::default(),
+            location: crate::ast::Location::default(),
         });
 
         // Create base logical plan from first pattern
@@ -1324,11 +1323,11 @@ impl QueryPlanner {
     /// Plan GROUP BY clause with alias resolution from RETURN clause
     fn plan_group_clause_with_aliases(
         &self,
-        group_clause: &crate::ast::ast::GroupClause,
-        return_clause: &crate::ast::ast::ReturnClause,
+        group_clause: &crate::ast::GroupClause,
+        return_clause: &crate::ast::ReturnClause,
         _context: &PlanningContext,
-    ) -> Result<Vec<crate::ast::ast::Expression>, PlanningError> {
-        use crate::ast::ast::{Expression, Variable};
+    ) -> Result<Vec<crate::ast::Expression>, PlanningError> {
+        use crate::ast::{Expression, Variable};
 
         let mut resolved_expressions = Vec::new();
 
@@ -1366,10 +1365,10 @@ impl QueryPlanner {
     /// Resolve expressions in HAVING clauses with alias resolution from RETURN clause
     fn resolve_having_expression_with_aliases(
         &self,
-        expr: &crate::ast::ast::Expression,
-        return_clause: &crate::ast::ast::ReturnClause,
-    ) -> crate::ast::ast::Expression {
-        use crate::ast::ast::{Expression, FunctionCall, Variable};
+        expr: &crate::ast::Expression,
+        return_clause: &crate::ast::ReturnClause,
+    ) -> crate::ast::Expression {
+        use crate::ast::{Expression, FunctionCall, Variable};
 
         match expr {
             Expression::Variable(Variable { name, .. }) => {
@@ -1380,7 +1379,7 @@ impl QueryPlanner {
                             // Found the alias! Use a variable reference to the alias instead
                             return Expression::Variable(Variable {
                                 name: alias.clone(),
-                                location: crate::ast::ast::Location::default(),
+                                location: crate::ast::Location::default(),
                             });
                         }
                     }
@@ -1401,7 +1400,7 @@ impl QueryPlanner {
                             if let Some(alias) = &return_item.alias {
                                 return Expression::Variable(Variable {
                                     name: alias.clone(),
-                                    location: crate::ast::ast::Location::default(),
+                                    location: crate::ast::Location::default(),
                                 });
                             }
                         }
@@ -1421,7 +1420,7 @@ impl QueryPlanner {
                 })
             }
             Expression::Binary(binary_expr) => {
-                Expression::Binary(crate::ast::ast::BinaryExpression {
+                Expression::Binary(crate::ast::BinaryExpression {
                     left: Box::new(
                         self.resolve_having_expression_with_aliases(
                             &binary_expr.left,
@@ -1439,7 +1438,7 @@ impl QueryPlanner {
                 })
             }
             Expression::Unary(unary_expr) => {
-                Expression::Unary(crate::ast::ast::UnaryExpression {
+                Expression::Unary(crate::ast::UnaryExpression {
                     operator: unary_expr.operator.clone(),
                     expression: Box::new(self.resolve_having_expression_with_aliases(
                         &unary_expr.expression,
@@ -1928,7 +1927,7 @@ impl QueryPlanner {
             left: Box::new(correlation_condition),
             operator: Operator::And,
             right: Box::new(in_condition),
-            location: crate::ast::ast::Location::default(),
+            location: crate::ast::Location::default(),
         });
 
         let outer_scan = LogicalNode::NodeScan {
@@ -1962,14 +1961,14 @@ impl QueryPlanner {
         Ok(Expression::Binary(BinaryExpression {
             left: Box::new(Expression::Variable(Variable {
                 name: format!("outer.{}", var_name),
-                location: crate::ast::ast::Location::default(),
+                location: crate::ast::Location::default(),
             })),
             operator: Operator::Equal,
             right: Box::new(Expression::Variable(Variable {
                 name: format!("inner.{}", var_name),
-                location: crate::ast::ast::Location::default(),
+                location: crate::ast::Location::default(),
             })),
-            location: crate::ast::ast::Location::default(),
+            location: crate::ast::Location::default(),
         }))
     }
 
@@ -2708,7 +2707,7 @@ impl QueryPlanner {
     /// Create logical plan for UNWIND statement
     fn create_unwind_logical_plan(
         &self,
-        unwind_stmt: &crate::ast::ast::UnwindStatement,
+        unwind_stmt: &crate::ast::UnwindStatement,
     ) -> Result<LogicalPlan, PlanningError> {
         use crate::plan::logical::LogicalNode;
 
@@ -2740,19 +2739,19 @@ impl QueryPlanner {
     /// Create logical plan for mutation pipeline
     fn create_mutation_pipeline_logical_plan(
         &mut self,
-        pipeline: &crate::ast::ast::MutationPipeline,
+        pipeline: &crate::ast::MutationPipeline,
     ) -> Result<LogicalPlan, PlanningError> {
         // For now, treat as a basic query using the first segment
         if let Some(first_segment) = pipeline.segments.first() {
             // Create a basic query from the first segment
-            let basic_query = crate::ast::ast::BasicQuery {
+            let basic_query = crate::ast::BasicQuery {
                 match_clause: first_segment.match_clause.clone(),
                 where_clause: first_segment.where_clause.clone(),
-                return_clause: crate::ast::ast::ReturnClause {
-                    distinct: crate::ast::ast::DistinctQualifier::None,
-                    items: vec![crate::ast::ast::ReturnItem {
-                        expression: crate::ast::ast::Expression::Variable(
-                            crate::ast::ast::Variable {
+                return_clause: crate::ast::ReturnClause {
+                    distinct: crate::ast::DistinctQualifier::None,
+                    items: vec![crate::ast::ReturnItem {
+                        expression: crate::ast::Expression::Variable(
+                            crate::ast::Variable {
                                 name: "*".to_string(),
                                 location: Default::default(),
                             },
@@ -3056,7 +3055,7 @@ impl<'a> IndexAwareOptimizer<'a> {
     /// Extract string literal from expression
     #[allow(dead_code)] // ROADMAP v0.6.0 - Literal extraction for predicate analysis
     fn extract_string_literal(&self, expr: &Expression) -> Option<String> {
-        use crate::ast::ast::{Expression, Literal};
+        use crate::ast::{Expression, Literal};
 
         if let Expression::Literal(Literal::String(s)) = expr {
             return Some(s.clone());
@@ -3067,7 +3066,7 @@ impl<'a> IndexAwareOptimizer<'a> {
     /// Extract number literal from expression
     #[allow(dead_code)] // ROADMAP v0.6.0 - Numeric literal extraction for cost estimation
     fn extract_number_literal(&self, expr: &Expression) -> Option<f64> {
-        use crate::ast::ast::{Expression, Literal};
+        use crate::ast::{Expression, Literal};
 
         match expr {
             Expression::Literal(Literal::Float(f)) => Some(*f),

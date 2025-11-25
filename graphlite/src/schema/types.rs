@@ -43,17 +43,6 @@ impl GraphTypeVersion {
         }
     }
 
-    pub fn to_string(&self) -> String {
-        let mut version = format!("{}.{}.{}", self.major, self.minor, self.patch);
-        if let Some(pre) = &self.pre_release {
-            version.push_str(&format!("-{}", pre));
-        }
-        if let Some(build) = &self.build_metadata {
-            version.push_str(&format!("+{}", build));
-        }
-        version
-    }
-
     pub fn parse(version_str: &str) -> Result<Self, String> {
         let parts: Vec<&str> = version_str.split('.').collect();
         if parts.len() != 3 {
@@ -92,6 +81,19 @@ impl GraphTypeVersion {
         // Same major version = compatible
         // Different major version = potentially incompatible
         self.major == other.major
+    }
+}
+
+impl std::fmt::Display for GraphTypeVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}.{}", self.major, self.minor, self.patch)?;
+        if let Some(pre) = &self.pre_release {
+            write!(f, "-{}", pre)?;
+        }
+        if let Some(build) = &self.build_metadata {
+            write!(f, "+{}", build)?;
+        }
+        Ok(())
     }
 }
 
@@ -161,7 +163,7 @@ pub enum DataType {
     Duration,
 
     // Special types
-    UUID,
+    Uuid,
     Text,  // For full-text indexable content
     Json,  // JSON object
     Bytes, // Binary data
@@ -203,7 +205,7 @@ impl DataType {
             DataType::DateTime => "TIMESTAMP".to_string(),
             DataType::Timestamp => "TIMESTAMP WITH TIME ZONE".to_string(),
             DataType::Duration => "INTERVAL".to_string(),
-            DataType::UUID => "UUID".to_string(),
+            DataType::Uuid => "UUID".to_string(),
             DataType::Text => "TEXT".to_string(),
             DataType::Json => "JSONB".to_string(),
             DataType::Bytes => "BYTEA".to_string(),

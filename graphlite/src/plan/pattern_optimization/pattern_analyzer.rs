@@ -10,7 +10,7 @@ use petgraph::graph::{Graph, NodeIndex, UnGraph};
 use petgraph::visit::EdgeRef;
 use std::collections::{HashMap, HashSet};
 
-use crate::ast::ast::{Edge, PathPattern, PatternElement};
+use crate::ast::{Edge, PathPattern, PatternElement};
 use crate::plan::pattern_optimization::pattern_analysis::{
     LinearPath, PatternConnectivity, TraversalStep,
 };
@@ -442,7 +442,7 @@ impl Default for PatternAnalyzer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::ast::{EdgeDirection, Location, Node};
+    use crate::ast::{EdgeDirection, Location, Node};
 
     fn create_test_node(id: &str, label: &str) -> PatternElement {
         PatternElement::Node(Node {
