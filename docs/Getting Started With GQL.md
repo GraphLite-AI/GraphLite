@@ -66,7 +66,7 @@ SESSION SET GRAPH /test_schema/social_network;
 ### 1.5 Verify Context
 ```gql
 -- Check current session settings
-CALL show_session();
+CALL gql.show_session();
 ```
 
 **Expected Output:** Shows current schema and graph context
