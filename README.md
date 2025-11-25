@@ -345,6 +345,64 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+### Using the graphlite crate
+
+1. In your Rust project, run: 
+
+        Cargo add graphlite
+
+    OR add graphlite = "0.0.1" to your Cargo.toml as a dependency
+
+
+2. Run the following script: use graphlite::QueryCoordinator;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let db_path = "./my_app_db";
+
+    // 1. Initialize database (creates all files and components)
+    let coordinator = QueryCoordinator::from_path(db_path)?;
+
+    // 2. Set admin user password
+    // The 'admin' user is created automatically during initialization
+    coordinator.set_user_password("admin", "my_secure_password")?;
+
+    // 3. Create a session
+    let session_id = coordinator.create_simple_session("admin")?;
+
+    // 4. Create schema and graph
+    coordinator.process_query("CREATE SCHEMA IF NOT EXISTS /myschema", &session_id)?;
+    coordinator.process_query("CREATE GRAPH IF NOT EXISTS /myschema/social", &session_id)?;
+    coordinator.process_query("SESSION SET GRAPH /myschema/social", &session_id)?;
+
+    // 5. Insert data
+    coordinator.process_query(
+        "INSERT (:Person {name: 'Alice', age: 30})",
+        &session_id
+    )?;
+
+    // 6. Query data
+    let result = coordinator.process_query(
+        "MATCH (p:Person) RETURN p.name, p.age",
+        &session_id
+    )?;
+
+    // 7. Process results
+    for row in &result.rows {
+        println!("Name: {:?}, Age: {:?}",
+            row.values.get("p.name"),
+            row.values.get("p.age")
+        );
+    }
+
+    // 8. Close session when done
+    coordinator.close_session(&session_id)?;
+
+    Ok(())
+}
+
+
+
+
 
 ### Examples and Documentation
 
