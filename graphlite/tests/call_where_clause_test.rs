@@ -166,7 +166,7 @@ fn test_call_where_demonstrates_bug() {
     );
 
     // Verify the fix is working
-    let row_count = result.rows.len();
+    let _row_count = result.rows.len();
 
     // The bug has been fixed! WHERE clause now works with CALL statements
     assert_eq!(

@@ -535,7 +535,7 @@ fn test_complex_match_with_scenarios() {
 
     // Debug: print what tiers actually exist
     for row in &upgrade_result.rows {
-        if let (Some(Value::String(name)), Some(tier)) =
+        if let (Some(Value::String(_name)), Some(_tier)) =
             (row.values.get("c.name"), row.values.get("c.tier"))
         {}
     }
@@ -964,7 +964,7 @@ fn test_complex_match_operations_with_multiple_relationships() {
     );
 
     // Test MATCH-SET to update quality scores based on engagement
-    fixture.query(
+    let _ = fixture.query(
         "MATCH (u:User)-[e:ENGAGED]->(c:Content)
          WITH c, sum(e.value) as total_engagement, count(e) as engagement_count
          WHERE total_engagement > 3
@@ -1240,7 +1240,7 @@ fn test_match_set_comprehensive_combinations() {
 
     // Test 3: MATCH-SET with WITH only (aggregation, no WHERE filtering)
     // Simpler test: just set a flag based on relationship existence
-    fixture.query(
+    let _ = fixture.query(
         "MATCH (u:User)-[c:CREATED]->(p:Post)
          WITH u, count(c) as creation_count
          SET u.has_created_content = true, u.creation_count = creation_count",
@@ -1294,7 +1294,7 @@ fn test_match_set_comprehensive_combinations() {
     }
 
     // Test 4: MATCH-SET with WITH and WHERE (aggregation with filtering)
-    fixture.query(
+    let _ = fixture.query(
         "MATCH (u:User)-[c:CREATED]->(p:Post)
          WITH u, avg(c.rating) as avg_rating
          WHERE avg_rating >= 17.0
@@ -1321,7 +1321,7 @@ fn test_match_set_comprehensive_combinations() {
 
         // Verify the aggregation and filtering logic works
         // First check what data we actually have
-        let debug_result = fixture
+        let _debug_result = fixture
             .query(
                 "MATCH (u:User)-[c:CREATED]->(p:Post)
              RETURN u.name as name, c.rating as rating",
@@ -1569,15 +1569,15 @@ fn test_match_delete_with_aggregation_and_where() {
     );
 
     // Debug: Test basic MATCH without WITH first
-    let match_only = fixture
+    let _match_only = fixture
         .assert_query_succeeds("MATCH (u:User)-[r:RATED]->(p:Post) RETURN u.id, r.rating, p.id");
 
     // Debug: Test if the variable names are what we expect
     let simple_test =
         fixture.query("MATCH (u:User)-[r:RATED]->(p:Post) WITH p RETURN count(p) as post_count");
     match simple_test {
-        Ok(result) => {}
-        Err(e) => {}
+        Ok(_result) => {}
+        Err(_e) => {}
     }
 
     // Test MATCH-DELETE with WITH and WHERE (aggregation with filtering)
@@ -1657,7 +1657,7 @@ fn test_match_remove_comprehensive_combinations() {
     );
 
     // Add debug query to see actual graph state before count
-    let debug_result = fixture.assert_query_succeeds(
+    let _debug_result = fixture.assert_query_succeeds(
         "MATCH (u:User) RETURN u.name as name, u.score as score, u.id as id",
     );
 
@@ -1911,12 +1911,12 @@ fn test_debug_with_clause_issue() {
                         } else {
                         }
                     }
-                    Err(e) => {}
+                    Err(_e) => {}
                 }
             } else {
-                let user_id_in_with = query_result.rows[0].values.get("user_id").unwrap();
+                let _user_id_in_with = query_result.rows[0].values.get("user_id").unwrap();
             }
         }
-        Err(e) => {}
+        Err(_e) => {}
     }
 }

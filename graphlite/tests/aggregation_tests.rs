@@ -756,7 +756,7 @@ fn test_labels_function_in_aggregation() {
 
     // First, test that nodes exist and have labels (using Account nodes from fraud data)
     let simple_query = "MATCH (n:Account) RETURN LABELS(n) AS labels LIMIT 1";
-    let simple_result = fixture.assert_query_succeeds(simple_query);
+    let _simple_result = fixture.assert_query_succeeds(simple_query);
 
     let query = r#"
         MATCH (n:Account)
@@ -770,7 +770,7 @@ fn test_labels_function_in_aggregation() {
     assert!(!result.rows.is_empty(), "Should have aggregation results");
 
     // Debug: Print all values in result rows
-    for (i, row) in result.rows.iter().enumerate() {}
+    for (_i, _row) in result.rows.iter().enumerate() {}
 
     // Check that LABELS function returns actual labels, not empty arrays
     let mut found_non_empty_labels = false;
@@ -859,12 +859,12 @@ fn test_labels_aggregation_with_multiple_labels_and_order_by() {
     );
 
     // Print all results to analyze the ordering
-    for (i, row) in result.rows.iter().enumerate() {
-        if let Some(node_labels_value) = row
+    for (_i, row) in result.rows.iter().enumerate() {
+        if let Some(_node_labels_value) = row
             .get_value("node_labels")
             .or_else(|| row.get_value("LABELS(...)"))
         {
-            if let Some(count_value) = row.get_value("count") {}
+            if let Some(_count_value) = row.get_value("count") {}
         }
     }
 
@@ -884,7 +884,7 @@ fn test_labels_aggregation_with_multiple_labels_and_order_by() {
     );
 
     // Check that ORDER BY is working by verifying the results are sorted
-    let mut previous_labels: Option<String> = None;
+    let mut _previous_labels: Option<String> = None;
     for row in &result.rows {
         if let Some(node_labels_value) = row
             .get_value("node_labels")
@@ -893,7 +893,7 @@ fn test_labels_aggregation_with_multiple_labels_and_order_by() {
             let current_labels = format!("{:?}", node_labels_value);
             // For basic ordering test - labels should be in some consistent order
             // (exact alphabetical ordering may depend on how arrays are compared)
-            previous_labels = Some(current_labels);
+            _previous_labels = Some(current_labels);
         }
     }
 
@@ -998,7 +998,7 @@ fn test_labels_aggregation_with_multiple_labels_and_order_by() {
 
     // Additional test: verify the counts are correct
     for row in &result.rows {
-        if let (Some(labels), Some(count)) = (
+        if let (Some(_labels), Some(count)) = (
             row.get_value("node_labels")
                 .or_else(|| row.get_value("LABELS(...)")),
             row.get_value("count"),
