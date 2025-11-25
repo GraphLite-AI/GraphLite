@@ -2,6 +2,16 @@
 
 Get GraphLite running and execute your first graph queries in **5 minutes**!
 
+## Choose Your Path
+
+**For Rust Applications:**
+- **[Using GraphLite as a Crate](Using%20GraphLite%20as%20a%20Crate.md)** - Embed GraphLite in your app (simpler, faster setup)
+
+**For CLI Usage:**
+- Continue below for interactive console and development
+
+---
+
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
@@ -28,7 +38,26 @@ Get GraphLite running and execute your first graph queries in **5 minutes**!
 
 ## Installation
 
-### Option 1: Build from Source (Recommended)
+This section covers installing the GraphLite CLI tool. If you want to use GraphLite as a library in your Rust application, see **[Using GraphLite as a Crate](Using%20GraphLite%20as%20a%20Crate.md)** instead.
+
+### Option 1: Install from crates.io (Easiest)
+
+Install the GraphLite CLI directly from crates.io:
+
+```bash
+cargo install graphlite-cli
+```
+
+**Install time**: ~2-5 minutes on first installation
+
+After installation, the `graphlite` binary will be available in your PATH (usually `~/.cargo/bin/graphlite`).
+
+**Benefits:**
+- No need to clone the repository
+- Automatic PATH setup
+- Easy updates with `cargo install graphlite-cli --force`
+
+### Option 2: Build from Source (For Development)
 
 ```bash
 # Clone the repository
@@ -43,7 +72,7 @@ cargo build --release
 
 After building, the binary will be available at `target/release/graphlite`.
 
-### Option 2: Using the Build Script
+### Option 3: Using the Build Script
 
 GraphLite includes a comprehensive build script that simplifies the build process:
 
@@ -83,6 +112,10 @@ GraphLite includes a comprehensive build script that simplifies the build proces
 Create a new GraphLite database with an admin user:
 
 ```bash
+# If installed via 'cargo install graphlite-cli' (Option 1)
+graphlite install --path ./my_db --admin-user admin --admin-password secret
+
+# If built from source (Options 2-3)
 ./target/release/graphlite install --path ./my_db --admin-user admin --admin-password secret
 ```
 
@@ -107,6 +140,10 @@ Default schema initialized
 Launch the interactive GraphLite console:
 
 ```bash
+# If installed via 'cargo install graphlite-cli' (Option 1)
+graphlite gql --path ./my_db -u admin -p secret
+
+# If built from source (Options 2-3)
 ./target/release/graphlite gql --path ./my_db -u admin -p secret
 ```
 
@@ -242,25 +279,27 @@ ORDER BY population DESC;
 
 ### Essential Commands
 
+**Note:** Replace `graphlite` with `./target/release/graphlite` if you built from source.
+
 ```bash
 # Show help
-./target/release/graphlite --help
+graphlite --help
 
 # Show version
-./target/release/graphlite version
+graphlite version
 
 # Initialize database
-./target/release/graphlite install --path ./db --admin-user admin --admin-password pwd
+graphlite install --path ./db --admin-user admin --admin-password pwd
 
 # Start REPL
-./target/release/graphlite gql --path ./db -u admin -p pwd
+graphlite gql --path ./db -u admin -p pwd
 
 # Execute single query
-./target/release/graphlite query "MATCH (n) RETURN n" --path ./db -u admin -p pwd
+graphlite query "MATCH (n) RETURN n" --path ./db -u admin -p pwd
 
 # Enable debug logging
-./target/release/graphlite -v gql --path ./db -u admin -p pwd
-./target/release/graphlite --log-level debug gql --path ./db -u admin -p pwd
+graphlite -v gql --path ./db -u admin -p pwd
+graphlite --log-level debug gql --path ./db -u admin -p pwd
 ```
 
 ### Global Options
@@ -306,7 +345,9 @@ xcode-select --install
 # Remove existing database
 rm -rf ./my_db
 
-# Or use different path
+# Or use different path (adjust command based on installation method)
+graphlite install --path ./new_db --admin-user admin --admin-password secret
+# OR
 ./target/release/graphlite install --path ./new_db --admin-user admin --admin-password secret
 ```
 
@@ -314,26 +355,36 @@ rm -rf ./my_db
 
 ## Next Steps
 
+### Embed GraphLite in Your Application
+
+**Using GraphLite as a Crate (Recommended):**
+
+**[Using GraphLite as a Crate](Using%20GraphLite%20as%20a%20Crate.md)** - Complete integration guide:
+- Add GraphLite to your Rust project with `cargo add graphlite`
+- No cloning or building required
+- SDK vs Core Library comparison
+- Complete working examples
+
 ### Learn More About GQL
 
-📚 **[Getting Started With GQL.md](Getting%20Started%20With%20GQL.md)** - Comprehensive GQL query language tutorial covering:
+**[Getting Started With GQL.md](Getting%20Started%20With%20GQL.md)** - Comprehensive GQL query language tutorial covering:
 - Pattern matching and graph traversal
 - Aggregations (GROUP BY, HAVING)
 - String and date/time functions
 - ORDER BY and LIMIT
 - Advanced query examples
 
-### Integrate GraphLite in Your Application
+### Code Examples
 
 **For Rust Applications:**
 
-🎯 **[SDK Examples](/graphlite-sdk/examples/)** - Recommended high-level API
+**[SDK Examples](/graphlite-sdk/examples/)** - Recommended high-level API
 - `basic_usage.rs` - Complete SDK walkthrough
 - Transaction management
 - Query builder API
 - Typed result deserialization
 
-🔧 **[Core Library Examples](/examples-core/)** - Advanced low-level usage
+**[Core Library Examples](/examples-core/)** - Advanced low-level usage
 - Direct QueryCoordinator API
 - Fine-grained control
 - Advanced features
@@ -363,7 +414,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### For Contributors
 
-👥 **[Contribution Guide.md](/CONTRIBUTING.md)** - How to contribute:
+**[Contribution Guide.md](/CONTRIBUTING.md)** - How to contribute:
 - Development setup
 - Testing guidelines
 - Code style and quality standards

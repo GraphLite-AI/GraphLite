@@ -81,7 +81,35 @@ cargo --version
 
 Get up and running with GraphLite in 3 simple steps:
 
-### Step 1: Clone and Build
+### Step 1: Installation
+
+**Choose your installation method:**
+
+#### Option A: Use as a Crate (Recommended for Rust Applications)
+
+Add GraphLite to your Rust project - no cloning or building required:
+
+```bash
+# For application development (SDK - recommended)
+cargo add graphlite-rust-sdk
+
+# For advanced/low-level usage
+cargo add graphlite
+```
+
+**See:** **[Using GraphLite as a Crate](docs/Using%20GraphLite%20as%20a%20Crate.md)** for complete integration guide.
+
+#### Option B: Install CLI from crates.io (Easiest for CLI Usage)
+
+Install the GraphLite CLI tool directly from crates.io:
+
+```bash
+cargo install graphlite-cli
+```
+
+After installation, the `graphlite` binary will be available in your PATH.
+
+#### Option C: Clone and Build (For Development/Contributing)
 
 ```bash
 # Clone the repository
@@ -129,10 +157,15 @@ If you prefer to build manually without the script:
     ```
 </details>
 
-### Step 2: Initialize Database
+### Step 2: Initialize Database (For CLI Usage)
+
+**Note:** If you're using GraphLite as a crate in your application, skip to **[Using GraphLite as a Crate](docs/Using%20GraphLite%20as%20a%20Crate.md)** instead.
 
 ```bash
-# Create a new database with admin credentials
+# If you installed via 'cargo install graphlite-cli' (Option B)
+graphlite install --path ./my_db --admin-user admin --admin-password secret
+
+# If you built from source (Option C)
 ./target/release/graphlite install --path ./my_db --admin-user admin --admin-password secret
 ```
 
@@ -142,10 +175,13 @@ This command:
 - Creates default admin and user roles.
 - Initializes the default schema.
 
-### Step 3: Start Using GQL
+### Step 3: Start Using GQL (CLI)
 
 ```bash
-# Launch the interactive GQL console
+# If you installed via 'cargo install graphlite-cli' (Option B)
+graphlite gql --path ./my_db -u admin -p secret
+
+# If you built from source (Option C)
 ./target/release/graphlite gql --path ./my_db -u admin -p secret
 ```
 
@@ -154,8 +190,9 @@ That's it! You're now ready to create graphs and run queries:
 $ gql>
 ```
 
-** Next Steps:**
-- **[Quick Start.md](docs/Quick%20Start.md)** - 5-minute tutorial with first queries
+**Next Steps:**
+- **[Using GraphLite as a Crate](docs/Using%20GraphLite%20as%20a%20Crate.md)** - Embed in your Rust application (recommended)
+- **[Quick Start.md](docs/Quick%20Start.md)** - 5-minute tutorial with CLI and first queries
 - **[Getting Started With GQL.md](docs/Getting%20Started%20With%20GQL.md)** - Complete query language reference
 
 <details>
@@ -345,64 +382,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
-### Using the graphlite crate
-
-1. In your Rust project, run: 
-
-        Cargo add graphlite
-
-    OR add graphlite = "0.0.1" to your Cargo.toml as a dependency
-
-
-2. Run the following script: use graphlite::QueryCoordinator;
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let db_path = "./my_app_db";
-
-    // 1. Initialize database (creates all files and components)
-    let coordinator = QueryCoordinator::from_path(db_path)?;
-
-    // 2. Set admin user password
-    // The 'admin' user is created automatically during initialization
-    coordinator.set_user_password("admin", "my_secure_password")?;
-
-    // 3. Create a session
-    let session_id = coordinator.create_simple_session("admin")?;
-
-    // 4. Create schema and graph
-    coordinator.process_query("CREATE SCHEMA IF NOT EXISTS /myschema", &session_id)?;
-    coordinator.process_query("CREATE GRAPH IF NOT EXISTS /myschema/social", &session_id)?;
-    coordinator.process_query("SESSION SET GRAPH /myschema/social", &session_id)?;
-
-    // 5. Insert data
-    coordinator.process_query(
-        "INSERT (:Person {name: 'Alice', age: 30})",
-        &session_id
-    )?;
-
-    // 6. Query data
-    let result = coordinator.process_query(
-        "MATCH (p:Person) RETURN p.name, p.age",
-        &session_id
-    )?;
-
-    // 7. Process results
-    for row in &result.rows {
-        println!("Name: {:?}, Age: {:?}",
-            row.values.get("p.name"),
-            row.values.get("p.age")
-        );
-    }
-
-    // 8. Close session when done
-    coordinator.close_session(&session_id)?;
-
-    Ok(())
-}
-
-
-
-
 
 ### Examples and Documentation
 
