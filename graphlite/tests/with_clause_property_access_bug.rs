@@ -32,7 +32,7 @@ fn test_with_clause_property_access_bug() {
     );
 
     // Test 1: Property access in RETURN (WORKS)
-    let result1 = fixture.assert_query_succeeds(
+    let _result1 = fixture.assert_query_succeeds(
         r#"
         MATCH (n:Node {id: 'test123'})
         RETURN n.data, n.number, n.text, n.name
@@ -40,7 +40,7 @@ fn test_with_clause_property_access_bug() {
     );
 
     // Test 2: Property access in WITH (FAILS)
-    let result2 = fixture.assert_query_succeeds(
+    let _result2 = fixture.assert_query_succeeds(
         r#"
         MATCH (n:Node {id: 'test123'})
         WITH n.data as arr, n.number as num, n.text as txt, n.name as nm
@@ -49,7 +49,7 @@ fn test_with_clause_property_access_bug() {
     );
 
     // Test 3: Compare node access vs property access
-    let result3 = fixture.assert_query_succeeds(
+    let _result3 = fixture.assert_query_succeeds(
         r#"
         MATCH (n:Node {id: 'test123'})
         WITH n as node, n.data as arr
@@ -58,7 +58,7 @@ fn test_with_clause_property_access_bug() {
     );
 
     // Test 4: Workaround - pass node through WITH, access property in RETURN
-    let result4 = fixture.assert_query_succeeds(
+    let _result4 = fixture.assert_query_succeeds(
         r#"
         MATCH (n:Node {id: 'test123'})
         WITH n as node

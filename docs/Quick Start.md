@@ -16,12 +16,15 @@ Get GraphLite running and execute your first graph queries in **5 minutes**!
 ## Prerequisites
 
 **Required:**
+
 - **Rust 1.70 or later** - Install from [rustup.rs](https://rustup.rs/)
-  ```bash
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-  ```
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
 
 **Optional:**
+
 - Git - For cloning the repository
 
 ---
@@ -59,12 +62,10 @@ GraphLite includes a comprehensive build script that simplifies the build proces
 
 # Build and run tests to verify installation
 ./scripts/build_all.sh --release --test
-
-# Show help
-./scripts/build_all.sh --help
 ```
 
 **Benefits of the build script**:
+
 - Automatically detects and adds Rust/Cargo to PATH if needed
 - Release builds are optimized for production use (significantly faster execution)
 - Builds both the library and CLI binary in one command
@@ -73,6 +74,7 @@ GraphLite includes a comprehensive build script that simplifies the build proces
 - Colored output with build summary and next steps
 
 **Build output locations**:
+
 - **Debug mode**: `target/debug/libgraphlite.rlib` and `target/debug/graphlite`
 - **Release mode**: `target/release/libgraphlite.rlib` and `target/release/graphlite`
 
@@ -87,13 +89,15 @@ Create a new GraphLite database with an admin user:
 ```
 
 **What this does:**
+
 - Creates the database files in `./my_db` directory
 - Sets up the admin user with the specified password
 - Creates default admin and user roles
 - Initializes the default schema
 
 **Expected output:**
-```
+
+```text
 Database installed successfully at ./my_db
 Admin user 'admin' created
 Default roles created: admin, user
@@ -111,7 +115,8 @@ Launch the interactive GraphLite console:
 ```
 
 **You should see:**
-```
+
+```text
 GraphLite v0.1.0 - ISO GQL Interactive Console
 Connected to: ./my_db
 User: admin
@@ -171,7 +176,8 @@ RETURN p.name, p.age, p.city;
 ```
 
 **Expected output:**
-```
+
+```text
 +-------+-----+---------------+
 | name  | age | city          |
 +-------+-----+---------------+
@@ -189,7 +195,8 @@ RETURN friend.name, friend.city;
 ```
 
 **Expected output:**
-```
+
+```text
 +------+---------------+
 | name | city          |
 +------+---------------+
@@ -205,7 +212,8 @@ RETURN fof.name AS friend_of_friend;
 ```
 
 **Expected output:**
-```
+
+```text
 +------------------+
 | friend_of_friend |
 +------------------+
@@ -225,7 +233,8 @@ ORDER BY population DESC;
 ```
 
 **Expected output:**
-```
+
+```text
 +---------------+------------+
 | city          | population |
 +---------------+------------+
@@ -266,6 +275,7 @@ ORDER BY population DESC;
 ### Global Options
 
 Available for all commands:
+
 - `-u, --user <USER>` - Username for authentication
 - `-p, --password <PASSWORD>` - Password for authentication
 - `-l, --log-level <LEVEL>` - Set log level (error, warn, info, debug, trace, off)
@@ -280,6 +290,7 @@ Available for all commands:
 ### "Cargo not found" Error
 
 **Solution**: Make sure Rust is installed and in your PATH
+
 ```bash
 # Install Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -291,6 +302,7 @@ source $HOME/.cargo/env
 ### Build Fails with "linker error"
 
 **Solution**: Install build essentials
+
 ```bash
 # Ubuntu/Debian
 sudo apt-get install build-essential
@@ -302,6 +314,7 @@ xcode-select --install
 ### Database Already Exists Error
 
 **Solution**: Remove existing database or use different path
+
 ```bash
 # Remove existing database
 rm -rf ./my_db
@@ -317,6 +330,7 @@ rm -rf ./my_db
 ### Learn More About GQL
 
 📚 **[Getting Started With GQL.md](Getting%20Started%20With%20GQL.md)** - Comprehensive GQL query language tutorial covering:
+
 - Pattern matching and graph traversal
 - Aggregations (GROUP BY, HAVING)
 - String and date/time functions
@@ -328,17 +342,20 @@ rm -rf ./my_db
 **For Rust Applications:**
 
 🎯 **[SDK Examples](/graphlite-sdk/examples/)** - Recommended high-level API
+
 - `basic_usage.rs` - Complete SDK walkthrough
 - Transaction management
 - Query builder API
 - Typed result deserialization
 
 🔧 **[Core Library Examples](/examples-core/)** - Advanced low-level usage
+
 - Direct QueryCoordinator API
 - Fine-grained control
 - Advanced features
 
 **SDK Quick Example:**
+
 ```rust
 use graphlite_sdk::GraphLite;
 
@@ -364,10 +381,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### For Contributors
 
 👥 **[Contribution Guide.md](/CONTRIBUTING.md)** - How to contribute:
+
 - Development setup
 - Testing guidelines
 - Code style and quality standards
 - Pull request process
+
 ---
 
 ## Example Queries Cheat Sheet

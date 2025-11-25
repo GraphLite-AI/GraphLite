@@ -218,7 +218,7 @@ fn test_count_aggregation_with_empty_results() {
     let working_result = fixture
         .query("MATCH (n:TestNode) RETURN count(n) as count")
         .unwrap();
-    for (i, row) in working_result.rows.iter().enumerate() {}
+    for (_i, _row) in working_result.rows.iter().enumerate() {}
 
     // Now test COUNT on non-existent nodes - should return 1 row with count=0
     let result = match fixture.query("MATCH (x:NonExistentLabel) RETURN count(x) as count") {
@@ -228,7 +228,7 @@ fn test_count_aggregation_with_empty_results() {
         }
     };
 
-    for (i, row) in result.rows.iter().enumerate() {}
+    for (_i, _row) in result.rows.iter().enumerate() {}
 
     // This should return exactly 1 row with count=0, not 0 rows
     assert_eq!(
@@ -673,7 +673,7 @@ fn test_dml_performance() {
             .query("MATCH (p:PerfNode) RETURN count(p) as count")
             .unwrap();
         if !result.rows.is_empty() {
-            let count = result.rows[0]
+            let _count = result.rows[0]
                 .values
                 .get("count")
                 .unwrap_or(&Value::Number(0.0));

@@ -316,7 +316,7 @@ fn test_min_end_to_end_with_where_clause() {
 
     // With fraud data generator: balance = (i as f64) * 100.0 + (i % 50) (range 101-5000)
     // So MIN with balance > 1000 should return a value in this range
-    let min_val = fixture.assert_numeric_range(
+    let _min_val = fixture.assert_numeric_range(
         "MATCH (a:Account) WHERE a.balance > 1000 RETURN MIN(a.balance) as min_balance",
         "min_balance",
         1000.0,
@@ -345,7 +345,7 @@ fn test_max_end_to_end_with_where_clause() {
 
     // With fraud data generator: balance = (i as f64) * 100.0 + (i % 50) (range 101-5000)
     // So MAX with balance < 4000 should return a value less than 4000
-    let max_val = fixture.assert_numeric_range(
+    let _max_val = fixture.assert_numeric_range(
         "MATCH (a:Account) WHERE a.balance < 4000 RETURN MAX(a.balance) as max_balance",
         "max_balance",
         101.0,
@@ -459,7 +459,7 @@ fn test_bnf_function_compliance() {
         .expect("Failed to run BNF compliance suite");
     results.print_summary();
 
-    let total = results.passed + results.failed;
+    let _total = results.passed + results.failed;
 }
 
 #[test]
@@ -606,5 +606,5 @@ fn test_function_integration_comprehensive() {
         results.failed, 0,
         "All function integration tests should pass"
     );
-    let total = results.passed + results.failed;
+    let _total = results.passed + results.failed;
 }
