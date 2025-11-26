@@ -23,7 +23,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-graphlite-sdk = "0.1"
+sdk-rust = "0.1"
 ```
 
 Basic usage:
@@ -260,7 +260,7 @@ fn get_users(db: &GraphLite) -> Result<Vec<User>, Box<dyn std::error::Error>> {
 
 GraphLite SDK follows similar patterns to rusqlite but adapted for graph databases:
 
-| Operation | rusqlite (SQLite) | graphlite-sdk (GraphLite) |
+| Operation | rusqlite (SQLite) | sdk-rust (GraphLite) |
 |-----------|-------------------|---------------------------|
 | Open DB | `Connection::open()` | `GraphLite::open()` |
 | Execute | `conn.execute()` | `session.execute()` |
@@ -324,7 +324,7 @@ Benchmark comparison:
 
 ## Documentation
 
-- [API Documentation](https://docs.rs/graphlite-sdk)
+- [API Documentation](https://docs.rs/sdk-rust)
 - [Examples](examples-core/)
 - [GraphLite Core](../graphlite/)
 - [Language Bindings](../bindings/)

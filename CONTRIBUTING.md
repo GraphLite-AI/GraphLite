@@ -120,7 +120,7 @@ git remote add upstream https://github.com/ORIGINAL_OWNER/GraphLite.git
 cargo build --all
 
 # Run the CLI
-cargo run --bin graphlite-cli
+cargo run --bin gql-cli
 
 # Run tests to verify setup
 cargo test --all

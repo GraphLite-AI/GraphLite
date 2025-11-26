@@ -20,7 +20,7 @@ The GraphLite Python SDK provides a developer-friendly API for working with Grap
 
 ```bash
 # Install from source (for now)
-cd python-sdk
+cd sdk-python
 pip install -e .
 ```
 
@@ -268,7 +268,7 @@ print(f"Total persons: {count_obj.count}")
 
 GraphLite SDK follows similar patterns to Python's sqlite3 but adapted for graph databases:
 
-| Operation | sqlite3 (SQLite) | graphlite-sdk (GraphLite) |
+| Operation | sqlite3 (SQLite) | sdk-rust (GraphLite) |
 |-----------|------------------|---------------------------|
 | Open DB | `sqlite3.connect()` | `GraphLite.open()` |
 | Execute | `conn.execute()` | `session.execute()` |
@@ -316,7 +316,7 @@ Your Application
 
 The GraphLite Python SDK is specifically for **Python applications**. For other languages:
 
-- **Rust** - Use `graphlite-sdk/` (native Rust SDK)
+- **Rust** - Use `sdk-rust/` (native Rust SDK)
 - **Java** - Use `bindings/java/` (via JNI)
 - **JavaScript/Node.js** - Use `bindings/javascript/` (via FFI/WASM)
 - **Kotlin** - Use `bindings/kotlin/` (via JNI)
@@ -378,7 +378,7 @@ To work on the SDK:
 
 ```bash
 # Install in development mode
-cd python-sdk
+cd sdk-python
 pip install -e .
 
 # Run tests (coming soon)

@@ -1,12 +1,12 @@
 [package]
-name = "graphlite-cli"
+name = "gql-cli"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Command-line interface for GraphLite"
-documentation = "https://docs.rs/graphlite-cli"
+documentation = "https://docs.rs/gql-cli"
 readme = "../README.md"
 keywords = ["gql", "graph", "cli", "database"]
 categories = ["command-line-utilities", "database"]

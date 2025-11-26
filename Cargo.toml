@@ -2,8 +2,8 @@
 resolver = "2"
 members = [
     "graphlite",
-    "graphlite-cli",
-    "graphlite-sdk",
+    "gql-cli",
+    "sdk-rust",
     "graphlite-ffi",
 ]
 

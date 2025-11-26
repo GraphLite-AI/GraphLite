@@ -7,7 +7,7 @@ echo "🔍 Checking rule compliance across entire codebase..."
 echo ""
 
 # Get all Rust files (excluding target, docs, and hooks)
-# Support both workspace structure (graphlite/src, graphlite-cli/src) and simple structure (src, tests)
+# Support both workspace structure (graphlite/src, gql-cli/src) and simple structure (src, tests)
 all_rust_files=$(find . -name "*.rs" 2>/dev/null | grep -E "(src/|tests/)" | grep -v "target/" | grep -v "docs/" | grep -v "hooks/" || true)
 
 if [ -z "$all_rust_files" ]; then

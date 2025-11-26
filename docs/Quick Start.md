@@ -48,7 +48,7 @@ This section covers installing the GraphLite CLI tool. If you want to use GraphL
 Install the GraphLite CLI directly from crates.io:
 
 ```bash
-cargo install graphlite-cli
+cargo install gql-cli
 ```
 
 **Install time**: ~2-5 minutes on first installation
@@ -58,7 +58,7 @@ After installation, the `graphlite` binary will be available in your PATH (usual
 **Benefits:**
 - No need to clone the repository
 - Automatic PATH setup
-- Easy updates with `cargo install graphlite-cli --force`
+- Easy updates with `cargo install gql-cli --force`
 
 ### Option 2: Build from Source (For Development)
 
@@ -114,7 +114,7 @@ GraphLite includes a comprehensive build script that simplifies the build proces
 Create a new GraphLite database with an admin user:
 
 ```bash
-# If installed via 'cargo install graphlite-cli' (Option 1)
+# If installed via 'cargo install gql-cli' (Option 1)
 graphlite install --path ./my_db --admin-user admin --admin-password secret
 
 # If built from source (Options 2-3)
@@ -144,7 +144,7 @@ Default schema initialized
 Launch the interactive GraphLite console:
 
 ```bash
-# If installed via 'cargo install graphlite-cli' (Option 1)
+# If installed via 'cargo install gql-cli' (Option 1)
 graphlite gql --path ./my_db -u admin -p secret
 
 # If built from source (Options 2-3)
@@ -391,7 +391,7 @@ graphlite install --path ./new_db --admin-user admin --admin-password secret
 
 **For Rust Applications:**
 
-**[SDK Examples](/graphlite-sdk/examples/)** - Recommended high-level API
+**[SDK Examples](/sdk-rust/examples/)** - Recommended high-level API
 - `basic_usage.rs` - Complete SDK walkthrough
 - Transaction management
 - Query builder API
@@ -509,4 +509,4 @@ RETURN c.name;
 
 **Congratulations! You now have GraphLite up and running!**
 
-Start exploring graph queries with [Getting Started With GQL.md](Getting%20Started%20With%20GQL.md) or integrate GraphLite into your application with our [SDK examples](/graphlite-sdk/examples/).
+Start exploring graph queries with [Getting Started With GQL.md](Getting%20Started%20With%20GQL.md) or integrate GraphLite into your application with our [SDK examples](/sdk-rust/examples/).

@@ -10,7 +10,7 @@ GraphLite provides bindings for multiple programming languages, all built on top
 
 | Language | Directory | Status | Performance | Installation |
 |----------|-----------|--------|-------------|--------------|
-| **Rust** | [../graphlite-sdk](../graphlite-sdk/) | Stable | ~100% native | `cargo add graphlite-sdk` |
+| **Rust** | [../sdk-rust](../sdk-rust/) | Stable | ~100% native | `cargo add sdk-rust` |
 | **Python** | [python/](python/) | Stable | ~80-90% native | `pip install graphlite` |
 | **Java** | [java/](java/) | Stable | ~75-85% native | Maven/Gradle |
 | **JavaScript** | javascript/ | Planned | ~70-80% native (WASM) | `npm install graphlite` |
@@ -30,7 +30,7 @@ let session = db.session("admin")?;
 let result = session.query("MATCH (n:Person) RETURN n")?;
 ```
 
-**See**: [graphlite-sdk/README.md](../graphlite-sdk/README.md)
+**See**: [sdk-rust/README.md](../sdk-rust/README.md)
 
 ### Python
 
@@ -162,7 +162,7 @@ All language bindings provide the same conceptual API:
 
 Each binding includes comprehensive examples:
 
-- **Rust**: [graphlite-sdk/examples/](../graphlite-sdk/examples/)
+- **Rust**: [sdk-rust/examples/](../sdk-rust/examples/)
 - **Python**: [python/examples/](python/examples/)
 - **Java**: [java/examples/](java/examples/)
 
