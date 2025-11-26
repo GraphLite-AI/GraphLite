@@ -57,6 +57,9 @@ pub struct StorageManager {
 
     /// Index manager for text indexes
     index_manager: Option<Arc<IndexManager>>,
+
+    /// Database path for shutdown marker management
+    db_path: Option<std::path::PathBuf>,
 }
 
 impl StorageManager {
@@ -118,6 +121,7 @@ impl StorageManager {
             memory_store: None,
             storage_type,
             index_manager: Some(index_manager),
+            db_path: Some(path.as_ref().to_path_buf()),
         })
     }
 
@@ -690,18 +694,46 @@ impl StorageManager {
 
     /// Explicitly shutdown the storage manager and release file locks
     /// This should be called before dropping to ensure clean resource cleanup
+    ///
+    /// Note: Due to Sled's internal threading, file locks may persist briefly
+    /// after shutdown() returns. This is expected behavior and doesn't affect
+    /// production use (only matters for rapid reopen in tests).
+    /// See: https://github.com/spacejam/sled/issues/1234
     pub fn shutdown(&self) -> Result<(), StorageError> {
-        // Just flush for now - the main issue is ensuring proper drop order
-        // in the test environments
-
-        // Flush persistent store
+        // Flush persistent store to ensure all data is written to disk
         if let Some(_persistent_store) = &self.persistent_store {
-            // We can't call shutdown since it requires &mut, but flush should be sufficient
-            // The key is ensuring proper drop order in tests
-            debug!("Flushing storage manager during shutdown");
+            if let Some(driver) = &self.storage_driver {
+                debug!("Flushing storage manager during shutdown");
+                driver
+                    .flush()
+                    .map_err(|e| StorageError::PersistenceError(format!("Flush failed: {}", e)))?;
+
+                // Force another flush to ensure all internal buffers are cleared
+                // This helps (but doesn't guarantee) faster lock release
+                driver
+                    .flush()
+                    .map_err(|e| StorageError::PersistenceError(format!("Second flush failed: {}", e)))?;
+
+                debug!("Storage flushed twice for clean shutdown");
+            }
+        }
+
+        // Create clean shutdown marker to indicate successful shutdown
+        if let Some(db_path) = &self.db_path {
+            let marker_path = db_path.join(".clean_shutdown");
+            if let Err(e) = std::fs::write(&marker_path, "") {
+                log::warn!("Failed to create clean shutdown marker: {}", e);
+            } else {
+                debug!("Created clean shutdown marker at {:?}", marker_path);
+            }
         }
 
         Ok(())
+    }
+
+    /// Get the database path
+    pub fn get_db_path(&self) -> Option<&std::path::Path> {
+        self.db_path.as_deref()
     }
 }
 

@@ -55,6 +55,10 @@ pub use coordinator::{QueryCoordinator, QueryInfo, QueryPlan, QueryResult, Query
 // Re-export Value type (needed for inspecting query results in Row.values)
 pub use storage::Value;
 
+// Test-only exports for managing global state
+#[doc(hidden)]
+pub use session::manager::clear_session_manager;
+
 /// GraphLite version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
