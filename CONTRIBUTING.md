@@ -129,8 +129,8 @@ cargo test --all
 ### 3. Install Development Tools
 
 ```bash
-# Install pre-commit hooks (if available)
-./scripts/install-hooks.sh
+# Install pre-commit hooks to enforce code quality rules
+bash scripts/install_hooks.sh
 
 # Install formatting tools
 rustup component add rustfmt clippy
@@ -138,6 +138,14 @@ rustup component add rustfmt clippy
 # Optional: Install cargo-watch for auto-recompilation
 cargo install cargo-watch
 ```
+
+**About Git Hooks:**
+
+The pre-commit hook automatically checks your code for rule violations before allowing commits. It validates:
+- Rust code patterns (Rules #1-10)
+- Documentation quality (Rule #11: No emojis in markdown)
+
+To bypass the hook (use sparingly): `git commit --no-verify`
 
 ### 4. Verify Your Setup
 
@@ -327,10 +335,23 @@ pub fn process_query(&self, query: &str) -> Result<String> {
 
 ### Critical Rules
 
-GraphLite has the following specific architectural patterns that are expressed as rules below.
-They can be enforced by using github hooks. Use [scripts/install_hooks.sh](../scripts/install_hooks.sh).
+GraphLite has specific architectural patterns enforced as rules to maintain code quality and consistency.
 
-Key rules:
+#### Rule Enforcement Tools
+
+**1. Manual Rule Check** - Run anytime to check entire codebase:
+```bash
+bash scripts/check_code_patterns.sh
+```
+This script scans all Rust files and markdown files for rule violations across the entire project.
+
+**2. Automatic Pre-commit Hook** - Install once to check on every commit:
+```bash
+bash scripts/install_hooks.sh
+```
+This installs a git pre-commit hook that validates **only staged files** before allowing commits. The hook will block commits that violate critical rules.
+
+#### Key rules:
 
 1. **ExecutionContext Management**: Never create new `ExecutionContext` instances
 2. **Storage Manager Singleton**: Never create new `StorageManager` instances during query execution
@@ -342,6 +363,7 @@ Key rules:
 8. **Test Integrity**: Fix bugs in code, not in tests (unless test is wrong)
 9. **Session Manager Isolation**: Use global SessionManager, don't create test-specific instances
 10. **API Boundary**: Use `QueryCoordinator` as the only public API
+11. **No Emojis in Documentation**: All markdown files must be emoji-free for professional consistency
 
 **Before submitting a PR, verify your changes don't violate these rules.**
 

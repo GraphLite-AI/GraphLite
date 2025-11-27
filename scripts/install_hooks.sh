@@ -223,6 +223,64 @@ if [ -n "$test_files" ]; then
     fi
 fi
 
+# Rule #11: No Emojis in Documentation
+echo "  🔍 Rule #11: No emojis in documentation..."
+staged_md_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.md$' || true)
+
+if [ -n "$staged_md_files" ]; then
+    # Check if Python is available
+    if command -v python3 &> /dev/null; then
+        emoji_violations=$(python3 << 'PYTHON_EOF'
+import re
+import sys
+import subprocess
+
+emoji_pattern = re.compile(
+    "["
+    "\U0001F1E0-\U0001F1FF"  # flags
+    "\U0001F300-\U0001F5FF"  # symbols & pictographs
+    "\U0001F600-\U0001F64F"  # emoticons
+    "\U0001F680-\U0001F6FF"  # transport
+    "\U0001F900-\U0001F9FF"  # supplemental
+    "\U00002600-\U000026FF"  # misc symbols
+    "\U00002700-\U000027BF"  # dingbats
+    "]+",
+    flags=re.UNICODE
+)
+
+violations = []
+files = sys.stdin.read().strip().split('\n')
+for filepath in files:
+    if not filepath:
+        continue
+    try:
+        # Get staged content from git
+        result = subprocess.run(['git', 'show', f':{filepath}'],
+                              capture_output=True, text=True, check=True)
+        content = result.stdout
+
+        if emoji_pattern.search(content):
+            violations.append(filepath)
+    except:
+        pass
+
+for v in violations:
+    print(v)
+PYTHON_EOF
+        echo "$staged_md_files" | python3)
+
+        if [ -n "$emoji_violations" ]; then
+            echo "❌ RULE #11 VIOLATION: Emojis found in staged markdown files"
+            echo "$emoji_violations"
+            echo "   💡 Remove all emoji characters from documentation"
+            echo "   📖 See Rule #11: No Emojis in Documentation"
+            violations=$((violations + 1))
+        fi
+    else
+        echo "⚠️  Python3 not found - skipping emoji check"
+    fi
+fi
+
 # Summary
 echo ""
 if [ $violations -eq 0 ]; then
@@ -257,6 +315,7 @@ echo "   • Rule #3: Read vs Write Lock Usage"
 echo "   • Rule #4: CatalogManager Singleton Pattern"
 echo "   • Rule #5: Async Runtime Management"
 echo "   • Rule #6: Helper Method Recursion"
+echo "   • Rule #11: No Emojis in Documentation"
 echo "   • Rule #7: Async Runtime Context Detection"
 echo "   • Rule #9: Test Case Integrity"
 echo "   • Rule #10: Session Manager Test Isolation"

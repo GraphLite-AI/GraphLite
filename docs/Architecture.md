@@ -49,45 +49,45 @@ GraphLite is a pure Rust implementation of the ISO GQL (Graph Query Language) st
 ## High-Level Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                        GraphLite System                          │
-├──────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐        │
-│  │     CLI      │    │   REPL       │    │   Library    │        │
-│  │  Interface   │    │  Console     │    │     API      │        │
-│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘        │
-│         │                   │                   │                │
-│         └───────────────────┴───────────────────┘                │
-│                             │                                    │
-│                    ┌────────▼──-──────┐                          │
-│                    │ Query Coordinator│                          │
-│                    └───────┬─--───────┘                          │
-│                            │                                     │
-│         ┌──────────────────┼──────────────────┐                  │
-│         │                  │                  │                  │
-│    ┌────▼─────┐      ┌─────▼──────┐     ┌─────▼──────┐           │
-│    │  Parser  │      │  Executor  │     │  Session   │           │
-│    │   & AST  │      │            │     │  Manager   │           │
-│    └────┬─────┘      └─────┬──────┘     └─────┬──────┘           │
-│         │                  │                  │                  │
-│    ┌────▼─────┐      ┌─────▼──────┐     ┌─────▼──────┐           │
-│    │ Planner  │      │   Cache    │     │Transaction │           │
-│    │ &Optimize│      │  Manager   │     │  Manager   │           │
-│    └────┬─────┘      └──-───┬─────┘     └─────┬──────┘           │
-│         │                   │                 │                  │
-│         └───────────────────┴─────────────────┘                  │
-│                             │                                    │
-│                    ┌────────▼────────┐                           │
-│                    │ Storage Manager │                           │
-│                    └────────┬────────┘                           │
-│                             │                                    │
-│                    ┌────────▼────────┐                           │
-│                    │  Sled Database  │                           │
-│                    │   (Persistent)  │                           │
-│                    └─────────────────┘                           │
-│                                                                  │
-└──────────────────────────────────────────────────────────────────┘
+
+                        GraphLite System                          
+
+                                                                  
+                  
+       CLI             REPL              Library            
+    Interface         Console              API              
+                  
+                                                               
+                         
+                                                                 
+                    -                          
+                     Query Coordinator                          
+                    --                          
+                                                                 
+                           
+                                                               
+                          
+      Parser          Executor         Session              
+       & AST                           Manager              
+                          
+                                                               
+                          
+     Planner           Cache         Transaction            
+     &Optimize        Manager          Manager              
+          -                
+                                                               
+                           
+                                                                 
+                                               
+                     Storage Manager                            
+                                               
+                                                                 
+                                               
+                      Sled Database                             
+                       (Persistent)                             
+                                               
+                                                                  
+
 ```
 
 ### Layer Responsibilities
@@ -167,11 +167,11 @@ admin::gql> INSERT (:Person {name: 'Alice', age: 30});
  Created 1 node
 
 admin::gql> MATCH (p:Person) RETURN p.name, p.age;
-┌────────┬───────┐
-│ p.name ┆ p.age │
-╞════════╪═══════╡
-│ Alice  ┆ 30    │
-└────────┴───────┘
+
+ p.name  p.age 
+
+ Alice   30    
+
 
 admin::gql> exit
 Goodbye!
@@ -225,11 +225,11 @@ A command-line interface for executing single queries and exiting - designed for
 **Basic query:**
 ```bash
 $ graphlite query "MATCH (p:Person) RETURN p.name" --path ./my_db
-┌────────┐
-│ p.name │
-╞════════╡
-│ Alice  │
-└────────┘
+
+ p.name 
+
+ Alice  
+
 ```
 
 **JSON output:**
@@ -293,33 +293,33 @@ Anonymous sessions have full query access but are intended for local development
 Both modes use the same underlying execution pipeline but differ in user interaction:
 
 ```
-┌─────────────────────────────────────────────┐
-│          CLI Entry Point (main.rs)          │
-│                                             │
-│  ┌──────────────┐      ┌─────────────────┐  │
-│  │ Commands::Gql│      │Commands::Query  │  │
-│  │   (REPL)     │      │  (One-shot)     │  │
-│  └──────┬───────┘      └────────┬────────┘  │
-└─────────┼──────────────────────┼───────--───┘
-          │                      │
-          ▼                      ▼
-   ┌──────────────┐      ┌──────────────┐
-   │ handle_gql() │      │handle_query()│
-   │              │      │              │
-   │ • Loop until │      │ • Execute    │
-   │   exit       │      │   once       │
-   │ • History    │      │ • Format     │
-   │ • Multi-line │      │ • Exit       │
-   └──────┬───────┘      └──────┬───────┘
-          │                     │
-          └──────────┬──────────┘
-                     ▼
-          ┌──────────────────────┐
-          │  QueryCoordinator    │
-          │  process_query()     │
-          └──────────────────────┘
-                     │
-                     ▼
+
+          CLI Entry Point (main.rs)          
+                                             
+          
+   Commands::Gql      Commands::Query    
+     (REPL)             (One-shot)       
+          
+--
+                                
+                                
+         
+    handle_gql()       handle_query()
+                                     
+    • Loop until        • Execute    
+      exit                once       
+    • History           • Format     
+    • Multi-line        • Exit       
+         
+                               
+          
+                     
+          
+            QueryCoordinator    
+            process_query()     
+          
+                     
+                     
               [Same Pipeline]
           Parser → Planner → Executor
 ```
@@ -367,60 +367,60 @@ Both modes use the same underlying execution pipeline but differ in user interac
 ### Component Diagram
 
 ```
-┌────────────────────────────────────────────────────────────────────┐
-│                     Component Breakdown                            │
-└────────────────────────────────────────────────────────────────────┘
 
-┌───────────────────────────────────────────────────────────────┐
-│ Parser & AST Module (src/ast/)                                │
-├───────────────────────────────────────────────────────────────┤
-│  ┌─────────┐  ┌──────────┐  ┌───────────┐  ┌──────────────┐   │
-│  │ Lexer   │→ │  Parser  │→ │    AST    │→ │  Validator   │   │
-│  │(Tokens) │  │  (Nom)   │  │ (Nodes)   │  │ (Semantic)   │   │
-│  └─────────┘  └──────────┘  └───────────┘  └──────────────┘   │
-└───────────────────────────────────────────────────────────────┘
+                     Component Breakdown                            
+
+
+
+ Parser & AST Module (src/ast/)                                
+
+           
+   Lexer   →   Parser  →     AST    →   Validator      
+  (Tokens)     (Nom)      (Nodes)      (Semantic)      
+           
+
                               ↓
-┌───────────────────────────────────────────────────────────────┐
-│ Query Planning Module (src/plan/)                             │
-├───────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌───────────────┐  ┌──────────────────┐    │
-│  │   Logical    │→ │   Physical    │→ │   Optimizer      │    │
-│  │   Planner    │  │   Planner     │  │ (Cost-Based)     │    │
-│  └──────────────┘  └───────────────┘  └──────────────────┘    │
-│         ↓                   ↓                    ↓            │
-│  ┌──────────────┐  ┌───────────────┐  ┌──────────────────┐    │
-│  │   Pattern    │  │   Cost Model  │  │   Statistics     │    │
-│  │  Analysis    │  │               │  │                  │    │
-│  └──────────────┘  └───────────────┘  └──────────────────┘    │
-└───────────────────────────────────────────────────────────────┘
+
+ Query Planning Module (src/plan/)                             
+
+          
+     Logical    →    Physical    →    Optimizer          
+     Planner         Planner        (Cost-Based)         
+          
+         ↓                   ↓                    ↓            
+          
+     Pattern         Cost Model       Statistics         
+    Analysis                                             
+          
+
                               ↓
-┌───────────────────────────────────────────────────────────────┐
-│ Execution Engine (src/exec/)                                  │
-├───────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌───────────────┐  ┌──────────────────┐    │
-│  │   Executor   │→ │   Context     │→ │   Iterator       |    │
-│  │   (Main)     │  │  (Variables)  │  │  (Streaming)     │    │
-│  └──────────────┘  └───────────────┘  └──────────────────┘    │
-│         ↓                   ↓                    ↓            │
-│  ┌──────────────┐  ┌───────────────┐  ┌──────────────────┐    │
-│  │  DML/DDL     │  │   Functions   │  │   Aggregates     │    │
-│  │  Executors   │  │   (50+)       │  │   (COUNT, SUM)   │    │
-│  └──────────────┘  └───────────────┘  └──────────────────┘    │
-└───────────────────────────────────────────────────────────────┘
+
+ Execution Engine (src/exec/)                                  
+
+          
+     Executor   →    Context     →    Iterator       |    
+     (Main)         (Variables)      (Streaming)         
+          
+         ↓                   ↓                    ↓            
+          
+    DML/DDL          Functions        Aggregates         
+    Executors        (50+)            (COUNT, SUM)       
+          
+
                               ↓
-┌───────────────────────────────────────────────────────────────┐
-│ Storage Layer (src/storage/)                                  │
-├───────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌───────────────┐  ┌──────────────────┐    │
-│  │   Storage    │→ │   Graph       │→ │    Index         │    │
-│  │   Manager    │  │   Cache       │  │   Manager        │    │
-│  └──────────────┘  └───────────────┘  └──────────────────┘    │
-│         ↓                   ↓                    ↓            │
-│  ┌──────────────┐  ┌───────────────┐  ┌──────────────────┐    │
-│  │     Sled     │  │  Multi-Graph  │  │   Value Types    │    │
-│  │   Backend    │  │   Support     │  │                  │    │
-│  └──────────────┘  └───────────────┘  └──────────────────┘    │
-└───────────────────────────────────────────────────────────────┘
+
+ Storage Layer (src/storage/)                                  
+
+          
+     Storage    →    Graph       →     Index             
+     Manager         Cache            Manager            
+          
+         ↓                   ↓                    ↓            
+          
+       Sled         Multi-Graph       Value Types        
+     Backend         Support                             
+          
+
 ```
 
 ### Module Responsibilities
@@ -461,145 +461,145 @@ Both modes use the same underlying execution pipeline but differ in user interac
 ### Execution Flow Diagram
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                    Query Execution Pipeline                      │
-└──────────────────────────────────────────────────────────────────┘
 
-┌─────────────┐
-│  GQL Query  │
-│   (Text)    │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Phase 1: Lexical Analysis                                   │
-│  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐             │
-│  │ MATCH  │  │   (    │  │   n    │  │   )    │  ...        │
-│  │ Keyword│  │ LParen │  │ Ident  │  │ RParen │             │
-│  └────────┘  └────────┘  └────────┘  └────────┘             │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ Token Stream
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Phase 2: Syntax Analysis (Parsing)                          │
-│  ┌───────────────────────────────────────┐                  │
-│  │         Abstract Syntax Tree          │                  │
-│  │                                       │                  │
-│  │        ┌──────────────┐               │                  │
-│  │        │ MatchClause  │               │                  │
-│  │        └──────┬───────┘               │                  │
-│  │               │                       │                  │
-│  │      ┌────────┴────────┐              │                  │
-│  │      │  Pattern: (n)   │              │                  │
-│  │      └─────────────────┘              │                  │
-│  └───────────────────────────────────────┘                  │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ AST
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Phase 3: Semantic Validation                                │
-│  - Type checking                                            │
-│  - Variable binding validation                              │
-│  - Schema compliance (if typed)                             │
-│  - Function signature matching                              │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ Validated AST
-                               ▼
-┌────────────────────────────────────────────────────────────┐
-│ Phase 4: Logical Planning                                  │
-│  ┌────────────────────────────────────────┐                │
-│  │        Logical Query Plan              │                │
-│  │                                        │                │
-│  │   ┌──────────────────────┐             │                │
-│  │   │  LogicalScan(n)      │             │                │
-│  │   └──────────┬───────────┘             │                │
-│  │              │                         │                │
-│  │   ┌──────────▼───────────┐             │                │
-│  │   │  LogicalFilter       │             │                │
-│  │   └──────────┬───────────┘             │                │
-│  │              │                         │                │
-│  │   ┌──────────▼───────────┐             │                │
-│  │   │  LogicalProject      │             │                │
-│  │   └──────────────────────┘             │                │
-│  └────────────────────────────────────────┘                │
-└──────────────────────────────┬─────────────────────────────┘
-                               │
-                               ▼
-┌────────────────────────────────────────────────────────────┐
-│ Phase 5: Physical Planning & Optimization                  │
-│  ┌────────────────────────────────────────┐                │
-│  │      Physical Query Plan               │                │
-│  │                                        │                │
-│  │   ┌──────────────────────┐             │                │
-│  │   │  IndexScan(n)        │  ← Optimizer chooses         │
-│  │   │  Cost: 10            │     index scan over          │
-│  │   └──────────┬───────────┘     full scan                │
-│  │              │                                          │
-│  │   ┌──────────▼───────────┐                              │
-│  │   │  FilterExec          │                              │
-│  │   │  Cost: 15            │                              │
-│  │   └──────────┬───────────┘                              │
-│  │              │                                          │
-│  │   ┌──────────▼───────────┐                              │
-│  │   │  ProjectExec         │                              │
-│  │   │  Cost: 20            │                              │
-│  │   └──────────────────────┘                              │
-│  └────────────────────────────────────────┘                │
-└──────────────────────────────┬─────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Phase 6: Cache Lookup (if applicable)                       │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐   │
-│  │ Plan Cache   │    │Result Cache  │    │Subquery Cache│   │
-│  │   (L3)       │    │   (L1/L2)    │    │              │   │
-│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘   │
-│         │                   │                   │           │
-│         └───────── Hit? ────┴──── Return Cached Result      │
-│                     │                                       │
-│                    Miss                                     │
-└─────────────────────┼────────────────────--─────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Phase 7: Execution                                          │
-│  ┌────────────────────────────────────────┐                 │
-│  │    Execution with Storage Access       │                 │
-│  │                                        │                 │
-│  │  1. Index Scan                         │                 │
-│  │     └─→ Read from storage              │                 │
-│  │                                        │                 │
-│  │  2. Apply Filters                      │                 │
-│  │     └─→ Evaluate predicates            │                 │
-│  │                                        │                 │
-│  │  3. Project Results                    │                 │
-│  │     └─→ Select columns                 │                 │
-│  │                                        │                 │
-│  │  4. Stream Results                     │                 │
-│  │     └─→ Iterator-based                 │                 │
-│  └────────────────────────────────────────┘                 │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Phase 8: Result Formation                                   │
-│  ┌────────────────────────────────────────┐                 │
-│  │         Query Result                   │                 │
-│  │                                        │                 │
-│  │  Columns: [name, age]                  │                 │
-│  │  Rows: [                               │                 │
-│  │    {name: "Alice", age: 30},           │                 │
-│  │    {name: "Bob", age: 25}              │                 │
-│  │  ]                                     │                 │
-│  │  Metadata: {rows: 2, time: 5ms}        │                 │
-│  └────────────────────────────────────────┘                 │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-                               ▼
-                       ┌───────────────┐
-                       │    Return     │
-                       │   to Client   │
-                       └───────────────┘
+                    Query Execution Pipeline                      
+
+
+
+  GQL Query  
+   (Text)    
+
+       
+       
+
+ Phase 1: Lexical Analysis                                   
+                     
+   MATCH       (         n         )      ...        
+   Keyword   LParen    Ident     RParen              
+                     
+
+                                Token Stream
+                               
+
+ Phase 2: Syntax Analysis (Parsing)                          
+                    
+           Abstract Syntax Tree                            
+                                                           
+                                           
+           MatchClause                                   
+                                           
+                                                          
+                                        
+          Pattern: (n)                                   
+                                        
+                    
+
+                                AST
+                               
+
+ Phase 3: Semantic Validation                                
+  - Type checking                                            
+  - Variable binding validation                              
+  - Schema compliance (if typed)                             
+  - Function signature matching                              
+
+                                Validated AST
+                               
+
+ Phase 4: Logical Planning                                  
+                  
+          Logical Query Plan                              
+                                                          
+                                  
+       LogicalScan(n)                                   
+                                  
+                                                         
+                                  
+       LogicalFilter                                    
+                                  
+                                                         
+                                  
+       LogicalProject                                   
+                                  
+                  
+
+                               
+                               
+
+ Phase 5: Physical Planning & Optimization                  
+                  
+        Physical Query Plan                               
+                                                          
+                                  
+       IndexScan(n)          ← Optimizer chooses         
+       Cost: 10                 index scan over          
+          full scan                
+                                                          
+                                   
+       FilterExec                                        
+       Cost: 15                                          
+                                   
+                                                          
+                                   
+       ProjectExec                                       
+       Cost: 20                                          
+                                   
+                  
+
+                               
+                               
+
+ Phase 6: Cache Lookup (if applicable)                       
+             
+   Plan Cache       Result Cache      Subquery Cache   
+     (L3)              (L1/L2)                         
+             
+                                                          
+          Hit?  Return Cached Result      
+                                                            
+                    Miss                                     
+--
+                      
+                      
+
+ Phase 7: Execution                                          
+                   
+      Execution with Storage Access                        
+                                                           
+    1. Index Scan                                          
+       → Read from storage                               
+                                                           
+    2. Apply Filters                                       
+       → Evaluate predicates                             
+                                                           
+    3. Project Results                                     
+       → Select columns                                  
+                                                           
+    4. Stream Results                                      
+       → Iterator-based                                  
+                   
+
+                               
+                               
+
+ Phase 8: Result Formation                                   
+                   
+           Query Result                                    
+                                                           
+    Columns: [name, age]                                   
+    Rows: [                                                
+      {name: "Alice", age: 30},                            
+      {name: "Bob", age: 25}                               
+    ]                                                      
+    Metadata: {rows: 2, time: 5ms}                         
+                   
+
+                               
+                               
+                       
+                           Return     
+                          to Client   
+                       
 ```
 
 ### Pipeline Stages Detail
@@ -670,85 +670,85 @@ Both modes use the same underlying execution pipeline but differ in user interac
 ### Storage Layer Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Storage Architecture                     │
-└─────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────┐
-│                   Application Layer                         │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
-│  │   Executor   │  │   Planner    │  │   Catalog    │       │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘       │
-│         │                 │                  │              │
-│         └─────────────────┴──────────────────┘              │
-│                           │                                 │
-└───────────────────────────┼─────────────────────────────────┘
-                            ▼
-┌────────────────────────────────────────────────────────────┐
-│              Storage Manager (Abstraction Layer)           │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  Unified API for Graph Operations                    │  │
-│  │  - get_node(), put_node()                            │  │
-│  │  - get_relationship(), put_relationship()            │  │
-│  │  - get_neighbors(), traverse()                       │  │
-│  │  - batch_operations()                                │  │
-│  └──────────────────────────────────────────────────────┘  │
-└───────────────────────────┬────────────────────────────────┘
-                            │
-        ┌───────────────────┼───────────────────┐
-        │                   │                   │
-        ▼                   ▼                   ▼
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│  Graph       │    │   Index      │    │  Multi-Graph │
-│  Cache       │    │   Manager    │    │   Support    │
-│  (Memory)    │    │              │    │              │
-└──────┬───────┘    └──────┬───────┘    └──────┬───────┘
-       │                   │                   │
-       └───────────────────┴───────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     Physical Storage                        │
-│  ┌───────────────────────────────────────────────-───────┐  │
-│  │            Sled Embedded Database                     │  │
-│  │                                                       │  │
-│  │  ┌─────────────────────────────────────────────┐      │  │
-│  │  │  Key-Value Store Organization               │      │  │
-│  │  │                                             │      │  │
-│  │  │  Tree: nodes                                │      │  │
-│  │  │    Key: node_id → Value: Node{labels, props}│      │  │
-│  │  │                                             │      │  │
-│  │  │  Tree: relationships                        │      │  │
-│  │  │    Key: rel_id → Value: Rel{type, props}    │      │  │
-│  │  │                                             │      │  │
-│  │  │  Tree: adjacency_src                        │      │  │
-│  │  │    Key: (src_id, rel_id) → Value: dst_id    │      │  │
-│  │  │                                             │      │  │
-│  │  │  Tree: adjacency_dst                        │      │  │
-│  │  │    Key: (dst_id, rel_id) → Value: src_id    │      │  │
-│  │  │                                             │      │  │
-│  │  │  Tree: indexes                              │      │  │
-│  │  │    Key: (label, prop, value) → Value: ids   │      │  │
-│  │  │                                             │      │  │
-│  │  │  Tree: catalog                              │      │  │
-│  │  │    Key: catalog_key → Value: metadata       │      │  │
-│  │  └─────────────────────────────────────────────┘      │  │
-│  └───────────────────────────────────────────────────-───┘  │
-└───────────────────────────┬─────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   Persistent Storage                        │
-│  ┌───────────────────────────────────────────────────-───┐  │
-│  │               File System                             │  │
-│  │                                                       │  │
-│  │  ./mydb/                                              │  │
-│  │    ├── conf                    (Sled config)          │  │
-│  │    ├── db-*                    (Data files)           │  │
-│  │    ├── snap.*                  (Snapshots)            │  │
-│  │    └── blobs/                  (Large objects)        │  │
-│  └──────────────────────────────────────────────────=────┘  │
-└─────────────────────────────────────────────────────────────┘
+                    Storage Architecture                     
+
+
+
+                   Application Layer                         
+             
+     Executor        Planner         Catalog           
+             
+                                                          
+                       
+                                                            
+
+                            
+
+              Storage Manager (Abstraction Layer)           
+    
+    Unified API for Graph Operations                      
+    - get_node(), put_node()                              
+    - get_relationship(), put_relationship()              
+    - get_neighbors(), traverse()                         
+    - batch_operations()                                  
+    
+
+                            
+        
+                                              
+                                              
+        
+  Graph              Index            Multi-Graph 
+  Cache              Manager           Support    
+  (Memory)                                        
+        
+                                             
+       
+                            
+                            
+
+                     Physical Storage                        
+  -  
+              Sled Embedded Database                       
+                                                           
+            
+      Key-Value Store Organization                       
+                                                         
+      Tree: nodes                                        
+        Key: node_id → Value: Node{labels, props}        
+                                                         
+      Tree: relationships                                
+        Key: rel_id → Value: Rel{type, props}            
+                                                         
+      Tree: adjacency_src                                
+        Key: (src_id, rel_id) → Value: dst_id            
+                                                         
+      Tree: adjacency_dst                                
+        Key: (dst_id, rel_id) → Value: src_id            
+                                                         
+      Tree: indexes                                      
+        Key: (label, prop, value) → Value: ids           
+                                                         
+      Tree: catalog                                      
+        Key: catalog_key → Value: metadata               
+            
+  -  
+
+                            
+                            
+
+                   Persistent Storage                        
+  -  
+                 File System                               
+                                                           
+    ./mydb/                                                
+       conf                    (Sled config)            
+       db-*                    (Data files)             
+       snap.*                  (Snapshots)              
+       blobs/                  (Large objects)          
+  =  
+
 ```
 
 ### Data Organization
@@ -799,86 +799,86 @@ Property Index: "idx:{label}:{property}:{value}" → Vec<node_id>
 ### Cache Architecture Diagram
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│                    Multi-Level Cache System                   │
-└───────────────────────────────────────────────────────────────┘
 
-                     ┌──────────────┐
-                     │    Query     │
-                     └──────┬───────┘
-                            │
-                            ▼
-        ┌────────────────────────────────-───────┐
-        │         Cache Lookup Decision          │
-        └───────┬───────────────────┬────────────┘
-                │                   │
+                    Multi-Level Cache System                   
+
+
+                     
+                         Query     
+                     
+                            
+                            
+        -
+                 Cache Lookup Decision          
+        
+                                   
         Query Hash              Plan Hash
-                │                   │
-                ▼                   ▼
-┌─────────────────────────┐ ┌─────────────────────────┐
-│   L1 Result Cache       │ │    L3 Plan Cache        │
-│   (Hot - In Memory)     │ │  (Cold - Disk Backed)   │
-│                         │ │                         │
-│  Size: 100 MB           │ │  Size: 500 MB           │
-│  TTL: 5 minutes         │ │  TTL: 1 hour            │
-│  Eviction: LRU          │ │  Eviction: LRU          │
-│  Hit Rate: ~85%         │ │  Hit Rate: ~92%         │
-└────┬──────────────────┬-┘ └────┬────────────────────┘
-     │ Hit              │        │ Hit
-     │                Miss       │
-     ▼                  │        ▼
- ┌─────────┐            │   ┌─────────┐
- │ Return  │            │   │Execute  │
- │ Cached  │            │   │With Plan│
- └─────────┘            │   └─────────┘
-                        │
-                        ▼
-           ┌─────────────────────────┐
-           │   L2 Result Cache       │
-           │   (Warm - In Memory)    │
-           │                         │
-           │  Size: 200 MB           │
-           │  TTL: 15 minutes        │
-           │  Eviction: LRU          │
-           │  Hit Rate: ~75%         │
-           └────┬───────────────────┬┘
-                │ Hit          Miss │
-                ▼                   │
-            ┌─────────┐             │
-            │ Return  │             │
-            │ Cached  │             │
-            └─────────┘             │
-                                    ▼
-                   ┌──────────────────────────────┐
-                   │   Subquery Cache             │
-                   │   (Specialized)              │
-                   │                              │
-                   │  Size: 50 MB                 │
-                   │  TTL: 10 minutes             │
-                   │  Scope: Per-query subqueries │
-                   └────┬───────────────────────┬-┘
-                        │ Hit             Miss  │
-                        ▼                       │
-                    ┌─────────┐                 │
-                    │ Return  │                 │
-                    │ Cached  │                 │
-                    └─────────┘                 │
-                                                ▼
-                                   ┌───────────────────────┐
-                                   │  Execute Full Query   │
-                                   │  Against Storage      │
-                                   └───────────────────────┘
-                                                │
-                                                ▼
-                                   ┌───────────────────────┐
-                                   │   Cache Results       │
-                                   │   (Store in L1/L2/L3) │
-                                   └───────────────────────┘
-                                                │
-                                                ▼
-                                        ┌──────────────┐
-                                        │Return Results│
-                                        └──────────────┘
+                                   
+                                   
+ 
+   L1 Result Cache            L3 Plan Cache        
+   (Hot - In Memory)        (Cold - Disk Backed)   
+                                                   
+  Size: 100 MB              Size: 500 MB           
+  TTL: 5 minutes            TTL: 1 hour            
+  Eviction: LRU             Eviction: LRU          
+  Hit Rate: ~85%            Hit Rate: ~92%         
+- 
+      Hit                       Hit
+                     Miss       
+                               
+                
+  Return                 Execute  
+  Cached                 With Plan
+                
+                        
+                        
+           
+              L2 Result Cache       
+              (Warm - In Memory)    
+                                    
+             Size: 200 MB           
+             TTL: 15 minutes        
+             Eviction: LRU          
+             Hit Rate: ~75%         
+           
+                 Hit          Miss 
+                                   
+                         
+             Return               
+             Cached               
+                         
+                                    
+                   
+                      Subquery Cache             
+                      (Specialized)              
+                                                 
+                     Size: 50 MB                 
+                     TTL: 10 minutes             
+                     Scope: Per-query subqueries 
+                   -
+                         Hit             Miss  
+                                               
+                                     
+                     Return                   
+                     Cached                   
+                                     
+                                                
+                                   
+                                     Execute Full Query   
+                                     Against Storage      
+                                   
+                                                
+                                                
+                                   
+                                      Cache Results       
+                                      (Store in L1/L2/L3) 
+                                   
+                                                
+                                                
+                                        
+                                        Return Results
+                                        
 ```
 
 ### Cache Types
@@ -917,36 +917,36 @@ Property Index: "idx:{label}:{property}:{value}" → Vec<node_id>
 ### Cache Invalidation
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│              Cache Invalidation Strategy                    │
-└─────────────────────────────────────────────────────────────┘
+
+              Cache Invalidation Strategy                    
+
 
 Write Operation (INSERT/UPDATE/DELETE)
-            │
-            ▼
-    ┌───────────────┐
-    │  Detect Scope │
-    │  - Tables     │
-    │  - Labels     │
-    │  - Properties │
-    └───────┬───────┘
-            │
-            ▼
-    ┌───────────────────────────────────┐
-    │  Invalidate Affected Caches       │
-    │                                   │
-    │  IF affects nodes/relationships:  │
-    │    → Clear result caches          │
-    │    → Clear subquery caches        │
-    │                                   │
-    │  IF schema change:                │
-    │    → Clear ALL caches             │
-    │    → Rebuild plan cache           │
-    │                                   │
-    │  IF index change:                 │
-    │    → Clear plan cache             │
-    │    → Keep result cache (if valid) │
-    └───────────────────────────────────┘
+            
+            
+    
+      Detect Scope 
+      - Tables     
+      - Labels     
+      - Properties 
+    
+            
+            
+    
+      Invalidate Affected Caches       
+                                       
+      IF affects nodes/relationships:  
+        → Clear result caches          
+        → Clear subquery caches        
+                                       
+      IF schema change:                
+        → Clear ALL caches             
+        → Rebuild plan cache           
+                                       
+      IF index change:                 
+        → Clear plan cache             
+        → Keep result cache (if valid) 
+    
 ```
 
 ### Cache Statistics
@@ -965,105 +965,105 @@ Accessible via `CALL gql.cache_stats()`:
 ### Transaction Architecture
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│                  Transaction System                           │
-└───────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────┐
-│                   Transaction Manager                       │
-│  ┌─────────────────────────────────────────────-─────────┐  │
-│  │  Active Transactions                                  │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐             │  │
-│  │  │ TXN-001  │  │ TXN-002  │  │ TXN-003  │             │  │
-│  │  │ Read-Only│  │Read-Write│  │Read-Write│             │  │
-│  │  │ Level: RC│  │Level: S  │  │Level: RR │             │  │
-│  │  └──────────┘  └──────────┘  └──────────┘             │  │
-│  └───────────────────────────────────────────────-───────┘  │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-        ┌─────────────────┼─────────────────┐
-        │                 │                 │
-        ▼                 ▼                 ▼
-┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│    WAL       │  │    Lock      │  │   MVCC       │
-│(Write-Ahead  │  │   Manager    │  │ (Multi-      │
-│   Log)       │  │              │  │  Version)    │
-└──────┬───────┘  └──────┬───────┘  └──────┬───────┘
-       │                 │                 │
-       │                 │                 │
-       └─────────────────┴─────────────────┘
-                         │
-                         ▼
-                ┌────────────────┐
-                │    Storage     │
-                │    Manager     │
-                └────────────────┘
+                  Transaction System                           
+
+
+
+                   Transaction Manager                       
+  -  
+    Active Transactions                                    
+                       
+     TXN-001     TXN-002     TXN-003                 
+     Read-Only  Read-Write  Read-Write               
+     Level: RC  Level: S    Level: RR                
+                       
+  -  
+
+                          
+        
+                                          
+                                          
+    
+    WAL             Lock           MVCC       
+(Write-Ahead       Manager       (Multi-      
+   Log)                           Version)    
+    
+                                         
+                                         
+       
+                         
+                         
+                
+                    Storage     
+                    Manager     
+                
 ```
 
 ### Transaction Flow
 
 ```
 BEGIN TRANSACTION
-       │
-       ▼
-┌──────────────────────────────────────┐
-│  1. Create Transaction Context       │
-│     - Assign transaction ID          │
-│     - Set isolation level            │
-│     - Initialize WAL entry           │
-│     - Acquire locks (if needed)      │
-└──────┬───────────────────────────────┘
-       │
-       ▼
-┌──────────────────────────────────────┐
-│  2. Execute Operations               │
-│     ┌────────────────────────────┐   │
-│     │ INSERT/UPDATE/DELETE       │   │
-│     │   ↓                        │   │
-│     │ Write to WAL               │   │
-│     │   ↓                        │   │
-│     │ Create version             │   │
-│     │   ↓                        │   │
-│     │ Apply to transaction view  │   │
-│     └────────────────────────────┘   │
-└──────┬───────────────────────────────┘
-       │
-       ├──→ COMMIT
-       │        │
-       │        ▼
-       │   ┌──────────────────────────┐
-       │   │  3a. Commit Phase        │
-       │   │     - Flush WAL          │
-       │   │     - Apply changes      │
-       │   │     - Release locks      │
-       │   │     - Mark committed     │
-       │   └──────┬───────────────────┘
-       │          │
-       │          ▼
-       │   ┌──────────────────────────┐
-       │   │  4a. Post-Commit         │
-       │   │     - Invalidate caches  │
-       │   │     - Update stats       │
-       │   │     - Cleanup            │
-       │   └──────────────────────────┘
-       │
-       └──→ ROLLBACK
-                │
-                ▼
-           ┌──────────────────────────┐
-           │  3b. Rollback Phase      │
-           │     - Discard changes    │
-           │     - Release locks      │
-           │     - Cleanup WAL        │
-           │     - Mark rolled back   │
-           └──────┬───────────────────┘
-                  │
-                  ▼
-           ┌──────────────────────────┐
-           │  4b. Post-Rollback       │
-           │     - Restore state      │
-           │     - Cleanup            │
-           └──────────────────────────┘
+       
+       
+
+  1. Create Transaction Context       
+     - Assign transaction ID          
+     - Set isolation level            
+     - Initialize WAL entry           
+     - Acquire locks (if needed)      
+
+       
+       
+
+  2. Execute Operations               
+        
+      INSERT/UPDATE/DELETE          
+        ↓                           
+      Write to WAL                  
+        ↓                           
+      Create version                
+        ↓                           
+      Apply to transaction view     
+        
+
+       
+       → COMMIT
+               
+               
+          
+            3a. Commit Phase        
+               - Flush WAL          
+               - Apply changes      
+               - Release locks      
+               - Mark committed     
+          
+                 
+                 
+          
+            4a. Post-Commit         
+               - Invalidate caches  
+               - Update stats       
+               - Cleanup            
+          
+       
+       → ROLLBACK
+                
+                
+           
+             3b. Rollback Phase      
+                - Discard changes    
+                - Release locks      
+                - Cleanup WAL        
+                - Mark rolled back   
+           
+                  
+                  
+           
+             4b. Post-Rollback       
+                - Restore state      
+                - Cleanup            
+           
 ```
 
 ### Isolation Levels
@@ -1078,22 +1078,22 @@ BEGIN TRANSACTION
 ### MVCC (Multi-Version Concurrency Control). (To be Tested and reviewed for Multi-user/Concurrent sessions. Not relevant in single session/single user embedded mode.)
 
 ```
-┌────────────────────────────────────────────────────────────┐
-│               Version Chain Example                        │
-└────────────────────────────────────────────────────────────┘
+
+               Version Chain Example                        
+
 
 Node ID: node_123
 Property: age
 
-┌──────────────────────────────────────────────────────────┐
-│  Version Chain (newest → oldest)                         │
-│                                                          │
-│  V3: age=31  [TXN-103, active]    ← Latest write         │
-│   ↓                                                      │
-│  V2: age=30  [TXN-102, committed] ← Previous version     │
-│   ↓                                                      │
-│  V1: age=29  [TXN-101, committed] ← Original version     │
-└──────────────────────────────────────────────────────────┘
+
+  Version Chain (newest → oldest)                         
+                                                          
+  V3: age=31  [TXN-103, active]    ← Latest write         
+   ↓                                                      
+  V2: age=30  [TXN-102, committed] ← Previous version     
+   ↓                                                      
+  V1: age=29  [TXN-101, committed] ← Original version     
+
 
 Transaction Visibility:
 - TXN-103: Sees V3 (own changes)
@@ -1108,40 +1108,40 @@ Transaction Visibility:
 ### Session Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                    Session Manager                       │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │              Active Sessions                       │  │
-│  │                                                    │  │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌─────────┐   │  │
-│  │  │ Session-001  │  │ Session-002  │  │ Session │   │  │
-│  │  │ User: alice  │  │ User: bob    │  │  -003   │   │  │
-│  │  │ Schema: prod │  │ Schema: dev  │  │  ...    │   │  │
-│  │  │ Graph: main  │  │ Graph: test  │  │         │   │  │
-│  │  └──────┬───────┘  └──────┬───────┘  └────┬────┘   │  │
-│  │         │                 │                 │      │  │
-│  └─────────┼─────────────────┼─────────────────┼──────┘  │
-└────────────┼─────────────────┼─────────────────┼─────────┘
-             │                 │                 │
-             ▼                 ▼                 ▼
-    ┌────────────────┐ ┌────────────────┐ ┌────────────────┐
-    │ Transaction    │ │ Transaction    │ │ Transaction    │
-    │ Context        │ │ Context        │ │ Context        │
-    └────────────────┘ └────────────────┘ └────────────────┘
-             │                 │                 │
-             ▼                 ▼                 ▼
-    ┌────────────────┐ ┌────────────────┐ ┌────────────────┐
-    │ Permission     │ │ Permission     │ │ Permission     │
-    │ Cache          │ │ Cache          │ │ Cache          │
-    └────────────────┘ └────────────────┘ └────────────────┘
-             │                 │                 │
-             └─────────────────┴─────────────────┘
-                               │
-                               ▼
-                     ┌─────────────────┐
-                     │  Catalog        │
-                     │  Manager        │
-                     └─────────────────┘
+
+                    Session Manager                       
+    
+                Active Sessions                         
+                                                        
+             
+     Session-001     Session-002     Session      
+     User: alice     User: bob        -003        
+     Schema: prod    Schema: dev      ...         
+     Graph: main     Graph: test                  
+             
+                                                     
+    
+
+                                               
+                                               
+      
+     Transaction      Transaction      Transaction    
+     Context          Context          Context        
+      
+                                               
+                                               
+      
+     Permission       Permission       Permission     
+     Cache            Cache            Cache          
+      
+                                               
+             
+                               
+                               
+                     
+                       Catalog        
+                       Manager        
+                     
 ```
 
 ### Session Lifecycle
@@ -1149,45 +1149,45 @@ Transaction Visibility:
 ```
 1. CONNECT → 2. AUTHENTICATE → 3. SET CONTEXT → 4. EXECUTE → 5. DISCONNECT
 
-┌──────────────┐
-│  1. Connect  │
-│  - Create ID │
-│  - Init state│
-└──────┬───────┘
-       │
-       ▼
-┌──────────────────┐
-│  2. Authenticate │
-│  - Verify user   │
-│  - Load roles    │
-│  - Check perms   │
-└──────┬───────────┘
-       │
-       ▼
-┌────────────────────┐
-│  3. Set Context    │
-│  - SESSION SET     │
-│    SCHEMA          │
-│  - SESSION SET     │
-│    GRAPH           │
-└──────┬─────────────┘
-       │
-       ▼
-┌────────────────────┐
-│  4. Execute Queries│
-│  - Parse           │
-│  - Plan            │
-│  - Execute         │
-│  - Return results  │
-└──────┬─────────────┘
-       │
-       ▼
-┌────────────────────┐
-│  5. Disconnect     │
-│  - Cleanup         │
-│  - Release locks   │
-│  - Close TXN       │
-└────────────────────┘
+
+  1. Connect  
+  - Create ID 
+  - Init state
+
+       
+       
+
+  2. Authenticate 
+  - Verify user   
+  - Load roles    
+  - Check perms   
+
+       
+       
+
+  3. Set Context    
+  - SESSION SET     
+    SCHEMA          
+  - SESSION SET     
+    GRAPH           
+
+       
+       
+
+  4. Execute Queries
+  - Parse           
+  - Plan            
+  - Execute         
+  - Return results  
+
+       
+       
+
+  5. Disconnect     
+  - Cleanup         
+  - Release locks   
+  - Close TXN       
+
 ```
 
 ---
@@ -1197,58 +1197,58 @@ Transaction Visibility:
 ### Security Layers
 
 ```
-┌───────────────────────────────────────────────────────────┐
-│                    Security Architecture                  │
-└───────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────┐
-│  Layer 1: Authentication                                    │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  Username/Password Authentication                    │   │
-│  │  - Bcrypt password hashing                           │   │
-│  │  - Secure credential storage in catalog              │   │
-│  │  - Session token generation                          │   │
-│  └──────────────────────────────────────────────────────┘   │
-└───────────────────────────┬─────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Layer 2: Authorization (RBAC)                              │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  Role Hierarchy                                      │   │
-│  │                                                      │   │
-│  │        ┌───────────┐                                 │   │
-│  │        │   admin   │  (All permissions)              │   │
-│  │        └─────┬─────┘                                 │   │
-│  │              │                                       │   │
-│  │      ┌───────┴────────┐                              │   │
-│  │      │                │                              │   │
-│  │  ┌───▼────┐      ┌─-──▼───┐                          │   │
-│  │  │  user  │      │analyst │                          │   │
-│  │  └────────┘      └────────┘                          │   │
-│  │  (Read/Write)    (Read-only)                         │   │
-│  └──────────────────────────────────────────────────────┘   │
-└───────────────────────────┬─────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Layer 3: Permission Enforcement                            │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  Permission Checks                                   │   │
-│  │  - Schema access                                     │   │
-│  │  - Graph access                                      │   │
-│  │  - Operation permissions (DDL/DML/DQL)               │   │
-│  │  - Row-level security (future)                       │   │
-│  └─────────────────────────────────────────--───────────┘   │
-└───────────────────────────┬─────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Layer 4: Audit Logging (future)                            │
-│  - Query logging                                            │
-│  - Access attempts                                          │
-│  - Security events                                          │
-└─────────────────────────────────────────────────────────────┘
+                    Security Architecture                  
+
+
+
+  Layer 1: Authentication                                    
+     
+    Username/Password Authentication                       
+    - Bcrypt password hashing                              
+    - Secure credential storage in catalog                 
+    - Session token generation                             
+     
+
+                            
+                            
+
+  Layer 2: Authorization (RBAC)                              
+     
+    Role Hierarchy                                         
+                                                           
+                                              
+             admin     (All permissions)                 
+                                              
+                                                          
+                                         
+                                                         
+          -                             
+      user        analyst                              
+                                       
+    (Read/Write)    (Read-only)                            
+     
+
+                            
+                            
+
+  Layer 3: Permission Enforcement                            
+     
+    Permission Checks                                      
+    - Schema access                                        
+    - Graph access                                         
+    - Operation permissions (DDL/DML/DQL)                  
+    - Row-level security (future)                          
+  --   
+
+                            
+                            
+
+  Layer 4: Audit Logging (future)                            
+  - Query logging                                            
+  - Access attempts                                          
+  - Security events                                          
+
 ```
 
 ---
@@ -1258,64 +1258,64 @@ Transaction Visibility:
 ### Optimization Strategies
 
 ```
-┌────────────────────────────────────────────────────────────┐
-│              Performance Optimization Stack                │
-└────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────┐
-│  1. Query-Level Optimizations                               │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  - Predicate pushdown                                │   │
-│  │  - Projection pruning                                │   │
-│  │  - Join order optimization                           │   │
-│  │  - Constant folding                                  │   │
-│  │  - Dead code elimination                             │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│  2. Index Optimizations (Future)                            │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  - Automatic index selection                         │   │
-│  │  - Covering indexes                                  │   │
-│  │  - Index-only scans                                  │   │
-│  │  - Composite indexes                                 │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│  3. Execution Optimizations                                 │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  - Parallel execution (Rayon)                        │   │
-│  │  - Lazy evaluation                                   │   │
-│  │  - Iterator-based streaming                          │   │
-│  │  - Batch operations                                  │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│  4. Storage Optimizations                                   │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  - Compression (Sled built-in)                       │   │
-│  │  - Adjacency list optimization                       │   │
-│  │  - Batch reads/writes                                │   │
-│  │  - Memory-mapped files                               │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│  5. Cache Optimizations                                     │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  - Multi-level caching                               │   │
-│  │  - Intelligent cache invalidation                    │   │
-│  │  - Query result caching                              │   │
-│  │  - Plan caching                                      │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+              Performance Optimization Stack                
+
+
+
+  1. Query-Level Optimizations                               
+     
+    - Predicate pushdown                                   
+    - Projection pruning                                   
+    - Join order optimization                              
+    - Constant folding                                     
+    - Dead code elimination                                
+     
+
+                            
+                            
+
+  2. Index Optimizations (Future)                            
+     
+    - Automatic index selection                            
+    - Covering indexes                                     
+    - Index-only scans                                     
+    - Composite indexes                                    
+     
+
+                            
+                            
+
+  3. Execution Optimizations                                 
+     
+    - Parallel execution (Rayon)                           
+    - Lazy evaluation                                      
+    - Iterator-based streaming                             
+    - Batch operations                                     
+     
+
+                            
+                            
+
+  4. Storage Optimizations                                   
+     
+    - Compression (Sled built-in)                          
+    - Adjacency list optimization                          
+    - Batch reads/writes                                   
+    - Memory-mapped files                                  
+     
+
+                            
+                            
+
+  5. Cache Optimizations                                     
+     
+    - Multi-level caching                                  
+    - Intelligent cache invalidation                       
+    - Query result caching                                 
+    - Plan caching                                         
+     
+
 ```
 
 ### Performance Characteristics

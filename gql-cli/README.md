@@ -71,11 +71,11 @@ gql> INSERT (:Person {name: 'Alice', age: 30});
 1 node inserted
 
 gql> MATCH (p:Person) RETURN p.name, p.age;
-┌────────┬───────┐
-│ name   │ age   │
-├────────┼───────┤
-│ Alice  │ 30    │
-└────────┴───────┘
+
+ name    age   
+
+ Alice   30    
+
 1 row
 
 gql> exit
@@ -103,12 +103,12 @@ graphlite query --path ./mydb -u admin -p secret "MATCH (n) RETURN n LIMIT 10"
 graphlite query --path ./mydb -u admin -p secret --format table "MATCH (p:Person) RETURN p.name"
 ```
 ```
-┌────────┐
-│ name   │
-├────────┤
-│ Alice  │
-│ Bob    │
-└────────┘
+
+ name   
+
+ Alice  
+ Bob    
+
 ```
 
 **JSON:**
@@ -210,10 +210,10 @@ The default database path is `./db` in the current directory. You can specify a 
 **Database structure:**
 ```
 mydb/
-├── catalog/          # Catalog metadata
-├── graphs/           # Graph data
-├── wal/              # Write-ahead log
-└── [sled files]      # Embedded storage files
+ catalog/          # Catalog metadata
+ graphs/           # Graph data
+ wal/              # Write-ahead log
+ [sled files]      # Embedded storage files
 ```
 
 ## Error Handling

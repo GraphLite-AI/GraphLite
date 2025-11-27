@@ -154,6 +154,63 @@ if [ -n "$test_files" ]; then
     fi
 fi
 
+# Rule #11: No Emojis in Documentation
+echo "🔍 Rule #11: No emojis in documentation..."
+md_files=$(find . -name "*.md" -type f ! -path "./target/*" ! -path "./.git/*" 2>/dev/null || true)
+if [ -n "$md_files" ]; then
+    # Save filenames to temp file for Python to read
+    temp_file=$(mktemp)
+    echo "$md_files" > "$temp_file"
+
+    # Use Python to detect emojis comprehensively
+    rule11_violations=$(python3 << PYTHON_EOF
+import re
+
+emoji_pattern = re.compile(
+    "["
+    "\U0001F1E0-\U0001F1FF"  # flags
+    "\U0001F300-\U0001F5FF"  # symbols & pictographs
+    "\U0001F600-\U0001F64F"  # emoticons
+    "\U0001F680-\U0001F6FF"  # transport
+    "\U0001F900-\U0001F9FF"  # supplemental
+    "\U00002600-\U000026FF"  # misc symbols
+    "\U00002700-\U000027BF"  # dingbats
+    "]+",
+    flags=re.UNICODE
+)
+
+violations = []
+with open("$temp_file", 'r') as f:
+    for line in f:
+        filepath = line.strip()
+        if not filepath:
+            continue
+        try:
+            with open(filepath, 'r', encoding='utf-8') as md:
+                content = md.read()
+                if emoji_pattern.search(content):
+                    violations.append(filepath)
+        except:
+            pass
+
+for v in violations:
+    print(v)
+PYTHON_EOF
+)
+    rm "$temp_file"
+
+    if [ -n "$rule11_violations" ]; then
+        echo "❌ RULE #11 VIOLATIONS: Emojis found in markdown files"
+        echo "$rule11_violations" | head -10
+        violation_count=$(echo "$rule11_violations" | wc -l | tr -d ' ')
+        echo "   Found $violation_count file(s) with emojis"
+        echo "   💡 Remove all emoji characters from documentation"
+        echo "   📖 See Rule #11"
+        echo ""
+        violations=$((violations + 1))
+    fi
+fi
+
 # Summary
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""

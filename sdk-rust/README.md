@@ -278,34 +278,36 @@ GraphLite SDK follows similar patterns to rusqlite but adapted for graph databas
 
 ```text
 Your Application
-       │
-       ▼
-┌─────────────────────────┐
-│   GraphLite SDK         │
-│   - GraphLite           │  ← You are here
-│   - Session             │
-│   - Transaction         │
-│   - QueryBuilder        │
-│   - TypedResult         │
-└─────────────────────────┘
-       │
-       ▼
-┌─────────────────────────┐
-│   GraphLite Core        │
-│   - QueryCoordinator    │
-│   - Storage Engine      │
-│   - Catalog Manager     │
-└─────────────────────────┘
+       
+       
+
+   GraphLite SDK         
+   - GraphLite             ← You are here
+   - Session             
+   - Transaction         
+   - QueryBuilder        
+   - TypedResult         
+
+       
+       
+
+   GraphLite Core        
+   - QueryCoordinator    
+   - Storage Engine      
+   - Catalog Manager     
+
 ```
 
 ## Language Bindings
 
 The GraphLite SDK is specifically for **Rust applications**. For other languages:
 
-- **Python** - Use `bindings/python/` (via FFI)
-- **Java** - Use `bindings/java/` (via JNI)
+- **Python** - Use `../sdk-python/` (high-level Python SDK)
+- **Swift** - Use `bindings/swift/` (via FFI)
+- **Java** - Use `bindings/java/` (via FFI)
 - **JavaScript/Node.js** - Use `bindings/javascript/` (via FFI/WASM)
-- **Kotlin** - Use `bindings/kotlin/` (via JNI)
+- **Go** - Use `bindings/go/` (via FFI)
+- **WASM** - Use `bindings/wasm/` (for browser/web)
 
 See the main [MULTI_LANGUAGE_BINDINGS_DESIGN.md](../MULTI_LANGUAGE_BINDINGS_DESIGN.md) for details.
 
