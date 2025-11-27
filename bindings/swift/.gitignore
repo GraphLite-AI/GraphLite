@@ -1,0 +1,26 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Xcode
+xcuserdata/
+*.xcworkspace/
+*.xcodeproj/
+
+# XCFramework (should be built, not committed)
+*.xcframework/
+
+# macOS
+.DS_Store
+
+# Build artifacts
+*.dSYM/
+*.o
+*.a
+*.dylib
+*.so
+
+# Swift intermediate files
+*.swiftmodule
+*.swiftdoc

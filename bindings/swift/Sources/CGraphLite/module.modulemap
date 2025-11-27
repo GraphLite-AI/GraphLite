@@ -1,0 +1,4 @@
+module CGraphLite {
+    header "include/graphlite.h"
+    export *
+}
