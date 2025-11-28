@@ -33,6 +33,7 @@ use super::context::ExecutionContext;
 use super::error::ExecutionError;
 use super::result::{QueryResult, Row};
 use crate::session::models::UserSession;
+use crate::session::SessionProvider;
 
 // Executor is now fully synchronous - no runtime management needed
 // All DDL and catalog operations are now sync, eliminating runtime nesting issues
@@ -107,6 +108,9 @@ pub struct QueryExecutor {
     function_registry: Arc<FunctionRegistry>,
     catalog_manager: Arc<std::sync::RwLock<CatalogManager>>, // New catalog system
     system_procedures: SystemProcedures,
+
+    // Session management
+    session_provider: Arc<dyn SessionProvider>,
 
     // Transaction management (session-agnostic)
     transaction_manager: Arc<TransactionManager>,
@@ -281,8 +285,10 @@ impl QueryExecutor {
             ExecutionContext::new("anonymous_session".to_string(), self.storage.clone())
         };
 
-        // Set function registry so that function calls can be evaluated in INSERT/SET operations
-        context.with_function_registry(self.function_registry.clone())
+        // Set function registry and session provider
+        context
+            .with_function_registry(self.function_registry.clone())
+            .with_session_provider(self.session_provider.clone())
     }
 
     /// Route and execute based on statement type
@@ -406,17 +412,23 @@ impl QueryExecutor {
         storage_manager: Arc<StorageManager>,
         catalog_manager: Arc<std::sync::RwLock<CatalogManager>>,
         transaction_manager: Arc<TransactionManager>,
+        session_provider: Arc<dyn SessionProvider>,
         _cache_manager: Option<Arc<CacheManager>>,
     ) -> Result<Self, ExecutionError> {
         // Create system procedures with the provided managers
-        let system_procedures =
-            SystemProcedures::new(catalog_manager.clone(), storage_manager.clone(), None);
+        let system_procedures = SystemProcedures::new(
+            catalog_manager.clone(),
+            storage_manager.clone(),
+            None,
+        )
+        .with_session_provider(session_provider.clone());
 
         Ok(Self {
             storage: storage_manager,
             function_registry: Arc::new(FunctionRegistry::new()),
             catalog_manager,
             system_procedures,
+            session_provider,
             transaction_manager,
             current_transaction: Arc::new(std::sync::RwLock::new(None)),
             transaction_logs: Arc::new(std::sync::RwLock::new(std::collections::HashMap::new())),
