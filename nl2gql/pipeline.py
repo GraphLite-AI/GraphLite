@@ -502,41 +502,76 @@ def print_verbose_info(
     gen_model: str,
     fix_model: str,
 ) -> None:
-    print("\n" + "=" * 60)
+    def _fmt_feedback(fb: Optional[List[Dict[str, str]]]) -> str:
+        if not fb:
+            return "none"
+        formatted = []
+        for item in fb:
+            if isinstance(item, dict):
+                formatted.append(f"{item.get('type', 'note')}: {item.get('reason', '')}".strip())
+            else:
+                formatted.append(str(item))
+        return "; ".join(formatted)
+
+    print("\n" + "=" * 80)
     print("PIPELINE EXECUTION SUMMARY")
-    print("=" * 60)
+    print("=" * 80)
     print(f"Query: {nl_query}")
     print(f"Models: {gen_model} (gen) | {fix_model} (fix)")
     print(f"Max Attempts: {max_attempts}")
 
-    print("\nTimeline:")
-    for idx, entry in enumerate(validation_log, 1):
-        attempt = entry["attempt"]
-        action = entry["action"]
-        valid = entry.get("valid")
+    # Group timeline entries by attempt for cleaner display.
+    grouped: Dict[int, List[Dict[str, Any]]] = {}
+    for entry in validation_log:
+        grouped.setdefault(entry["attempt"], []).append(entry)
 
-        if action == "generated":
-            print(f"  {idx}. Attempt {attempt}: Generated query")
-            if entry.get("feedback"):
-                print(f"      Used {len(entry['feedback'])} feedback item(s)")
-        elif action == "validated_syntax":
-            status = "✓ SYNTAX VALID" if valid else "✗ SYNTAX INVALID"
-            print(f"  {idx}. Attempt {attempt}: {status}")
-            if not valid and entry.get("error"):
-                print(f"      Error: {entry['error']}")
-        elif action == "fixed_syntax":
-            print(f"  {idx}. Attempt {attempt}: Applied syntax fix")
-        elif action == "validated_logic":
-            status = "✓ LOGIC VALID" if valid else "✗ LOGIC INVALID"
-            print(f"  {idx}. Attempt {attempt}: {status}")
-            if not valid and entry.get("error"):
-                print(f"      Error: {entry['error']}")
+    print("\nTimeline (per attempt):")
+    for attempt in sorted(grouped.keys()):
+        print("-" * 80)
+        print(f"Attempt {attempt}")
+        for entry in grouped[attempt]:
+            action = entry["action"]
+            valid = entry.get("valid")
+
+            if action == "generated":
+                fb_text = _fmt_feedback(entry.get("feedback"))
+                print(f"  • Generated (used feedback: {fb_text})")
+                print("    Query:")
+                print("      " + "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"]))
+            elif action == "incomplete_generation":
+                print("  • Incomplete generation (missing RETURN or too short)")
+                print("    Query:")
+                print("      " + "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"]))
+            elif action == "validated_syntax":
+                status = "✓ SYNTAX VALID" if valid else "✗ SYNTAX INVALID"
+                print(f"  • {status}")
+                if entry.get("error"):
+                    print("    Error:")
+                    print("      " + "\n      ".join(str(entry["error"]).splitlines()))
+            elif action == "fixed_syntax":
+                print("  • Applied syntax fix")
+                print("    Query:")
+                print("      " + "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"]))
+            elif action == "validated_logic":
+                status = "✓ LOGIC VALID" if valid else "✗ LOGIC INVALID"
+                print(f"  • {status}")
+                if entry.get("error"):
+                    print("    Error:")
+                    print("      " + "\n      ".join(str(entry["error"]).splitlines()))
+            elif action == "fixed_logic":
+                print("  • Applied logic fix")
+                print("    Query:")
+                print("      " + "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"]))
+            elif action == "auto_fixed_syntax_hint":
+                print("  • Auto-applied property correction")
+                print("    Query:")
+                print("      " + "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"]))
 
     total_tokens = sum(item.get("total_tokens", 0) for item in usage_data)
     print("\nAPI Usage:")
     print(f"  Calls: {len(usage_data)}")
     print(f"  Tokens: {total_tokens}")
-    print("=" * 60)
+    print("=" * 80)
 
 
 def read_text(path: str) -> str:
