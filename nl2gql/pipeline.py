@@ -120,6 +120,7 @@ def chat_complete(
     *,
     temperature: float = 0.3,
     top_p: float = 0.9,
+    max_tokens: int = 400,
 ) -> Tuple[str, Optional[Dict[str, Any]]]:
     """Simple chat completion with retries and usage extraction."""
 
@@ -128,6 +129,7 @@ def chat_complete(
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
         temperature=temperature,
         top_p=top_p,
+        max_tokens=max_tokens,
     )
 
     text = (resp.choices[0].message.content or "").strip()
@@ -240,7 +242,7 @@ SYSTEM_GENERATE = (
     "You write ISO GQL (GraphLite dialect) queries from natural language. "
     "Use only MATCH, WHERE, RETURN, WITH, ORDER BY, LIMIT, DISTINCT, and aggregates (COUNT, SUM, AVG, MIN, MAX). "
     "Use single quotes for strings. IN clauses use square brackets. Do not invent labels or properties outside schema_context. "
-    "Return the query only with no commentary."
+    "Return the query only with no commentary. Always include a RETURN clause (and LIMIT if applicable); do not stop early."
 )
 
 USER_GENERATE_TEMPLATE = (
@@ -395,6 +397,21 @@ def generate_isogql_with_models(
                 "feedback": feedback.copy(),
             }
         )
+
+        # Short-circuit obvious early stops so we don't waste validation on partial outputs.
+        if len(query) < 32 or "RETURN" not in query.upper():
+            feedback.append(
+                "Incomplete query: generation stopped early (missing RETURN or too short). Emit a full query with RETURN (and LIMIT if applicable)."
+            )
+            validation_log.append(
+                {
+                    "attempt": attempt_num,
+                    "action": "incomplete_generation",
+                    "query": query,
+                    "error": "missing RETURN / too short",
+                }
+            )
+            continue
 
         syntax_valid, syntax_error = validator.validate(query)
         validation_log.append(
