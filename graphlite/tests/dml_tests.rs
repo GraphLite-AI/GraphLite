@@ -218,7 +218,7 @@ fn test_count_aggregation_with_empty_results() {
     let working_result = fixture
         .query("MATCH (n:TestNode) RETURN count(n) as count")
         .unwrap();
-    for (_i, _row) in working_result.rows.iter().enumerate() {}
+    for _row in working_result.rows.iter() {}
 
     // Now test COUNT on non-existent nodes - should return 1 row with count=0
     let result = match fixture.query("MATCH (x:NonExistentLabel) RETURN count(x) as count") {
@@ -228,7 +228,7 @@ fn test_count_aggregation_with_empty_results() {
         }
     };
 
-    for (_i, _row) in result.rows.iter().enumerate() {}
+    for _row in result.rows.iter() {}
 
     // This should return exactly 1 row with count=0, not 0 rows
     assert_eq!(
@@ -629,10 +629,7 @@ fn test_dml_error_cases() {
     // This may or may not fail depending on type coercion rules
     let result = fixture.query("MATCH (t:TypeTest) SET t.number_prop = 'string_value'");
 
-    match result {
-        Ok(_) => {}
-        Err(_) => {}
-    }
+    if let Ok(_) = result {}
 }
 
 #[test]
@@ -663,7 +660,7 @@ fn test_dml_performance() {
         }
 
         // Debug: show the first few clauses
-        if batch == 0 {}
+        batch == 0;
 
         insert_query.push_str(&clauses.join(", "));
         fixture.assert_query_succeeds(&insert_query);
@@ -677,8 +674,7 @@ fn test_dml_performance() {
                 .values
                 .get("count")
                 .unwrap_or(&Value::Number(0.0));
-        } else {
-        }
+        } 
     }
 
     let insert_duration = start.elapsed();

@@ -198,7 +198,7 @@ fn test_union_all_preserves_duplicates() {
     log::debug!("UNION ALL results: {} rows", result.rows.len());
 
     // If there are results, verify they include department members
-    if result.rows.len() > 0 {
+    if !result.rows.is_empty() {
         let names: Vec<String> = result
             .rows
             .iter()
@@ -229,7 +229,7 @@ fn test_intersect_with_conditions() {
 
     log::debug!("INTERSECT results: {} rows", result.rows.len());
 
-    if result.rows.len() > 0 {
+    if !result.rows.is_empty() {
         let names: Vec<String> = result
             .rows
             .iter()
@@ -1045,7 +1045,7 @@ fn test_iso_gql_compliant_verification() {
     // ISO GQL compliant verification: Check labels
     let verify_labels = fixture.query("MATCH (person:Person {name: 'Alice Smith'}) RETURN person.name, LABELS(person) as all_labels").expect("Label verification should succeed");
     assert!(
-        verify_labels.rows.len() >= 1,
+        !verify_labels.rows.is_empty(),
         "Should return at least 1 row"
     );
 
@@ -1058,7 +1058,7 @@ fn test_iso_gql_compliant_verification() {
 
     // Accept that there might be multiple rows due to how the system works
     assert!(
-        verify_no_temp.rows.len() >= 1,
+        !verify_no_temp.rows.is_empty(),
         "Should confirm TemporaryRole was removed"
     );
 

@@ -278,7 +278,7 @@ impl SystemProcedures {
                         if let (Some(g_name), Some(s_name)) = (graph_name, schema_name) {
                             graphs_by_schema
                                 .entry(s_name)
-                                .or_insert_with(Vec::new)
+                                .or_default()
                                 .push(g_name);
                         }
                     }

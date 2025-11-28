@@ -141,10 +141,7 @@ fn test_ddl_transaction_behavior() {
         test_schema
     ));
 
-    match result {
-        Ok(_) => {}
-        Err(_) => {}
-    }
+    if let Ok(_) = result {}
 }
 
 #[test]

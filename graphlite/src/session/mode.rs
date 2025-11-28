@@ -32,6 +32,7 @@
 /// # Ok::<(), String>(())
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum SessionMode {
     /// Instance-based session management (default)
     ///
@@ -42,6 +43,7 @@ pub enum SessionMode {
     /// - Running embedded database in application
     /// - Each database instance needs complete isolation
     /// - Testing with parallel test execution
+    #[default]
     Instance,
 
     /// Process-wide session management
@@ -56,12 +58,6 @@ pub enum SessionMode {
     Global,
 }
 
-impl Default for SessionMode {
-    fn default() -> Self {
-        // Default to Instance mode for backward compatibility and safety
-        SessionMode::Instance
-    }
-}
 
 impl SessionMode {
     /// Returns true if this is Instance mode
@@ -99,7 +95,7 @@ mod tests {
     #[test]
     fn test_clone() {
         let mode = SessionMode::Global;
-        let cloned = mode.clone();
+        let cloned = mode;
         assert_eq!(mode, cloned);
     }
 

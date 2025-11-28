@@ -25,7 +25,7 @@ fn main() {
 
     for i in 0..1000 {
         let session_id = coordinator
-            .create_simple_session(&format!("user{}", i))
+            .create_simple_session(format!("user{}", i))
             .expect("Failed to create session");
         session_ids.push(session_id);
     }

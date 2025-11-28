@@ -125,7 +125,7 @@ fn test_json_format_with_aggregation() {
         )
         .expect("Query failed");
 
-    assert!(result.rows.len() > 0);
+    assert!(!result.rows.is_empty());
     assert_eq!(result.variables.len(), 2);
 
     // Verify all rows have correct structure

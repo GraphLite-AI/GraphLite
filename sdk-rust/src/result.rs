@@ -242,7 +242,7 @@ fn value_to_json(value: &Value) -> serde_json::Value {
         Value::Number(n) => serde_json::json!(n),
         Value::String(s) => serde_json::Value::String(s.clone()),
         Value::Array(arr) | Value::List(arr) => {
-            let items: Vec<serde_json::Value> = arr.iter().map(|v| value_to_json(v)).collect();
+            let items: Vec<serde_json::Value> = arr.iter().map(value_to_json).collect();
             serde_json::Value::Array(items)
         }
         // For complex types like Node, Edge, Path, etc., use serde serialization
