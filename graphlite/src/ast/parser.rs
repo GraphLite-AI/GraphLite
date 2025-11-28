@@ -63,7 +63,7 @@ fn filter_sql_comments(tokens: Vec<Token>) -> Vec<Token> {
                         filtered.push(tokens[i].clone());
                         i += 1;
                     }
-                    Token::EOF => {
+                    Token::Eof => {
                         // Just -- at end of input, keep as edge pattern
                         filtered.push(tokens[i].clone());
                         i += 1;
@@ -72,7 +72,7 @@ fn filter_sql_comments(tokens: Vec<Token>) -> Vec<Token> {
                         // This looks like a SQL comment, skip all tokens until EOF
                         // (In a real implementation, we'd skip until newline, but our lexer
                         // doesn't produce newline tokens, so we skip to EOF)
-                        while i < tokens.len() && !matches!(tokens[i], Token::EOF) {
+                        while i < tokens.len() && !matches!(tokens[i], Token::Eof) {
                             i += 1;
                         }
                     }
@@ -137,17 +137,17 @@ pub fn parse_query(input: &str) -> Result<Document, ParserError> {
         match &tokens[i] {
             Token::Union => {
                 // Check if this is followed by EOF or is the last meaningful token
-                if i + 1 >= tokens.len() || matches!(tokens.get(i + 1), Some(Token::EOF) | None) {
+                if i + 1 >= tokens.len() || matches!(tokens.get(i + 1), Some(Token::Eof) | None) {
                     return Err(ParserError::IncompleteUnion);
                 }
             }
             Token::Except => {
-                if i + 1 >= tokens.len() || matches!(tokens.get(i + 1), Some(Token::EOF) | None) {
+                if i + 1 >= tokens.len() || matches!(tokens.get(i + 1), Some(Token::Eof) | None) {
                     return Err(ParserError::IncompleteExcept);
                 }
             }
             Token::Intersect => {
-                if i + 1 >= tokens.len() || matches!(tokens.get(i + 1), Some(Token::EOF) | None) {
+                if i + 1 >= tokens.len() || matches!(tokens.get(i + 1), Some(Token::Eof) | None) {
                     return Err(ParserError::IncompleteIntersect);
                 }
             }
@@ -156,7 +156,7 @@ pub fn parse_query(input: &str) -> Result<Document, ParserError> {
     }
 
     // Handle comment-only or empty input
-    if tokens.is_empty() || (tokens.len() == 1 && matches!(tokens[0], Token::EOF)) {
+    if tokens.is_empty() || (tokens.len() == 1 && matches!(tokens[0], Token::Eof)) {
         return Err(ParserError::ExpectedToken(Token::Identifier(
             "statement".to_string(),
         )));
@@ -263,15 +263,15 @@ pub fn parse_query(input: &str) -> Result<Document, ParserError> {
         // CALL cannot be combined with RETURN, MATCH, or other clauses
         let only_terminators = remaining
             .iter()
-            .all(|t| matches!(t, Token::Semicolon | Token::EOF));
+            .all(|t| matches!(t, Token::Semicolon | Token::Eof));
 
         if !only_terminators {
             // Found unexpected tokens after CALL statement
             // Get the first unexpected token
             let unexpected = remaining
                 .iter()
-                .find(|t| !matches!(t, Token::Semicolon | Token::EOF))
-                .unwrap_or(&Token::EOF);
+                .find(|t| !matches!(t, Token::Semicolon | Token::Eof))
+                .unwrap_or(&Token::Eof);
             return Err(ParserError::UnexpectedToken(unexpected.clone()));
         }
 
@@ -341,7 +341,7 @@ pub fn parse_query(input: &str) -> Result<Document, ParserError> {
             tokens.get(0..10).unwrap_or(&[])
         );
         // Return the first token as unexpected since we couldn't parse it
-        let unexpected = tokens.first().unwrap_or(&Token::EOF);
+        let unexpected = tokens.first().unwrap_or(&Token::Eof);
         Err(ParserError::UnexpectedToken(unexpected.clone()))
     }
 }
@@ -519,14 +519,11 @@ fn parse_intersect(tokens: &[Token]) -> IResult<&[Token], Query> {
     // Check for incomplete INTERSECT operations
     if !remaining.is_empty() {
         if let Some(token) = remaining.first() {
-            match token {
-                Token::Intersect => {
-                    return Err(nom::Err::Error(nom::error::Error::new(
-                        remaining,
-                        nom::error::ErrorKind::Alt,
-                    )));
-                }
-                _ => {}
+            if token == &Token::Intersect {
+                return Err(nom::Err::Error(nom::error::Error::new(
+                    remaining,
+                    nom::error::ErrorKind::Alt,
+                )));
             }
         }
     }
@@ -2005,7 +2002,7 @@ fn path_constructor(tokens: &[Token]) -> IResult<&[Token], PathConstructor> {
         // Convert vector values to literal expressions
         let elements = values
             .iter()
-            .map(|&v| Expression::Literal(crate::ast::ast::Literal::Float(v)))
+            .map(|&v| Expression::Literal(crate::ast::Literal::Float(v)))
             .collect();
 
         return Ok((
@@ -3166,9 +3163,9 @@ fn type_spec(tokens: &[Token]) -> IResult<&[Token], TypeSpec> {
 /// Parse session statement: SESSION SET/RESET/CLOSE
 fn session_statement(tokens: &[Token]) -> IResult<&[Token], SessionStatement> {
     alt((
-        map(session_set_statement, SessionStatement::SessionSet),
-        map(session_reset_statement, SessionStatement::SessionReset),
-        map(session_close_statement, SessionStatement::SessionClose),
+        map(session_set_statement, SessionStatement::Set),
+        map(session_reset_statement, SessionStatement::Reset),
+        map(session_close_statement, SessionStatement::Close),
     ))(tokens)
 }
 
@@ -4128,7 +4125,7 @@ fn set_item(tokens: &[Token]) -> IResult<&[Token], SetItem> {
                 expect_token(Token::Equal),
                 expression,
             )),
-            |(property, _, value)| SetItem::PropertyAssignment { property, value },
+            |(property, _, value)| SetItem::Property { property, value },
         ),
         // Label assignment: variable:label or variable IS label
         map(
@@ -4137,12 +4134,12 @@ fn set_item(tokens: &[Token]) -> IResult<&[Token], SetItem> {
                 alt((expect_token(Token::Colon), expect_token(Token::Is))),
                 label_expression,
             )),
-            |(variable, _, labels)| SetItem::LabelAssignment { variable, labels },
+            |(variable, _, labels)| SetItem::Label { variable, labels },
         ),
         // Variable assignment: variable = value
         map(
             tuple((identifier, expect_token(Token::Equal), expression)),
-            |(variable, _, value)| SetItem::VariableAssignment { variable, value },
+            |(variable, _, value)| SetItem::Variable { variable, value },
         ),
     ))(tokens)
 }
@@ -4308,16 +4305,16 @@ fn procedure_body_statement(tokens: &[Token]) -> IResult<&[Token], ProcedureBody
             tuple((
                 many1(variable_declaration_for_procedure_body), // At least one variable definition
                 alt((
-                    map(query, |q| Statement::Query(q)), // Accept any query including LET
-                    map(data_statement, |ds| Statement::DataStatement(ds)),
-                    map(catalog_statement, |cs| Statement::CatalogStatement(cs)),
+                    map(query, Statement::Query), // Accept any query including LET
+                    map(data_statement, Statement::DataStatement),
+                    map(catalog_statement, Statement::CatalogStatement),
                 )),
                 many0(tuple((
                     expect_token(Token::Next),
                     opt(yield_clause),
                     alt((
-                        map(query, |q| Statement::Query(q)), // Accept any query after NEXT
-                        map(data_statement, |ds| Statement::DataStatement(ds)),
+                        map(query, Statement::Query), // Accept any query after NEXT
+                        map(data_statement, Statement::DataStatement),
                     )),
                 ))),
             )),
@@ -4329,17 +4326,17 @@ fn procedure_body_statement(tokens: &[Token]) -> IResult<&[Token], ProcedureBody
         map(
             tuple((
                 alt((
-                    map(query, |q| Statement::Query(q)), // Accept any query including LET
-                    map(data_statement, |ds| Statement::DataStatement(ds)),
-                    map(catalog_statement, |cs| Statement::CatalogStatement(cs)),
+                    map(query, Statement::Query), // Accept any query including LET
+                    map(data_statement, Statement::DataStatement),
+                    map(catalog_statement, Statement::CatalogStatement),
                 )),
                 many1(tuple((
                     // At least one NEXT statement
                     expect_token(Token::Next),
                     opt(yield_clause),
                     alt((
-                        map(query, |q| Statement::Query(q)), // Accept any query after NEXT
-                        map(data_statement, |ds| Statement::DataStatement(ds)),
+                        map(query, Statement::Query), // Accept any query after NEXT
+                        map(data_statement, Statement::DataStatement),
                     )),
                 ))),
             )),
@@ -4540,7 +4537,7 @@ fn at_location_statement(tokens: &[Token]) -> IResult<&[Token], AtLocationStatem
                     alt((
                         map(declare_statement, Statement::Declare),
                         // NEXT statements removed - only allowed in procedure body context
-                        map(basic_query, |q| Statement::Query(q)),
+                        map(basic_query, Statement::Query),
                         map(select_statement, Statement::Select),
                         map(set_statement, |s| {
                             Statement::DataStatement(DataStatement::Set(s))
@@ -4766,11 +4763,11 @@ fn pattern_expression(tokens: &[Token]) -> IResult<&[Token], PatternExpression> 
 /// Parse index statement (CREATE INDEX, DROP INDEX, ALTER INDEX, OPTIMIZE INDEX, REINDEX)
 fn index_statement(tokens: &[Token]) -> IResult<&[Token], IndexStatement> {
     alt((
-        map(create_index_statement, IndexStatement::CreateIndex),
-        map(drop_index_statement, IndexStatement::DropIndex),
-        map(alter_index_statement, IndexStatement::AlterIndex),
-        map(optimize_index_statement, IndexStatement::OptimizeIndex),
-        map(reindex_statement, IndexStatement::ReindexIndex),
+        map(create_index_statement, IndexStatement::Create),
+        map(drop_index_statement, IndexStatement::Drop),
+        map(alter_index_statement, IndexStatement::Alter),
+        map(optimize_index_statement, IndexStatement::Optimize),
+        map(reindex_statement, IndexStatement::Reindex),
     ))(tokens)
 }
 
@@ -5061,8 +5058,8 @@ fn index_options(tokens: &[Token]) -> IResult<&[Token], IndexOptions> {
 fn parse_value(tokens: &[Token]) -> IResult<&[Token], Value> {
     alt((
         map(parse_string_literal, Value::String),
-        map(parse_number, |n| Value::Number(n)),
-        map(parse_integer, |i| Value::Integer(i)),
+        map(parse_number, Value::Number),
+        map(parse_integer, Value::Integer),
         map(expect_identifier("true"), |_| Value::Boolean(true)),
         map(expect_identifier("false"), |_| Value::Boolean(false)),
         map(expect_identifier("null"), |_| Value::Null),

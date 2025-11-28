@@ -10,7 +10,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 
-use crate::ast::ast::{Expression, InsertStatement, PatternElement};
+use crate::ast::{Expression, InsertStatement, PatternElement};
 use crate::plan::logical::{
     EntityType, InsertPattern, LogicalNode, LogicalPlan, NodeIdentifier, VariableInfo,
 };
@@ -87,7 +87,7 @@ impl InsertPlanner {
     /// Process a node pattern element
     fn process_node_pattern(
         &mut self,
-        node_pattern: &crate::ast::ast::Node,
+        node_pattern: &crate::ast::Node,
         variables: &mut HashMap<String, VariableInfo>,
     ) -> Result<Option<InsertPattern>, PlanningError> {
         // Check if this is a reference to an already-defined node
@@ -148,7 +148,7 @@ impl InsertPlanner {
     /// Process an edge pattern element
     fn process_edge_pattern(
         &mut self,
-        edge_pattern: &crate::ast::ast::Edge,
+        edge_pattern: &crate::ast::Edge,
         all_elements: &[PatternElement],
         current_idx: usize,
         variables: &mut HashMap<String, VariableInfo>,
@@ -269,7 +269,7 @@ impl InsertPlanner {
     /// Extract properties from a property map
     fn extract_properties(
         &self,
-        prop_map: &crate::ast::ast::PropertyMap,
+        prop_map: &crate::ast::PropertyMap,
     ) -> Result<HashMap<String, Expression>, PlanningError> {
         let mut properties = HashMap::new();
 

@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::ast::ast::{Expression, MatchSetStatement, PatternElement, SetItem};
+use crate::ast::{Expression, MatchSetStatement, PatternElement, SetItem};
 use crate::exec::with_clause_processor::WithClauseProcessor;
 use crate::exec::write_stmt::data_stmt::DataStatementExecutor;
 use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
@@ -68,22 +68,21 @@ impl MatchSetExecutor {
     }
 
     /// Convert AST literal to storage value (still needed for WHERE clause evaluation)
-    fn literal_to_value(literal: &crate::ast::ast::Literal) -> Value {
+    fn literal_to_value(literal: &crate::ast::Literal) -> Value {
         match literal {
-            crate::ast::ast::Literal::String(s) => Value::String(s.clone()),
-            crate::ast::ast::Literal::Integer(i) => Value::Number(*i as f64),
-            crate::ast::ast::Literal::Float(f) => Value::Number(*f),
-            crate::ast::ast::Literal::Boolean(b) => Value::Boolean(*b),
-            crate::ast::ast::Literal::Null => Value::Null,
-            crate::ast::ast::Literal::DateTime(dt) => Value::String(dt.clone()),
-            crate::ast::ast::Literal::Duration(dur) => Value::String(dur.clone()),
-            crate::ast::ast::Literal::TimeWindow(tw) => Value::String(tw.clone()),
-            crate::ast::ast::Literal::Vector(vec) => {
+            crate::ast::Literal::String(s) => Value::String(s.clone()),
+            crate::ast::Literal::Integer(i) => Value::Number(*i as f64),
+            crate::ast::Literal::Float(f) => Value::Number(*f),
+            crate::ast::Literal::Boolean(b) => Value::Boolean(*b),
+            crate::ast::Literal::Null => Value::Null,
+            crate::ast::Literal::DateTime(dt) => Value::String(dt.clone()),
+            crate::ast::Literal::Duration(dur) => Value::String(dur.clone()),
+            crate::ast::Literal::TimeWindow(tw) => Value::String(tw.clone()),
+            crate::ast::Literal::Vector(vec) => {
                 Value::Vector(vec.iter().map(|&f| f as f32).collect())
             }
-            crate::ast::ast::Literal::List(list) => {
-                let converted: Vec<Value> =
-                    list.iter().map(|lit| Self::literal_to_value(lit)).collect();
+            crate::ast::Literal::List(list) => {
+                let converted: Vec<Value> = list.iter().map(Self::literal_to_value).collect();
                 Value::List(converted)
             }
         }
@@ -93,7 +92,7 @@ impl MatchSetExecutor {
     /// Returns (node_bindings, edge_bindings)
     fn match_path_pattern(
         graph: &GraphCache,
-        pattern: &crate::ast::ast::PathPattern,
+        pattern: &crate::ast::PathPattern,
     ) -> Result<(Vec<HashMap<String, Node>>, Vec<HashMap<String, Edge>>), ExecutionError> {
         let mut node_matches = Vec::new();
         let mut edge_matches = Vec::new();
@@ -105,7 +104,7 @@ impl MatchSetExecutor {
                 Some(PatternElement::Edge(edge_pattern)),
                 Some(PatternElement::Node(target_pattern)),
             ) = (
-                pattern.elements.get(0),
+                pattern.elements.first(),
                 pattern.elements.get(1),
                 pattern.elements.get(2),
             ) {
@@ -115,7 +114,7 @@ impl MatchSetExecutor {
                     let edge_label_matches = if edge_pattern.labels.is_empty() {
                         true
                     } else {
-                        edge_pattern.labels.iter().any(|label| edge.label == *label)
+                        edge_pattern.labels.contains(&edge.label)
                     };
 
                     if !edge_label_matches {
@@ -129,9 +128,9 @@ impl MatchSetExecutor {
                     ) {
                         // Check if source node matches pattern
                         let source_matches =
-                            Self::node_matches_pattern(&source_node, source_pattern);
+                            Self::node_matches_pattern(source_node, source_pattern);
                         let target_matches =
-                            Self::node_matches_pattern(&target_node, target_pattern);
+                            Self::node_matches_pattern(target_node, target_pattern);
 
                         if source_matches && target_matches {
                             let mut node_binding = HashMap::new();
@@ -158,7 +157,7 @@ impl MatchSetExecutor {
             if let Some(PatternElement::Node(node_pattern)) = pattern.elements.first() {
                 let nodes = graph.get_all_nodes();
                 for node in nodes {
-                    if Self::node_matches_pattern(&node, node_pattern) {
+                    if Self::node_matches_pattern(node, node_pattern) {
                         let mut binding = HashMap::new();
                         if let Some(ref identifier) = node_pattern.identifier {
                             binding.insert(identifier.clone(), node.clone());
@@ -173,7 +172,7 @@ impl MatchSetExecutor {
     }
 
     /// Check if a node matches a node pattern
-    fn node_matches_pattern(node: &Node, node_pattern: &crate::ast::ast::Node) -> bool {
+    fn node_matches_pattern(node: &Node, node_pattern: &crate::ast::Node) -> bool {
         // Check labels
         if !node_pattern.labels.is_empty() {
             let has_required_label = node_pattern
@@ -203,7 +202,7 @@ impl MatchSetExecutor {
     /// Evaluate WHERE clause on a variable combination
     fn evaluate_where_clause_on_combination(
         combination: &HashMap<String, Node>,
-        where_clause: &crate::ast::ast::WhereClause,
+        where_clause: &crate::ast::WhereClause,
         computed_values: Option<&HashMap<String, Value>>,
     ) -> bool {
         if let Some(computed_values) = computed_values {
@@ -226,23 +225,23 @@ impl MatchSetExecutor {
                     Self::evaluate_expression_on_combination(combination, &binary_op.right);
 
                 match binary_op.operator {
-                    crate::ast::ast::Operator::GreaterThan => match (left_val, right_val) {
+                    crate::ast::Operator::GreaterThan => match (left_val, right_val) {
                         (Some(Value::Number(l)), Some(Value::Number(r))) => l > r,
                         _ => false,
                     },
-                    crate::ast::ast::Operator::LessThan => match (left_val, right_val) {
+                    crate::ast::Operator::LessThan => match (left_val, right_val) {
                         (Some(Value::Number(l)), Some(Value::Number(r))) => l < r,
                         _ => false,
                     },
-                    crate::ast::ast::Operator::GreaterEqual => match (left_val, right_val) {
+                    crate::ast::Operator::GreaterEqual => match (left_val, right_val) {
                         (Some(Value::Number(l)), Some(Value::Number(r))) => l >= r,
                         _ => false,
                     },
-                    crate::ast::ast::Operator::Equal => match (left_val, right_val) {
+                    crate::ast::Operator::Equal => match (left_val, right_val) {
                         (Some(l), Some(r)) => l == r,
                         _ => false,
                     },
-                    crate::ast::ast::Operator::And => {
+                    crate::ast::Operator::And => {
                         // For AND, evaluate both sides as boolean expressions
                         let left_bool = Self::evaluate_where_expression_on_combination(
                             combination,
@@ -254,7 +253,7 @@ impl MatchSetExecutor {
                         );
                         left_bool && right_bool
                     }
-                    crate::ast::ast::Operator::Or => {
+                    crate::ast::Operator::Or => {
                         // For OR, evaluate both sides as boolean expressions
                         let left_bool = Self::evaluate_where_expression_on_combination(
                             combination,
@@ -279,13 +278,9 @@ impl MatchSetExecutor {
         expr: &Expression,
     ) -> Option<Value> {
         match expr {
-            Expression::Variable(var) => {
-                if let Some(node) = combination.get(&var.name) {
-                    Some(Value::String(node.id.clone()))
-                } else {
-                    None
-                }
-            }
+            Expression::Variable(var) => combination
+                .get(&var.name)
+                .map(|node| Value::String(node.id.clone())),
             Expression::PropertyAccess(prop_access) => {
                 if let Some(node) = combination.get(&prop_access.object) {
                     node.properties.get(&prop_access.property).cloned()
@@ -302,7 +297,7 @@ impl MatchSetExecutor {
                     Self::evaluate_expression_on_combination(combination, &binary_expr.right)?;
 
                 // Apply the binary operation
-                use crate::ast::ast::Operator;
+                use crate::ast::Operator;
                 match (&left_val, &binary_expr.operator, &right_val) {
                     // Numeric operations
                     (Value::Number(l), Operator::Plus, Value::Number(r)) => {
@@ -545,7 +540,7 @@ impl DataStatementExecutor for MatchSetExecutor {
                 // Both nodes and edges: zip them together
                 variable_combinations
                     .into_iter()
-                    .zip(edge_combinations.into_iter())
+                    .zip(edge_combinations)
                     .collect()
             };
 
@@ -668,34 +663,31 @@ impl DataStatementExecutor for MatchSetExecutor {
             // This ensures atomicity - if any expression fails, we abort before making ANY changes
             let mut evaluated_items = Vec::new();
             for item in &self.statement.items {
-                match item {
-                    SetItem::PropertyAssignment { property, value } => {
-                        log::debug!(
-                            "MATCH-SET: SET property assignment: {}.{} = {:?}",
-                            property.object,
-                            property.property,
-                            value
-                        );
+                if let SetItem::Property { property, value } = item {
+                    log::debug!(
+                        "MATCH-SET: SET property assignment: {}.{} = {:?}",
+                        property.object,
+                        property.property,
+                        value
+                    );
 
-                        // Get computed values from WITH clause result
-                        let computed_values = with_result.as_ref().map(|wr| &wr.computed_values);
+                    // Get computed values from WITH clause result
+                    let computed_values = with_result.as_ref().map(|wr| &wr.computed_values);
 
-                        // Evaluate the new value - fail immediately if invalid (no partial updates!)
-                        let new_value = Self::evaluate_expression(value, computed_values, combination, context)
-                            .ok_or_else(|| ExecutionError::ExpressionError(
-                                format!("Failed to evaluate MATCH SET property '{}': expression evaluation failed. Transaction aborted.", property.property)
-                            ))?;
+                    // Evaluate the new value - fail immediately if invalid (no partial updates!)
+                    let new_value = Self::evaluate_expression(value, computed_values, combination, context)
+                        .ok_or_else(|| ExecutionError::ExpressionError(
+                            format!("Failed to evaluate MATCH SET property '{}': expression evaluation failed. Transaction aborted.", property.property)
+                        ))?;
 
-                        evaluated_items.push((property.clone(), new_value));
-                    }
-                    _ => {} // Handle other items separately
+                    evaluated_items.push((property.clone(), new_value));
                 }
             }
 
             // Capture old state for all nodes BEFORE making any changes (for rollback)
             let mut node_old_states: HashMap<String, (HashMap<String, Value>, Vec<String>)> =
                 HashMap::new();
-            for (_var_name, matched_node) in combination {
+            for matched_node in combination.values() {
                 if !node_old_states.contains_key(&matched_node.id) {
                     if let Some(node) = graph.get_node(&matched_node.id) {
                         node_old_states.insert(
@@ -830,17 +822,17 @@ impl DataStatementExecutor for MatchSetExecutor {
             // Handle other SET item types (TODO: these should also be transactional)
             for item in &self.statement.items {
                 match item {
-                    SetItem::PropertyAssignment { .. } => {
+                    SetItem::Property { .. } => {
                         // Already handled above
                     }
-                    SetItem::VariableAssignment { variable, value } => {
+                    SetItem::Variable { variable, value } => {
                         log::warn!(
                             "Variable assignment in MATCH SET not yet fully supported: {} = {:?}",
                             variable,
                             value
                         );
                     }
-                    SetItem::LabelAssignment { variable, labels } => {
+                    SetItem::Label { variable, labels } => {
                         // Handle label assignment for matched nodes
                         for (var_name, matched_node) in combination {
                             if self.statement.match_clause.patterns.iter().any(|p| {
@@ -857,9 +849,8 @@ impl DataStatementExecutor for MatchSetExecutor {
                                     // Extract labels from LabelExpression
                                     for term in &labels.terms {
                                         for factor in &term.factors {
-                                            if let crate::ast::ast::LabelFactor::Identifier(
-                                                new_label,
-                                            ) = factor
+                                            if let crate::ast::LabelFactor::Identifier(new_label) =
+                                                factor
                                             {
                                                 if !node_mut.labels.contains(new_label) {
                                                     node_mut.labels.push(new_label.clone());

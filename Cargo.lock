@@ -509,7 +509,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "graphlite-sdk"
+name = "graphlite-rust-sdk"
 version = "0.0.1"
 dependencies = [
  "graphlite",

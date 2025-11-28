@@ -3,7 +3,7 @@
 //
 //! Query execution results for graph databases
 
-use crate::ast::ast::{CatalogPath, GraphExpression};
+use crate::ast::{CatalogPath, GraphExpression};
 use crate::storage::Value;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -53,6 +53,12 @@ pub struct QueryResult {
     /// Warnings generated during query execution (e.g., duplicate insert detection)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
+}
+
+impl Default for QueryResult {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QueryResult {
@@ -184,7 +190,7 @@ impl Row {
     /// Create a row from positional values with variable names
     pub fn from_positional(values: Vec<Value>, variables: &[String]) -> Self {
         let mut named_values = HashMap::new();
-        for (_i, (value, var_name)) in values.iter().zip(variables.iter()).enumerate() {
+        for (value, var_name) in values.iter().zip(variables.iter()) {
             named_values.insert(var_name.clone(), value.clone());
         }
 

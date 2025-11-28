@@ -10,11 +10,11 @@ GraphLite provides bindings for multiple programming languages, all built on top
 
 | Language | Directory | Status | Performance | Installation |
 |----------|-----------|--------|-------------|--------------|
-| **Rust** | [../graphlite-sdk](../graphlite-sdk/) | ✅ Stable | ~100% native | `cargo add graphlite-sdk` |
-| **Python** | [python/](python/) | ✅ Stable | ~80-90% native | `pip install graphlite` |
-| **Java** | [java/](java/) | ✅ Stable | ~75-85% native | Maven/Gradle |
-| **JavaScript** | javascript/ | ⏳ Planned | ~70-80% native (WASM) | `npm install graphlite` |
-| **Kotlin** | kotlin/ | ⏳ Planned | ~75-85% native | Maven/Gradle |
+| **Rust** | [../graphlite-sdk](../graphlite-sdk/) | Stable | ~100% native | `cargo add graphlite-sdk` |
+| **Python** | [python/](python/) | Stable | ~80-90% native | `pip install graphlite` |
+| **Java** | [java/](java/) | Stable | ~75-85% native | Maven/Gradle |
+| **JavaScript** | javascript/ | Planned | ~70-80% native (WASM) | `npm install graphlite` |
+| **Kotlin** | kotlin/ | Planned | ~75-85% native | Maven/Gradle |
 
 ## Quick Start by Language
 
@@ -204,28 +204,28 @@ mvn clean deploy
 ## Choosing a Language Binding
 
 ### Choose Rust SDK if:
-- ✅ Maximum performance required
-- ✅ Type safety at compile time
-- ✅ Building a Rust application
-- ✅ Need zero-overhead abstractions
+- Maximum performance required
+- Type safety at compile time
+- Building a Rust application
+- Need zero-overhead abstractions
 
 ### Choose Python if:
-- ✅ Rapid development priority
-- ✅ Data science / ML integration
-- ✅ Scripting and automation
-- ✅ Familiar with Python ecosystem
+- Rapid development priority
+- Data science / ML integration
+- Scripting and automation
+- Familiar with Python ecosystem
 
 ### Choose Java if:
-- ✅ Enterprise Java application
-- ✅ Spring Boot integration
-- ✅ Android development
-- ✅ JVM ecosystem (Scala, Kotlin, Groovy)
+- Enterprise Java application
+- Spring Boot integration
+- Android development
+- JVM ecosystem (Scala, Kotlin, Groovy)
 
 ### Choose JavaScript if:
-- ✅ Web application (browser or Node.js)
-- ✅ TypeScript support needed
-- ✅ React/Vue/Angular integration
-- ✅ Server-side JavaScript
+- Web application (browser or Node.js)
+- TypeScript support needed
+- React/Vue/Angular integration
+- Server-side JavaScript
 
 ## Contributing
 

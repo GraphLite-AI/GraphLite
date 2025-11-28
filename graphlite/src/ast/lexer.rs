@@ -288,7 +288,7 @@ pub enum Token {
     Comment(String),
 
     // End of file
-    EOF,
+    Eof,
 }
 
 /// Lexer state
@@ -350,7 +350,7 @@ impl Lexer {
                 }
             }
         }
-        tokens.push(Token::EOF);
+        tokens.push(Token::Eof);
         self.tokens = tokens.clone();
         Ok(tokens)
     }
@@ -373,11 +373,11 @@ fn token(input: &str) -> IResult<&str, Token> {
         // Variables (must come before simple_patterns to avoid $ being parsed as Dollar)
         map(variable, |s| Token::Variable(s.to_string())),
         // Vector literals (must come before simple_patterns to avoid [ being parsed as LeftBracket)
-        map(vector_literal, |v| Token::Vector(v)),
+        map(vector_literal, Token::Vector),
         // Float literals (must come before integer_literal to avoid . being parsed as Dot)
-        map(float_literal, |f| Token::Float(f)),
+        map(float_literal, Token::Float),
         // Integer literals (must come before simple_patterns to avoid - being parsed as Minus)
-        map(integer_literal, |n| Token::Integer(n)),
+        map(integer_literal, Token::Integer),
         // Complex literals (use nom for parsing) - must come before function calls
         map(backtick_identifier, |s| {
             Token::BacktickString(s.to_string())
@@ -421,6 +421,7 @@ fn token(input: &str) -> IResult<&str, Token> {
 /// 1. `!=` pattern matches first
 /// 2. Remaining input: "" (empty)
 /// 3. Lexer completes successfully
+///
 /// Check if character is a word boundary (not alphanumeric or underscore)
 fn is_word_boundary(c: char) -> bool {
     !c.is_alphanumeric() && c != '_'
@@ -448,26 +449,26 @@ fn is_keyword_match(input: &str, keyword: &str) -> bool {
 
 fn simple_patterns(input: &str) -> IResult<&str, Token> {
     // Multi-character operators (must come before single character)
-    if input.starts_with("||") {
-        Ok((&input[2..], Token::Concat))
-    } else if input.starts_with("!=") {
-        Ok((&input[2..], Token::NotEqual))
-    } else if input.starts_with("<>") {
-        Ok((&input[2..], Token::NotEqual))
-    } else if input.starts_with("<=") {
-        Ok((&input[2..], Token::LessEqual))
-    } else if input.starts_with(">=") {
-        Ok((&input[2..], Token::GreaterEqual))
-    } else if input.starts_with("=~") {
-        Ok((&input[2..], Token::Regex))
-    } else if input.starts_with("~=") {
-        Ok((&input[2..], Token::FuzzyEqual))
-    } else if input.starts_with("<->") {
-        Ok((&input[3..], Token::ArrowBoth))
-    } else if input.starts_with("->") {
-        Ok((&input[2..], Token::Arrow))
-    } else if input.starts_with("<-") {
-        Ok((&input[2..], Token::ArrowLeft))
+    if let Some(rest) = input.strip_prefix("||") {
+        Ok((rest, Token::Concat))
+    } else if let Some(rest) = input.strip_prefix("!=") {
+        Ok((rest, Token::NotEqual))
+    } else if let Some(rest) = input.strip_prefix("<>") {
+        Ok((rest, Token::NotEqual))
+    } else if let Some(rest) = input.strip_prefix("<=") {
+        Ok((rest, Token::LessEqual))
+    } else if let Some(rest) = input.strip_prefix(">=") {
+        Ok((rest, Token::GreaterEqual))
+    } else if let Some(rest) = input.strip_prefix("=~") {
+        Ok((rest, Token::Regex))
+    } else if let Some(rest) = input.strip_prefix("~=") {
+        Ok((rest, Token::FuzzyEqual))
+    } else if let Some(rest) = input.strip_prefix("<->") {
+        Ok((rest, Token::ArrowBoth))
+    } else if let Some(rest) = input.strip_prefix("->") {
+        Ok((rest, Token::Arrow))
+    } else if let Some(rest) = input.strip_prefix("<-") {
+        Ok((rest, Token::ArrowLeft))
     }
     // Keywords (case insensitive check) - longer keywords first
     else if input.len() >= 11
@@ -1509,61 +1510,61 @@ fn simple_patterns(input: &str) -> IResult<&str, Token> {
         Ok((&input[4..], Token::Null))
     }
     // Single character operators and delimiters
-    else if input.starts_with('+') {
-        Ok((&input[1..], Token::Plus))
-    } else if input.starts_with('-') {
+    else if let Some(rest) = input.strip_prefix('+') {
+        Ok((rest, Token::Plus))
+    } else if let Some(rest) = input.strip_prefix('-') {
         // Check if this is part of a number (minus operator) or a dash delimiter
-        if input.len() > 1 && input.chars().nth(1).unwrap().is_ascii_digit() {
-            Ok((&input[1..], Token::Minus))
+        if !rest.is_empty() && rest.chars().next().unwrap().is_ascii_digit() {
+            Ok((rest, Token::Minus))
         } else {
             // For edge patterns, dash should be Dash token in most cases
             // Each dash is consumed individually, so -- becomes two Token::Dash
-            Ok((&input[1..], Token::Dash))
+            Ok((rest, Token::Dash))
         }
-    } else if input.starts_with('*') {
-        Ok((&input[1..], Token::Star))
-    } else if input.starts_with('/') {
-        Ok((&input[1..], Token::Slash))
-    } else if input.starts_with('%') {
-        Ok((&input[1..], Token::Percent))
-    } else if input.starts_with('^') {
-        Ok((&input[1..], Token::Caret))
-    } else if input.starts_with('=') {
-        Ok((&input[1..], Token::Equal))
-    } else if input.starts_with('<') {
-        Ok((&input[1..], Token::LessThan))
-    } else if input.starts_with('>') {
-        Ok((&input[1..], Token::GreaterThan))
-    } else if input.starts_with('@') {
-        Ok((&input[1..], Token::AtSign))
-    } else if input.starts_with('$') {
-        Ok((&input[1..], Token::Dollar))
-    } else if input.starts_with('.') {
-        Ok((&input[1..], Token::Dot))
-    } else if input.starts_with(',') {
-        Ok((&input[1..], Token::Comma))
-    } else if input.starts_with(';') {
-        Ok((&input[1..], Token::Semicolon))
-    } else if input.starts_with(':') {
-        Ok((&input[1..], Token::Colon))
-    } else if input.starts_with('&') {
-        Ok((&input[1..], Token::Ampersand))
-    } else if input.starts_with('|') {
-        Ok((&input[1..], Token::Pipe))
-    } else if input.starts_with('(') {
-        Ok((&input[1..], Token::LeftParen))
-    } else if input.starts_with(')') {
-        Ok((&input[1..], Token::RightParen))
-    } else if input.starts_with('[') {
-        Ok((&input[1..], Token::LeftBracket))
-    } else if input.starts_with(']') {
-        Ok((&input[1..], Token::RightBracket))
-    } else if input.starts_with('{') {
-        Ok((&input[1..], Token::LeftBrace))
-    } else if input.starts_with('}') {
-        Ok((&input[1..], Token::RightBrace))
-    } else if input.starts_with('?') {
-        Ok((&input[1..], Token::Question))
+    } else if let Some(rest) = input.strip_prefix('*') {
+        Ok((rest, Token::Star))
+    } else if let Some(rest) = input.strip_prefix('/') {
+        Ok((rest, Token::Slash))
+    } else if let Some(rest) = input.strip_prefix('%') {
+        Ok((rest, Token::Percent))
+    } else if let Some(rest) = input.strip_prefix('^') {
+        Ok((rest, Token::Caret))
+    } else if let Some(rest) = input.strip_prefix('=') {
+        Ok((rest, Token::Equal))
+    } else if let Some(rest) = input.strip_prefix('<') {
+        Ok((rest, Token::LessThan))
+    } else if let Some(rest) = input.strip_prefix('>') {
+        Ok((rest, Token::GreaterThan))
+    } else if let Some(rest) = input.strip_prefix('@') {
+        Ok((rest, Token::AtSign))
+    } else if let Some(rest) = input.strip_prefix('$') {
+        Ok((rest, Token::Dollar))
+    } else if let Some(rest) = input.strip_prefix('.') {
+        Ok((rest, Token::Dot))
+    } else if let Some(rest) = input.strip_prefix(',') {
+        Ok((rest, Token::Comma))
+    } else if let Some(rest) = input.strip_prefix(';') {
+        Ok((rest, Token::Semicolon))
+    } else if let Some(rest) = input.strip_prefix(':') {
+        Ok((rest, Token::Colon))
+    } else if let Some(rest) = input.strip_prefix('&') {
+        Ok((rest, Token::Ampersand))
+    } else if let Some(rest) = input.strip_prefix('|') {
+        Ok((rest, Token::Pipe))
+    } else if let Some(rest) = input.strip_prefix('(') {
+        Ok((rest, Token::LeftParen))
+    } else if let Some(rest) = input.strip_prefix(')') {
+        Ok((rest, Token::RightParen))
+    } else if let Some(rest) = input.strip_prefix('[') {
+        Ok((rest, Token::LeftBracket))
+    } else if let Some(rest) = input.strip_prefix(']') {
+        Ok((rest, Token::RightBracket))
+    } else if let Some(rest) = input.strip_prefix('{') {
+        Ok((rest, Token::LeftBrace))
+    } else if let Some(rest) = input.strip_prefix('}') {
+        Ok((rest, Token::RightBrace))
+    } else if let Some(rest) = input.strip_prefix('?') {
+        Ok((rest, Token::Question))
     } else {
         // No match found - this should not happen if lexer is working correctly
         Err(nom::Err::Error(nom::error::Error::new(
@@ -1645,6 +1646,7 @@ fn comment(input: &str) -> IResult<&str, &str> {
 /// 1. function_call() called on "(a:User {id: 123})"
 /// 2. Function validates: does it start with identifier + '('?
 /// 3. No, it starts with '(' directly, so returns Error
+///
 /// Parse property access like user.risk_score
 fn property_access(input: &str) -> IResult<&str, &str> {
     recognize(tuple((

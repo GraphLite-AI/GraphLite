@@ -309,7 +309,7 @@ impl SchemaValidator {
             (DataType::Boolean, Value::Bool(_)) => true,
             (DataType::Json, _) => true, // JSON can hold any value
             (DataType::Array(_), Value::Array(_)) => true, // TODO: Validate element types
-            (DataType::UUID, Value::String(s)) => {
+            (DataType::Uuid, Value::String(s)) => {
                 // Basic UUID format validation
                 s.len() == 36 && s.chars().filter(|c| *c == '-').count() == 4
             }

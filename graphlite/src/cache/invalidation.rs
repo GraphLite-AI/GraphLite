@@ -15,7 +15,7 @@ pub enum InvalidationStrategy {
     Manual,
 
     /// Time-based expiration with TTL
-    TTL {
+    Ttl {
         #[allow(dead_code)]
         // ROADMAP v0.5.0 - TTL-based cache expiration with background cleanup task
         default_ttl: Duration,
@@ -200,10 +200,7 @@ impl InvalidationManager {
 
         {
             let mut reverse_deps = self.reverse_deps.write().unwrap();
-            reverse_deps
-                .entry(dep_key)
-                .or_insert_with(HashSet::new)
-                .insert(entry_key);
+            reverse_deps.entry(dep_key).or_default().insert(entry_key);
         }
     }
 
@@ -411,7 +408,7 @@ impl InvalidationManager {
     fn strategy_name(&self) -> String {
         match &self.strategy {
             InvalidationStrategy::Manual => "Manual".to_string(),
-            InvalidationStrategy::TTL { .. } => "TTL".to_string(),
+            InvalidationStrategy::Ttl { .. } => "TTL".to_string(),
             InvalidationStrategy::TagBased { .. } => "TagBased".to_string(),
             InvalidationStrategy::Versioned { .. } => "Versioned".to_string(),
             InvalidationStrategy::WriteThrough { .. } => "WriteThrough".to_string(),
@@ -450,7 +447,7 @@ impl InvalidationStrategy {
     /// Create TTL-based strategy with default settings
     #[allow(dead_code)] // ROADMAP v0.5.0 - Default TTL strategy factory (30min default, 2hr max)
     pub fn default_ttl() -> Self {
-        Self::TTL {
+        Self::Ttl {
             default_ttl: Duration::from_secs(1800), // 30 minutes
             max_ttl: Duration::from_secs(7200),     // 2 hours
         }

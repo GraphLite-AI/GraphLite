@@ -6,7 +6,7 @@
 //! This module provides the complete integration of pattern optimization
 //! into the query planning pipeline.
 
-use crate::ast::ast::{MatchClause, Query};
+use crate::ast::{MatchClause, Query};
 use crate::plan::logical::LogicalPlan;
 use crate::plan::pattern_optimization::{
     cost_estimation::StatisticsManager,
@@ -475,8 +475,10 @@ impl GlobalPatternOptimizer {
     /// Enable or disable the global optimizer
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
-        let mut config = IntegrationConfig::default();
-        config.enable_optimization = enabled;
+        let config = IntegrationConfig {
+            enable_optimization: enabled,
+            ..IntegrationConfig::default()
+        };
         self.pipeline.update_config(config);
     }
 

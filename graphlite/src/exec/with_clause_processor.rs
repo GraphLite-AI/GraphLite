@@ -6,7 +6,7 @@
 //! This module provides shared functionality for processing WITH clauses across all MATCH
 //! statement types (MATCH-INSERT, MATCH-SET, MATCH-DELETE, MATCH-REMOVE).
 
-use crate::ast::ast::{DistinctQualifier, Expression, FunctionCall, Literal, WithClause, WithItem};
+use crate::ast::{DistinctQualifier, Expression, FunctionCall, Literal, WithClause, WithItem};
 use crate::exec::{ExecutionContext, ExecutionError};
 use crate::functions::FunctionContext;
 use crate::storage::{Edge, Node, Value};
@@ -270,7 +270,7 @@ impl WithClauseProcessor {
             if let Some((_primary_var, nodes)) = variable_bindings.iter().next() {
                 let mut filtered_nodes = Vec::new();
 
-                for (_node_idx, node) in nodes.iter().enumerate() {
+                for node in nodes.iter() {
                     // Create computed values for this specific node
                     let mut node_computed_values = HashMap::new();
 
@@ -306,7 +306,7 @@ impl WithClauseProcessor {
 
                 // Update all variable bindings to only include filtered nodes
                 // Simplified logic: directly copy filtered nodes to all relevant variables
-                for (var, _) in &updated_bindings {
+                for var in updated_bindings.keys() {
                     if let Some(_original_nodes) = variable_bindings.get(var) {
                         if !filtered_nodes.is_empty() {
                             filtered_bindings.insert(var.clone(), filtered_nodes.clone());
@@ -1196,8 +1196,7 @@ impl WithClauseProcessor {
             Literal::TimeWindow(tw) => Value::String(tw.clone()),
             Literal::Vector(vec) => Value::String(format!("{:?}", vec)),
             Literal::List(list) => {
-                let converted: Vec<Value> =
-                    list.iter().map(|lit| Self::literal_to_value(lit)).collect();
+                let converted: Vec<Value> = list.iter().map(Self::literal_to_value).collect();
                 Value::List(converted)
             }
         }
@@ -1205,7 +1204,7 @@ impl WithClauseProcessor {
 
     /// Evaluate WHERE clause conditions using computed values from WITH clause
     pub fn evaluate_where_with_computed_values(
-        where_clause: &crate::ast::ast::WhereClause,
+        where_clause: &crate::ast::WhereClause,
         computed_values: &HashMap<String, Value>,
     ) -> bool {
         Self::evaluate_expression_with_computed_values(&where_clause.condition, computed_values)
@@ -1222,37 +1221,37 @@ impl WithClauseProcessor {
                 let right_val = Self::get_value_from_expression(&binary_op.right, computed_values);
 
                 let result = match &binary_op.operator {
-                    crate::ast::ast::Operator::GreaterThan => {
+                    crate::ast::Operator::GreaterThan => {
                         if let (Value::Number(l), Value::Number(r)) = (&left_val, &right_val) {
                             l > r
                         } else {
                             false
                         }
                     }
-                    crate::ast::ast::Operator::LessThan => {
+                    crate::ast::Operator::LessThan => {
                         if let (Value::Number(l), Value::Number(r)) = (&left_val, &right_val) {
                             l < r
                         } else {
                             false
                         }
                     }
-                    crate::ast::ast::Operator::Equal => left_val == right_val,
-                    crate::ast::ast::Operator::NotEqual => left_val != right_val,
-                    crate::ast::ast::Operator::GreaterEqual => {
+                    crate::ast::Operator::Equal => left_val == right_val,
+                    crate::ast::Operator::NotEqual => left_val != right_val,
+                    crate::ast::Operator::GreaterEqual => {
                         if let (Value::Number(l), Value::Number(r)) = (&left_val, &right_val) {
                             l >= r
                         } else {
                             false
                         }
                     }
-                    crate::ast::ast::Operator::LessEqual => {
+                    crate::ast::Operator::LessEqual => {
                         if let (Value::Number(l), Value::Number(r)) = (&left_val, &right_val) {
                             l <= r
                         } else {
                             false
                         }
                     }
-                    crate::ast::ast::Operator::And => {
+                    crate::ast::Operator::And => {
                         // For AND, recursively evaluate both sides as boolean expressions
                         let left_bool = Self::evaluate_expression_with_computed_values(
                             &binary_op.left,
@@ -1264,7 +1263,7 @@ impl WithClauseProcessor {
                         );
                         left_bool && right_bool
                     }
-                    crate::ast::ast::Operator::Or => {
+                    crate::ast::Operator::Or => {
                         // For OR, recursively evaluate both sides as boolean expressions
                         let left_bool = Self::evaluate_expression_with_computed_values(
                             &binary_op.left,

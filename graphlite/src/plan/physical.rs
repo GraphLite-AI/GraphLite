@@ -6,7 +6,7 @@
 //! Physical plans represent the actual execution strategy with specific
 //! algorithms and data access methods chosen for optimal performance.
 
-use crate::ast::ast::{EdgeDirection, Expression, PathType};
+use crate::ast::{EdgeDirection, Expression, PathType};
 use crate::plan::logical::{AggregateFunction, JoinType, LogicalNode, LogicalPlan, PathElement};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -326,7 +326,7 @@ pub enum PhysicalNode {
 
     /// WITH query that needs special execution handling
     WithQuery {
-        original_query: Box<crate::ast::ast::WithQuery>,
+        original_query: Box<crate::ast::WithQuery>,
         estimated_rows: usize,
         estimated_cost: f64,
     },
@@ -1046,10 +1046,8 @@ impl PhysicalPlan {
 
             LogicalNode::Union { inputs, all } => {
                 // Convert all input logical nodes to physical nodes
-                let physical_inputs: Vec<PhysicalNode> = inputs
-                    .iter()
-                    .map(|input| Self::convert_logical_node(input))
-                    .collect();
+                let physical_inputs: Vec<PhysicalNode> =
+                    inputs.iter().map(Self::convert_logical_node).collect();
 
                 // Calculate estimated rows and cost
                 let estimated_rows: usize = physical_inputs
@@ -1140,8 +1138,8 @@ impl PhysicalPlan {
 
     /// Extract label information from a logical node (helper for text search optimization)
     #[allow(dead_code)] // FALSE POSITIVE - Recursively called at line 1085, compiler doesn't detect recursive usage
-    fn extract_label_from_logical_node(node: &Box<LogicalNode>) -> Option<String> {
-        match node.as_ref() {
+    fn extract_label_from_logical_node(node: &LogicalNode) -> Option<String> {
+        match node {
             LogicalNode::NodeScan { labels, .. } => {
                 // Return the first label if available
                 labels.first().cloned()
@@ -1274,10 +1272,15 @@ impl PhysicalNode {
                 // The execution will be handled specially
             }
 
-            PhysicalNode::Unwind { input, .. } => {
-                if let Some(input_node) = input {
-                    operators.extend(input_node.get_operators());
-                }
+            PhysicalNode::Unwind {
+                input: Some(input_node),
+                ..
+            } => {
+                operators.extend(input_node.get_operators());
+            }
+
+            PhysicalNode::Unwind { input: None, .. } => {
+                // No input node
             }
 
             PhysicalNode::HashJoin { build, probe, .. }

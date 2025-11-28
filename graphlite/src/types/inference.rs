@@ -187,10 +187,10 @@ impl TypeInferenceEngine {
         }
 
         // Numeric literals
-        if let Ok(_) = literal.parse::<i64>() {
+        if literal.parse::<i64>().is_ok() {
             return GqlType::Integer;
         }
-        if let Ok(_) = literal.parse::<f64>() {
+        if literal.parse::<f64>().is_ok() {
             return GqlType::Double;
         }
 
@@ -378,10 +378,8 @@ impl TypeInferenceEngine {
             // For aggregate functions with polymorphic return type, infer from input
             if signature.return_type == GqlType::Double {
                 // Use Double as polymorphic marker
-                if name == "MIN" || name == "MAX" {
-                    if !arg_types.is_empty() {
-                        return Ok(arg_types[0].clone());
-                    }
+                if (name == "MIN" || name == "MAX") && !arg_types.is_empty() {
+                    return Ok(arg_types[0].clone());
                 }
             }
 
@@ -491,9 +489,9 @@ impl TypeInferenceEngine {
     pub fn infer_unary_operation_type(
         &self,
         operand_type: &GqlType,
-        operator: &crate::ast::ast::Operator,
+        operator: &crate::ast::Operator,
     ) -> TypeResult<GqlType> {
-        use crate::ast::ast::Operator;
+        use crate::ast::Operator;
 
         match operator {
             Operator::Not => {

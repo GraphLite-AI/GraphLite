@@ -43,17 +43,6 @@ impl GraphTypeVersion {
         }
     }
 
-    pub fn to_string(&self) -> String {
-        let mut version = format!("{}.{}.{}", self.major, self.minor, self.patch);
-        if let Some(pre) = &self.pre_release {
-            version.push_str(&format!("-{}", pre));
-        }
-        if let Some(build) = &self.build_metadata {
-            version.push_str(&format!("+{}", build));
-        }
-        version
-    }
-
     pub fn parse(version_str: &str) -> Result<Self, String> {
         let parts: Vec<&str> = version_str.split('.').collect();
         if parts.len() != 3 {
@@ -95,6 +84,19 @@ impl GraphTypeVersion {
     }
 }
 
+impl std::fmt::Display for GraphTypeVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}.{}", self.major, self.minor, self.patch)?;
+        if let Some(pre) = &self.pre_release {
+            write!(f, "-{}", pre)?;
+        }
+        if let Some(build) = &self.build_metadata {
+            write!(f, "+{}", build)?;
+        }
+        Ok(())
+    }
+}
+
 /// Definition of a node type within a graph type
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeTypeDefinition {
@@ -119,23 +121,12 @@ pub struct EdgeTypeDefinition {
 }
 
 /// Cardinality constraints for edges
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EdgeCardinality {
     pub from_min: Option<u32>,
     pub from_max: Option<u32>,
     pub to_min: Option<u32>,
     pub to_max: Option<u32>,
-}
-
-impl Default for EdgeCardinality {
-    fn default() -> Self {
-        Self {
-            from_min: None,
-            from_max: None,
-            to_min: None,
-            to_max: None,
-        }
-    }
 }
 
 /// Definition of a property within a node or edge type
@@ -172,7 +163,7 @@ pub enum DataType {
     Duration,
 
     // Special types
-    UUID,
+    Uuid,
     Text,  // For full-text indexable content
     Json,  // JSON object
     Bytes, // Binary data
@@ -214,7 +205,7 @@ impl DataType {
             DataType::DateTime => "TIMESTAMP".to_string(),
             DataType::Timestamp => "TIMESTAMP WITH TIME ZONE".to_string(),
             DataType::Duration => "INTERVAL".to_string(),
-            DataType::UUID => "UUID".to_string(),
+            DataType::Uuid => "UUID".to_string(),
             DataType::Text => "TEXT".to_string(),
             DataType::Json => "JSONB".to_string(),
             DataType::Bytes => "BYTEA".to_string(),
@@ -261,20 +252,15 @@ pub enum ForeignKeyAction {
 }
 
 /// Schema enforcement modes
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
 pub enum SchemaEnforcementMode {
     /// Block operations that violate schema
     Strict,
     /// Warn but allow violations
+    #[default]
     Advisory,
     /// No schema validation
     Disabled,
-}
-
-impl Default for SchemaEnforcementMode {
-    fn default() -> Self {
-        SchemaEnforcementMode::Advisory
-    }
 }
 
 /// Schema change for ALTER operations

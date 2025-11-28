@@ -216,7 +216,7 @@ impl IndexStatistics {
         if hit {
             self.cache_hit_rate = self.cache_hit_rate * (1.0 - weight) + weight;
         } else {
-            self.cache_hit_rate = self.cache_hit_rate * (1.0 - weight);
+            self.cache_hit_rate *= 1.0 - weight;
         }
     }
 

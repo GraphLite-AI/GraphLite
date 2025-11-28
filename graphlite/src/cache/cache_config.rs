@@ -70,19 +70,19 @@ pub enum CachePolicy {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EvictionPolicy {
     /// Least Recently Used
-    LRU,
+    Lru,
     /// Least Frequently Used
-    LFU,
+    Lfu,
     /// First In First Out
-    FIFO,
+    Fifo,
     /// Random replacement
     Random,
     /// Time-based (oldest entries first)
-    TTL,
+    Ttl,
     /// Size-based (largest entries first)  
     Size,
     /// Adaptive Replacement Cache (balance recency/frequency)
-    ARC,
+    Arc,
 }
 
 /// Cache invalidation strategies
@@ -91,7 +91,7 @@ pub enum InvalidationStrategy {
     /// Manual invalidation only
     Manual,
     /// Time-based expiration
-    TTL,
+    Ttl,
     /// Tag-based invalidation (invalidate by graph/table changes)
     TagBased,
     /// Version-based invalidation
@@ -126,12 +126,12 @@ impl Default for CacheConfig {
                 default_ttl: Some(Duration::from_secs(3600)), // 1 hour
                 policy: CachePolicy::WriteBack,
             },
-            eviction_policy: EvictionPolicy::ARC,
+            eviction_policy: EvictionPolicy::Arc,
             stats_interval: Duration::from_secs(60),
             compression_enabled: true,
             invalidation_strategy: InvalidationStrategy::Hybrid {
                 primary: Box::new(InvalidationStrategy::TagBased),
-                fallback: Box::new(InvalidationStrategy::TTL),
+                fallback: Box::new(InvalidationStrategy::Ttl),
             },
         }
     }
@@ -140,12 +140,19 @@ impl Default for CacheConfig {
 impl CacheConfig {
     /// Create configuration optimized for read-heavy workloads
     pub fn read_optimized() -> Self {
-        let mut config = Self::default();
-        config.l1_config.max_entries = 2000;
-        config.l2_config.max_entries = 10000;
-        config.l1_config.default_ttl = Some(Duration::from_secs(600)); // 10 minutes
-        config.l2_config.default_ttl = Some(Duration::from_secs(3600)); // 1 hour
-        config
+        Self {
+            l1_config: LevelConfig {
+                max_entries: 2000,
+                default_ttl: Some(Duration::from_secs(600)), // 10 minutes
+                ..Self::default().l1_config
+            },
+            l2_config: LevelConfig {
+                max_entries: 10000,
+                default_ttl: Some(Duration::from_secs(3600)), // 1 hour
+                ..Self::default().l2_config
+            },
+            ..Self::default()
+        }
     }
 
     /// Create configuration optimized for write-heavy workloads
@@ -153,7 +160,7 @@ impl CacheConfig {
         let mut config = Self::default();
         config.l1_config.policy = CachePolicy::WriteBack;
         config.l2_config.policy = CachePolicy::WriteBack;
-        config.eviction_policy = EvictionPolicy::LRU; // Simpler for write workloads
+        config.eviction_policy = EvictionPolicy::Lru; // Simpler for write workloads
         config.invalidation_strategy = InvalidationStrategy::TagBased;
         config
     }

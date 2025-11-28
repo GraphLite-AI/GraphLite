@@ -272,9 +272,10 @@ pub struct MatchClause {
 }
 
 /// Path type constraints for graph traversal
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum PathType {
     /// WALK - allows repeated vertices and edges (most permissive)
+    #[default]
     Walk,
     /// TRAIL - allows repeated vertices but not repeated edges
     Trail,
@@ -282,12 +283,6 @@ pub enum PathType {
     SimplePath,
     /// ACYCLIC PATH - no repeated vertices or edges, strictest cycle detection
     AcyclicPath,
-}
-
-impl Default for PathType {
-    fn default() -> Self {
-        PathType::Walk // Default to most permissive
-    }
 }
 
 impl PathType {
@@ -738,13 +733,15 @@ impl CatalogPath {
         Self { segments, location }
     }
 
-    pub fn to_string(&self) -> String {
-        format!("/{}", self.segments.join("/"))
-    }
-
     /// Get the last segment as the name
     pub fn name(&self) -> Option<&String> {
         self.segments.last()
+    }
+}
+
+impl std::fmt::Display for CatalogPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "/{}", self.segments.join("/"))
     }
 }
 
@@ -920,15 +917,15 @@ pub struct SetStatement {
 /// SET item
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SetItem {
-    PropertyAssignment {
+    Property {
         property: PropertyAccess,
         value: Expression,
     },
-    VariableAssignment {
+    Variable {
         variable: String,
         value: Expression,
     },
-    LabelAssignment {
+    Label {
         variable: String,
         labels: LabelExpression,
     },
@@ -994,9 +991,9 @@ pub struct MatchDeleteStatement {
 /// Session statements for managing session state and variables
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SessionStatement {
-    SessionSet(SessionSetStatement),
-    SessionReset(SessionResetStatement),
-    SessionClose(SessionCloseStatement),
+    Set(SessionSetStatement),
+    Reset(SessionResetStatement),
+    Close(SessionCloseStatement),
 }
 
 /// SESSION SET statement
@@ -1710,11 +1707,11 @@ impl AccessMode {
 /// Index DDL statement types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IndexStatement {
-    CreateIndex(CreateIndexStatement),
-    DropIndex(DropIndexStatement),
-    AlterIndex(AlterIndexStatement),
-    OptimizeIndex(OptimizeIndexStatement),
-    ReindexIndex(ReindexStatement),
+    Create(CreateIndexStatement),
+    Drop(DropIndexStatement),
+    Alter(AlterIndexStatement),
+    Optimize(OptimizeIndexStatement),
+    Reindex(ReindexStatement),
 }
 
 /// CREATE GRAPH INDEX statement
@@ -1783,19 +1780,10 @@ pub enum GraphIndexTypeSpecifier {
 }
 
 /// Index options for CREATE INDEX
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct IndexOptions {
     pub parameters: std::collections::HashMap<String, Value>,
     pub location: Location,
-}
-
-impl Default for IndexOptions {
-    fn default() -> Self {
-        Self {
-            parameters: std::collections::HashMap::new(),
-            location: Location::default(),
-        }
-    }
 }
 
 /// Value type for index parameters

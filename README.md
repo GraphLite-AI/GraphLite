@@ -7,13 +7,13 @@ GraphLite uses a single binary and is an ideal solution for applications requiri
 
 ## Features
 
-- ✅ **ISO GQL Standard** - Full implementation of ISO GQL query language based on grammar optimized from [OpenGQL](https://github.com/opengql/grammar/tree/main) project
-- ✅ **Pattern Matching** - Powerful MATCH clauses for graph traversal
-- ✅ **ACID Transactions** - Full transaction support with isolation levels
-- ✅ **Embedded Storage** - Sled-based embedded database (no server needed)
-- ✅ **Type System** - Strong typing with validation and inference
-- ✅ **Query Optimization** - Cost-based query optimization
-- ✅ **Pure Rust** - Memory-safe implementation in Rust
+- **ISO GQL Standard** - Full implementation of ISO GQL query language based on grammar optimized from [OpenGQL](https://github.com/opengql/grammar/tree/main) project
+- **Pattern Matching** - Powerful MATCH clauses for graph traversal
+- **ACID Transactions** - Full transaction support with isolation levels
+- **Embedded Storage** - Sled-based embedded database (no server needed)
+- **Type System** - Strong typing with validation and inference
+- **Query Optimization** - Cost-based query optimization
+- **Pure Rust** - Memory-safe implementation in Rust
 
 ## Prerequisites
 
@@ -81,7 +81,35 @@ cargo --version
 
 Get up and running with GraphLite in 3 simple steps:
 
-### Step 1: Clone and Build
+### Step 1: Installation
+
+**Choose your installation method:**
+
+#### Option A: Use as a Crate (Recommended for Rust Applications)
+
+Add GraphLite to your Rust project - no cloning or building required:
+
+```bash
+# For application development (SDK - recommended)
+cargo add graphlite-rust-sdk
+
+# For advanced/low-level usage
+cargo add graphlite
+```
+
+**See:** **[Using GraphLite as a Crate](docs/Using%20GraphLite%20as%20a%20Crate.md)** for complete integration guide.
+
+#### Option B: Install CLI from crates.io (Easiest for CLI Usage)
+
+Install the GraphLite CLI tool directly from crates.io:
+
+```bash
+cargo install graphlite-cli
+```
+
+After installation, the `graphlite` binary will be available in your PATH.
+
+#### Option C: Clone and Build (For Development/Contributing)
 
 ```bash
 # Clone the repository
@@ -129,10 +157,15 @@ If you prefer to build manually without the script:
     ```
 </details>
 
-### Step 2: Initialize Database
+### Step 2: Initialize Database (For CLI Usage)
+
+**Note:** If you're using GraphLite as a crate in your application, skip to **[Using GraphLite as a Crate](docs/Using%20GraphLite%20as%20a%20Crate.md)** instead.
 
 ```bash
-# Create a new database with admin credentials
+# If you installed via 'cargo install graphlite-cli' (Option B)
+graphlite install --path ./my_db --admin-user admin --admin-password secret
+
+# If you built from source (Option C)
 ./target/release/graphlite install --path ./my_db --admin-user admin --admin-password secret
 ```
 
@@ -142,10 +175,13 @@ This command:
 - Creates default admin and user roles.
 - Initializes the default schema.
 
-### Step 3: Start Using GQL
+### Step 3: Start Using GQL (CLI)
 
 ```bash
-# Launch the interactive GQL console
+# If you installed via 'cargo install graphlite-cli' (Option B)
+graphlite gql --path ./my_db -u admin -p secret
+
+# If you built from source (Option C)
 ./target/release/graphlite gql --path ./my_db -u admin -p secret
 ```
 
@@ -154,8 +190,9 @@ That's it! You're now ready to create graphs and run queries:
 $ gql>
 ```
 
-**📚 Next Steps:**
-- **[Quick Start.md](docs/Quick%20Start.md)** - 5-minute tutorial with first queries
+**Next Steps:**
+- **[Using GraphLite as a Crate](docs/Using%20GraphLite%20as%20a%20Crate.md)** - Embed in your Rust application (recommended)
+- **[Quick Start.md](docs/Quick%20Start.md)** - 5-minute tutorial with CLI and first queries
 - **[Getting Started With GQL.md](docs/Getting%20Started%20With%20GQL.md)** - Complete query language reference
 
 <details>
@@ -215,7 +252,7 @@ cargo test --release --test <test_name>
 cargo test --release --test aggregation_tests
 ```
 
-**📚 Comprehensive testing documentation (In Progress)**, which will cover:
+** Comprehensive testing documentation (In Progress)**, which will cover:
 - Test configuration and architecture
 - Test categories and organization
 - Writing tests with TestFixture
@@ -234,7 +271,7 @@ GraphLite provides flexible configuration for logging, performance tuning, and p
 ./target/release/graphlite -v gql --path ./my_db -u admin -p secret
 ```
 
-**📚 Comprehensive configuration documentation (In Progress)**, which will cover:
+** Comprehensive configuration documentation (In Progress)**, which will cover:
 - Logging configuration (CLI flags, RUST_LOG, module-specific)
 - Performance tuning (caching, indexing, batch operations)
 - Production deployment (systemd, backups, monitoring)
@@ -299,7 +336,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Insert data with transaction
     let mut tx = session.transaction()?;
-    tx.execute("CREATE (p:Person {name: 'Alice'})")?;
+    tx.execute("INSERT (:Person {name: 'Alice'})")?;
     tx.commit()?;
 
     // Query data
@@ -327,7 +364,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Insert data
     coordinator.process_query(
-        "CREATE (p:Person {name: 'Alice'})",
+        "INSERT (:Person {name: 'Alice'})",
         &session_id
     )?;
 
@@ -348,7 +385,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Examples and Documentation
 
-📚 **For Rust Applications:**
+**For Rust Applications:**
 - **[SDK Examples](graphlite-sdk/examples/)** - Recommended high-level API (start here!)
 - **[Core Library Examples](examples-core/)** - Advanced low-level usage
 
@@ -418,7 +455,7 @@ GraphLite provides comprehensive documentation for all skill levels:
 - Open an issue for bugs or feature requests
 - Check existing issues before creating new ones
 - Join discussions in open issues and PRs
-- Contribution guidelines (In Progress)
+- **[Contribution Guidelines](CONTRIBUTING.md)** - How to contribute
 
 ---
 
@@ -435,7 +472,7 @@ cargo test
 ```
 
 
-**👉 Contribution guide (In Progress)** will include complete details on:
+** See [CONTRIBUTING.md](CONTRIBUTING.md) for complete details on:**
 - How to contribute
 - Development setup
 - Testing guidelines
@@ -455,4 +492,9 @@ GraphLite is built on top of excellent open source projects. We are grateful to 
 
 - **Rust Community** - For creating an amazing ecosystem of high-quality libraries
 - All open source contributors whose work makes projects like GraphLite possible
+
 ---
+
+## Security
+
+If you discover a security vulnerability in GraphLite, please report it to **gl@deepgraphai.com**. Do not create public GitHub issues for security vulnerabilities.

@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::ast::ast::{
+use crate::ast::{
     Expression, LabelFactor, Literal, MatchRemoveStatement, PatternElement, RemoveItem,
 };
 use crate::exec::with_clause_processor::WithClauseProcessor;
@@ -39,8 +39,7 @@ impl MatchRemoveExecutor {
             Literal::TimeWindow(tw) => Value::String(tw.clone()),
             Literal::Vector(vec) => Value::Vector(vec.iter().map(|&f| f as f32).collect()),
             Literal::List(list) => {
-                let converted: Vec<Value> =
-                    list.iter().map(|lit| Self::literal_to_value(lit)).collect();
+                let converted: Vec<Value> = list.iter().map(Self::literal_to_value).collect();
                 Value::List(converted)
             }
         }
@@ -50,7 +49,7 @@ impl MatchRemoveExecutor {
     /// Returns (node_bindings, edge_bindings)
     fn match_path_pattern(
         graph: &GraphCache,
-        pattern: &crate::ast::ast::PathPattern,
+        pattern: &crate::ast::PathPattern,
     ) -> Result<(Vec<HashMap<String, Node>>, Vec<HashMap<String, Edge>>), ExecutionError> {
         let mut node_matches = Vec::new();
         let mut edge_matches = Vec::new();
@@ -62,7 +61,7 @@ impl MatchRemoveExecutor {
                 Some(PatternElement::Edge(edge_pattern)),
                 Some(PatternElement::Node(target_pattern)),
             ) = (
-                pattern.elements.get(0),
+                pattern.elements.first(),
                 pattern.elements.get(1),
                 pattern.elements.get(2),
             ) {
@@ -72,7 +71,7 @@ impl MatchRemoveExecutor {
                     let edge_label_matches = if edge_pattern.labels.is_empty() {
                         true
                     } else {
-                        edge_pattern.labels.iter().any(|label| edge.label == *label)
+                        edge_pattern.labels.contains(&edge.label)
                     };
 
                     if !edge_label_matches {
@@ -86,9 +85,9 @@ impl MatchRemoveExecutor {
                     ) {
                         // Check if source node matches pattern
                         let source_matches =
-                            Self::node_matches_pattern(&source_node, source_pattern);
+                            Self::node_matches_pattern(source_node, source_pattern);
                         let target_matches =
-                            Self::node_matches_pattern(&target_node, target_pattern);
+                            Self::node_matches_pattern(target_node, target_pattern);
 
                         if source_matches && target_matches {
                             let mut node_binding = HashMap::new();
@@ -115,7 +114,7 @@ impl MatchRemoveExecutor {
             if let Some(PatternElement::Node(node_pattern)) = pattern.elements.first() {
                 let nodes = graph.get_all_nodes();
                 for node in nodes {
-                    if Self::node_matches_pattern(&node, node_pattern) {
+                    if Self::node_matches_pattern(node, node_pattern) {
                         let mut binding = HashMap::new();
                         if let Some(ref identifier) = node_pattern.identifier {
                             binding.insert(identifier.clone(), node.clone());
@@ -130,7 +129,7 @@ impl MatchRemoveExecutor {
     }
 
     /// Check if a node matches a node pattern
-    fn node_matches_pattern(node: &Node, node_pattern: &crate::ast::ast::Node) -> bool {
+    fn node_matches_pattern(node: &Node, node_pattern: &crate::ast::Node) -> bool {
         // Check labels
         if !node_pattern.labels.is_empty() {
             let has_required_label = node_pattern
@@ -160,7 +159,7 @@ impl MatchRemoveExecutor {
     /// Evaluate WHERE clause on a variable combination
     fn evaluate_where_clause_on_combination(
         combination: &HashMap<String, Node>,
-        where_clause: &crate::ast::ast::WhereClause,
+        where_clause: &crate::ast::WhereClause,
         computed_values: Option<&HashMap<String, Value>>,
     ) -> bool {
         if let Some(computed_values) = computed_values {
@@ -186,7 +185,7 @@ impl MatchRemoveExecutor {
                 // In WHERE clause, NULL comparisons evaluate to FALSE (exclude rows)
                 // This follows SQL/GQL three-valued logic where NULL is treated as FALSE in WHERE
                 match binary_op.operator {
-                    crate::ast::ast::Operator::GreaterThan => {
+                    crate::ast::Operator::GreaterThan => {
                         match (left_val, right_val) {
                             // NULL comparison returns false in WHERE clause
                             (None, _) | (_, None) => false,
@@ -195,7 +194,7 @@ impl MatchRemoveExecutor {
                             _ => false,
                         }
                     }
-                    crate::ast::ast::Operator::LessThan => {
+                    crate::ast::Operator::LessThan => {
                         match (left_val, right_val) {
                             // NULL comparison returns false in WHERE clause
                             (None, _) | (_, None) => false,
@@ -204,7 +203,7 @@ impl MatchRemoveExecutor {
                             _ => false,
                         }
                     }
-                    crate::ast::ast::Operator::GreaterEqual => {
+                    crate::ast::Operator::GreaterEqual => {
                         match (left_val, right_val) {
                             // NULL comparison returns false in WHERE clause
                             (None, _) | (_, None) => false,
@@ -213,7 +212,7 @@ impl MatchRemoveExecutor {
                             _ => false,
                         }
                     }
-                    crate::ast::ast::Operator::LessEqual => {
+                    crate::ast::Operator::LessEqual => {
                         match (left_val, right_val) {
                             // NULL comparison returns false in WHERE clause
                             (None, _) | (_, None) => false,
@@ -222,14 +221,14 @@ impl MatchRemoveExecutor {
                             _ => false,
                         }
                     }
-                    crate::ast::ast::Operator::Equal => {
+                    crate::ast::Operator::Equal => {
                         match (&left_val, &right_val) {
                             // NULL = NULL is false in WHERE clause (SQL three-valued logic)
                             (None, _) | (_, None) => false,
                             (Some(l), Some(r)) => l == r,
                         }
                     }
-                    crate::ast::ast::Operator::NotEqual => {
+                    crate::ast::Operator::NotEqual => {
                         match (&left_val, &right_val) {
                             // NULL != value is false in WHERE clause (SQL three-valued logic)
                             (None, _) | (_, None) => false,
@@ -249,13 +248,9 @@ impl MatchRemoveExecutor {
         expr: &Expression,
     ) -> Option<Value> {
         match expr {
-            Expression::Variable(var) => {
-                if let Some(node) = combination.get(&var.name) {
-                    Some(Value::String(node.id.clone()))
-                } else {
-                    None
-                }
-            }
+            Expression::Variable(var) => combination
+                .get(&var.name)
+                .map(|node| Value::String(node.id.clone())),
             Expression::PropertyAccess(prop_access) => {
                 if let Some(node) = combination.get(&prop_access.object) {
                     node.properties.get(&prop_access.property).cloned()

@@ -99,25 +99,25 @@ impl std::str::FromStr for IsolationLevel {
 }
 
 /// Convert from AST isolation level to transaction isolation level
-impl From<crate::ast::ast::IsolationLevel> for IsolationLevel {
-    fn from(ast_level: crate::ast::ast::IsolationLevel) -> Self {
+impl From<crate::ast::IsolationLevel> for IsolationLevel {
+    fn from(ast_level: crate::ast::IsolationLevel) -> Self {
         match ast_level {
-            crate::ast::ast::IsolationLevel::ReadUncommitted => IsolationLevel::ReadUncommitted,
-            crate::ast::ast::IsolationLevel::ReadCommitted => IsolationLevel::ReadCommitted,
-            crate::ast::ast::IsolationLevel::RepeatableRead => IsolationLevel::RepeatableRead,
-            crate::ast::ast::IsolationLevel::Serializable => IsolationLevel::Serializable,
+            crate::ast::IsolationLevel::ReadUncommitted => IsolationLevel::ReadUncommitted,
+            crate::ast::IsolationLevel::ReadCommitted => IsolationLevel::ReadCommitted,
+            crate::ast::IsolationLevel::RepeatableRead => IsolationLevel::RepeatableRead,
+            crate::ast::IsolationLevel::Serializable => IsolationLevel::Serializable,
         }
     }
 }
 
 /// Convert to AST isolation level from transaction isolation level
-impl From<IsolationLevel> for crate::ast::ast::IsolationLevel {
+impl From<IsolationLevel> for crate::ast::IsolationLevel {
     fn from(txn_level: IsolationLevel) -> Self {
         match txn_level {
-            IsolationLevel::ReadUncommitted => crate::ast::ast::IsolationLevel::ReadUncommitted,
-            IsolationLevel::ReadCommitted => crate::ast::ast::IsolationLevel::ReadCommitted,
-            IsolationLevel::RepeatableRead => crate::ast::ast::IsolationLevel::RepeatableRead,
-            IsolationLevel::Serializable => crate::ast::ast::IsolationLevel::Serializable,
+            IsolationLevel::ReadUncommitted => crate::ast::IsolationLevel::ReadUncommitted,
+            IsolationLevel::ReadCommitted => crate::ast::IsolationLevel::ReadCommitted,
+            IsolationLevel::RepeatableRead => crate::ast::IsolationLevel::RepeatableRead,
+            IsolationLevel::Serializable => crate::ast::IsolationLevel::Serializable,
         }
     }
 }

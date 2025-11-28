@@ -3,7 +3,7 @@
 //
 use std::collections::HashMap;
 
-use crate::ast::ast::{DeleteStatement, Expression};
+use crate::ast::{DeleteStatement, Expression};
 use crate::exec::write_stmt::data_stmt::DataStatementExecutor;
 use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
 use crate::exec::ExecutionError;
@@ -22,7 +22,7 @@ impl DeleteExecutor {
     }
 
     /// Check if a node matches a given pattern
-    fn node_matches_pattern(node: &Node, pattern: &crate::ast::ast::Node) -> bool {
+    fn node_matches_pattern(node: &Node, pattern: &crate::ast::Node) -> bool {
         // Check labels
         if !pattern.labels.is_empty() {
             // Node must have all labels from the pattern
@@ -46,11 +46,11 @@ impl DeleteExecutor {
                     Expression::Literal(lit) => {
                         // Convert the literal to a Value for comparison
                         let expected_value = match lit {
-                            crate::ast::ast::Literal::String(s) => Value::String(s.clone()),
-                            crate::ast::ast::Literal::Integer(i) => Value::Number(*i as f64),
-                            crate::ast::ast::Literal::Float(f) => Value::Number(*f),
-                            crate::ast::ast::Literal::Boolean(b) => Value::Boolean(*b),
-                            crate::ast::ast::Literal::Null => Value::Null,
+                            crate::ast::Literal::String(s) => Value::String(s.clone()),
+                            crate::ast::Literal::Integer(i) => Value::Number(*i as f64),
+                            crate::ast::Literal::Float(f) => Value::Number(*f),
+                            crate::ast::Literal::Boolean(b) => Value::Boolean(*b),
+                            crate::ast::Literal::Null => Value::Null,
                             _ => {
                                 log::warn!("Unsupported literal type in DELETE pattern");
                                 return false;
@@ -108,8 +108,7 @@ impl DataStatementExecutor for DeleteExecutor {
 
                     // For now, we only support simple node patterns, not full path patterns
                     if pattern.elements.len() == 1 {
-                        if let crate::ast::ast::PatternElement::Node(node_pattern) =
-                            &pattern.elements[0]
+                        if let crate::ast::PatternElement::Node(node_pattern) = &pattern.elements[0]
                         {
                             // Collect nodes that match the pattern
                             let node_ids_to_delete: Vec<String> = graph

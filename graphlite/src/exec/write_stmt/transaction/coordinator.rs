@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 DeepGraph Inc.
 // SPDX-License-Identifier: Apache-2.0
 //
-use crate::ast::ast::TransactionStatement;
+use crate::ast::TransactionStatement;
 use crate::exec::write_stmt::{ExecutionContext, TransactionStatementExecutor};
 use crate::exec::{ExecutionError, QueryExecutor, QueryResult};
 

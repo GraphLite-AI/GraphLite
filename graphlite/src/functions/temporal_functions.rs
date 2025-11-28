@@ -105,17 +105,14 @@ impl TimezoneInfo {
                                     result =
                                         result.with_month(result.month() + 1).unwrap_or(result);
                                 }
+                            } else if result.month() == 1 {
+                                result = result
+                                    .with_year(result.year() - 1)
+                                    .unwrap_or(result)
+                                    .with_month(12)
+                                    .unwrap_or(result);
                             } else {
-                                if result.month() == 1 {
-                                    result = result
-                                        .with_year(result.year() - 1)
-                                        .unwrap_or(result)
-                                        .with_month(12)
-                                        .unwrap_or(result);
-                                } else {
-                                    result =
-                                        result.with_month(result.month() - 1).unwrap_or(result);
-                                }
+                                result = result.with_month(result.month() - 1).unwrap_or(result);
                             }
                         }
                         result
@@ -154,17 +151,14 @@ impl TimezoneInfo {
                                     result =
                                         result.with_month(result.month() + 1).unwrap_or(result);
                                 }
+                            } else if result.month() == 1 {
+                                result = result
+                                    .with_year(result.year() - 1)
+                                    .unwrap_or(result)
+                                    .with_month(12)
+                                    .unwrap_or(result);
                             } else {
-                                if result.month() == 1 {
-                                    result = result
-                                        .with_year(result.year() - 1)
-                                        .unwrap_or(result)
-                                        .with_month(12)
-                                        .unwrap_or(result);
-                                } else {
-                                    result =
-                                        result.with_month(result.month() - 1).unwrap_or(result);
-                                }
+                                result = result.with_month(result.month() - 1).unwrap_or(result);
                             }
                         }
                         result
@@ -783,12 +777,10 @@ impl Function for DateAddFunction {
                             } else {
                                 result = result.with_month(result.month() + 1).unwrap_or(result);
                             }
+                        } else if result.month() == 1 {
+                            result = result.with_year(result.year() - 1).unwrap_or(result).with_month(12).unwrap_or(result);
                         } else {
-                            if result.month() == 1 {
-                                result = result.with_year(result.year() - 1).unwrap_or(result).with_month(12).unwrap_or(result);
-                            } else {
-                                result = result.with_month(result.month() - 1).unwrap_or(result);
-                            }
+                            result = result.with_month(result.month() - 1).unwrap_or(result);
                         }
                     }
                     result
@@ -916,12 +908,10 @@ impl Function for DateSubFunction {
                         } else {
                             result = result.with_month(result.month() - 1).unwrap_or(result);
                         }
+                    } else if result.month() == 12 {
+                        result = result.with_year(result.year() + 1).unwrap_or(result).with_month(1).unwrap_or(result);
                     } else {
-                        if result.month() == 12 {
-                            result = result.with_year(result.year() + 1).unwrap_or(result).with_month(1).unwrap_or(result);
-                        } else {
-                            result = result.with_month(result.month() + 1).unwrap_or(result);
-                        }
+                        result = result.with_month(result.month() + 1).unwrap_or(result);
                     }
                 }
                 result
@@ -1103,11 +1093,11 @@ fn parse_iso_duration(duration_str: &str) -> Result<i64, String> {
     }
 
     let mut total_seconds = 0i64;
-    let mut chars = duration_str[1..].chars().peekable(); // Skip the 'P'
+    let chars = duration_str[1..].chars().peekable(); // Skip the 'P'
     let mut number_str = String::new();
     let mut in_time_part = false;
 
-    while let Some(ch) = chars.next() {
+    for ch in chars {
         match ch {
             'T' => {
                 in_time_part = true;

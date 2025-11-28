@@ -31,7 +31,7 @@ fn test_type_function_fixed() {
     );
 
     // Test with array
-    let result1 = fixture.query(
+    let _result1 = fixture.query(
         r#"
         MATCH (d:Document)
         WITH d.tags as arr
@@ -40,7 +40,7 @@ fn test_type_function_fixed() {
     );
 
     // Test with string
-    let result2 = fixture.query(
+    let _result2 = fixture.query(
         r#"
         MATCH (d:Document)
         WITH d.title as title_str
@@ -49,7 +49,7 @@ fn test_type_function_fixed() {
     );
 
     // Test with number
-    let result3 = fixture.query(
+    let _result3 = fixture.query(
         r#"
         MATCH (d:Document)
         WITH d.count as num
@@ -58,7 +58,7 @@ fn test_type_function_fixed() {
     );
 
     // Test with boolean
-    let result4 = fixture.query(
+    let _result4 = fixture.query(
         r#"
         MATCH (d:Document)
         WITH d.flag as bool_val
@@ -67,7 +67,7 @@ fn test_type_function_fixed() {
     );
 
     // Test with node
-    let result5 = fixture.query(
+    let _result5 = fixture.query(
         r#"
         MATCH (d:Document)
         RETURN TYPE(d) as node_type
@@ -100,7 +100,7 @@ fn test_size_function_fixed() {
     );
 
     // Test with number list
-    let result1 = fixture.query(
+    let _result1 = fixture.query(
         r#"
         MATCH (d:Document)
         WITH d.numbers as nums
@@ -109,7 +109,7 @@ fn test_size_function_fixed() {
     );
 
     // Test with string
-    let result2 = fixture.query(
+    let _result2 = fixture.query(
         r#"
         MATCH (d:Document)
         WITH d.title as title_str
@@ -118,7 +118,7 @@ fn test_size_function_fixed() {
     );
 
     // Test with list
-    let result3 = fixture.query(
+    let _result3 = fixture.query(
         r#"
         MATCH (d:Document)
         WITH d.list_data as list_val
@@ -127,7 +127,7 @@ fn test_size_function_fixed() {
     );
 
     // Test with literal values
-    let result4 = fixture.query(
+    let _result4 = fixture.query(
         r#"
         RETURN
             SIZE([1, 2, 3, 4]) as literal_list_size,
@@ -174,8 +174,8 @@ fn test_combined_type_and_size() {
 
     // Validate results
     match result {
-        Ok(query_result) => if let Some(row) = query_result.rows.first() {},
-        Err(e) => {}
+        Ok(query_result) => if let Some(_row) = query_result.rows.first() {},
+        Err(_e) => {}
     }
 }
 
@@ -203,7 +203,7 @@ fn debug_properties_function() {
     );
 
     // Test what properties() actually returns
-    let result1 = fixture.query(
+    let _result1 = fixture.query(
         r#"
         MATCH (d:Document)
         RETURN properties(d) as props
@@ -211,7 +211,7 @@ fn debug_properties_function() {
     );
 
     // Test direct property access vs properties function
-    let result2 = fixture.query(
+    let _result2 = fixture.query(
         r#"
         MATCH (d:Document)
         RETURN d.title, d.data, d.count, properties(d)
@@ -219,7 +219,7 @@ fn debug_properties_function() {
     );
 
     // Test dot notation property access
-    let result3 = fixture.query(
+    let _result3 = fixture.query(
         r#"
         MATCH (d:Document)
         WITH d.title as title_from_with, d.data as data_from_with

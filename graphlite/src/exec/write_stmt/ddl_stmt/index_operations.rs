@@ -16,7 +16,7 @@ thread_local! {
         .expect("Failed to create runtime for index operations");
 }
 
-use crate::ast::ast::{
+use crate::ast::{
     AlterIndexOperation, AlterIndexStatement, CreateIndexStatement, DropIndexStatement,
     GraphIndexTypeSpecifier, IndexStatement, IndexTypeSpecifier, OptimizeIndexStatement,
     ReindexStatement, Value,
@@ -62,25 +62,25 @@ impl IndexStatementCoordinator {
 
         // Create the appropriate executor and execute
         let (message, affected) = match stmt {
-            IndexStatement::CreateIndex(create_index) => {
+            IndexStatement::Create(create_index) => {
                 let stmt_executor = CreateIndexExecutor::new(create_index.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)?
+                stmt_executor.execute(context, catalog_manager, &storage)?
             }
-            IndexStatement::DropIndex(drop_index) => {
+            IndexStatement::Drop(drop_index) => {
                 let stmt_executor = DropIndexExecutor::new(drop_index.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)?
+                stmt_executor.execute(context, catalog_manager, &storage)?
             }
-            IndexStatement::AlterIndex(alter_index) => {
+            IndexStatement::Alter(alter_index) => {
                 let stmt_executor = AlterIndexExecutor::new(alter_index.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)?
+                stmt_executor.execute(context, catalog_manager, &storage)?
             }
-            IndexStatement::OptimizeIndex(optimize_index) => {
+            IndexStatement::Optimize(optimize_index) => {
                 let stmt_executor = OptimizeIndexExecutor::new(optimize_index.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)?
+                stmt_executor.execute(context, catalog_manager, &storage)?
             }
-            IndexStatement::ReindexIndex(reindex) => {
+            IndexStatement::Reindex(reindex) => {
                 let stmt_executor = ReindexExecutor::new(reindex.clone());
-                stmt_executor.execute(&context, catalog_manager, &storage)?
+                stmt_executor.execute(context, catalog_manager, &storage)?
             }
         };
 

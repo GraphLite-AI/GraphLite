@@ -7,7 +7,7 @@
 //! physical execution details. They are optimized for correctness and
 //! logical equivalence transformations.
 
-use crate::ast::ast::{
+use crate::ast::{
     EdgeDirection, Expression, PathPattern, PathQuantifier, PathType, PatternElement,
 };
 use serde::{Deserialize, Serialize};
@@ -232,7 +232,7 @@ pub enum LogicalNode {
 
     /// WITH query that needs special execution handling
     WithQuery {
-        original_query: Box<crate::ast::ast::WithQuery>,
+        original_query: Box<crate::ast::WithQuery>,
     },
 
     /// UNWIND expression into individual rows
@@ -413,21 +413,20 @@ impl LogicalPlan {
                                     if let Some(target_props) = &next_node.properties {
                                         for property in &target_props.properties {
                                             let property_access = Expression::PropertyAccess(
-                                                crate::ast::ast::PropertyAccess {
+                                                crate::ast::PropertyAccess {
                                                     object: to_variable.clone(),
                                                     property: property.key.clone(),
-                                                    location: crate::ast::ast::Location::default(),
+                                                    location: crate::ast::Location::default(),
                                                 },
                                             );
 
-                                            let filter_condition = Expression::Binary(
-                                                crate::ast::ast::BinaryExpression {
+                                            let filter_condition =
+                                                Expression::Binary(crate::ast::BinaryExpression {
                                                     left: Box::new(property_access),
-                                                    operator: crate::ast::ast::Operator::Equal,
+                                                    operator: crate::ast::Operator::Equal,
                                                     right: Box::new(property.value.clone()),
-                                                    location: crate::ast::ast::Location::default(),
-                                                },
-                                            );
+                                                    location: crate::ast::Location::default(),
+                                                });
 
                                             let filter = LogicalNode::Filter {
                                                 condition: filter_condition,
@@ -500,7 +499,7 @@ impl LogicalPlan {
     /// Extract start and end nodes from pattern
     fn extract_start_end_nodes(
         pattern: &PathPattern,
-    ) -> Result<(&crate::ast::ast::Node, &crate::ast::ast::Node), String> {
+    ) -> Result<(&crate::ast::Node, &crate::ast::Node), String> {
         let first = pattern.elements.first().ok_or("Pattern has no elements")?;
         let last = pattern.elements.last().ok_or("Pattern has no elements")?;
 
@@ -591,7 +590,7 @@ impl LogicalPlan {
 
                 // Get the argument expression (if any)
                 let arg_expr = if func_call.arguments.is_empty() {
-                    Expression::Literal(crate::ast::ast::Literal::Integer(1)) // COUNT(*) case
+                    Expression::Literal(crate::ast::Literal::Integer(1)) // COUNT(*) case
                 } else {
                     func_call.arguments[0].clone()
                 };
@@ -912,12 +911,12 @@ impl LogicalNode {
                     for pattern in &segment.match_clause.patterns {
                         for element in &pattern.elements {
                             match element {
-                                crate::ast::ast::PatternElement::Node(node) => {
+                                crate::ast::PatternElement::Node(node) => {
                                     if let Some(var_name) = &node.identifier {
                                         vars.push(var_name.clone());
                                     }
                                 }
-                                crate::ast::ast::PatternElement::Edge(edge) => {
+                                crate::ast::PatternElement::Edge(edge) => {
                                     if let Some(var_name) = &edge.identifier {
                                         vars.push(var_name.clone());
                                     }

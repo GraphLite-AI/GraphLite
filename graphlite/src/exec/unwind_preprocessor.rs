@@ -166,10 +166,8 @@ impl UnwindPreprocessor {
             let mut prices = vec![];
             for item in &items {
                 if let Value::Node(node_ref) = item {
-                    if let Some(price_value) = node_ref.properties.get("price") {
-                        if let Value::Number(price) = price_value {
-                            prices.push(*price);
-                        }
+                    if let Some(Value::Number(price)) = node_ref.properties.get("price") {
+                        prices.push(*price);
                     }
                 }
             }
@@ -245,13 +243,11 @@ impl UnwindPreprocessor {
         let text_after_paren = &match_clause[open_paren + 1..];
 
         // Find the variable name - it's the first word after (
-        let var_end = text_after_paren
-            .find(|c: char| c == ':' || c == ')' || c == ' ')
-            .ok_or_else(|| {
-                ExecutionError::RuntimeError(
-                    "Invalid MATCH clause: cannot find variable name".to_string(),
-                )
-            })?;
+        let var_end = text_after_paren.find([':', ')', ' ']).ok_or_else(|| {
+            ExecutionError::RuntimeError(
+                "Invalid MATCH clause: cannot find variable name".to_string(),
+            )
+        })?;
 
         let var_name = text_after_paren[..var_end].trim();
 

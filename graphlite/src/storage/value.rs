@@ -51,12 +51,12 @@ impl TemporalValue {
 
     /// Check if this value is valid at a specific point in time
     pub fn is_valid_at(&self, time: DateTime<Utc>) -> bool {
-        time >= self.valid_from && self.valid_to.map_or(true, |vt| time < vt)
+        time >= self.valid_from && self.valid_to.is_none_or(|vt| time < vt)
     }
 
     /// Check if this value is currently valid (valid_to is None or in the future)
     pub fn is_current(&self) -> bool {
-        self.valid_to.map_or(true, |vt| vt > Utc::now())
+        self.valid_to.is_none_or(|vt| vt > Utc::now())
     }
 }
 
@@ -100,6 +100,12 @@ pub struct PathValue {
     pub elements: Vec<PathElement>,
 }
 
+impl Default for PathValue {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PathValue {
     /// Create a new empty path
     pub fn new() -> Self {
@@ -132,7 +138,7 @@ impl PathValue {
     pub fn get_edges(&self) -> Vec<&str> {
         self.elements
             .iter()
-            .filter_map(|e| e.edge_id.as_ref().map(|id| id.as_str()))
+            .filter_map(|e| e.edge_id.as_deref())
             .collect()
     }
 }

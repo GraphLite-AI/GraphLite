@@ -153,7 +153,7 @@ impl ValidationContext {
     }
 
     fn register_builtin_functions(&mut self) {
-        use crate::ast::ast::TypeSpec as GqlType;
+        use crate::ast::TypeSpec as GqlType;
 
         // Temporal functions
         self.function_signatures.insert(
@@ -689,7 +689,7 @@ pub fn validate_query(
                 for var_decl in &var_def.variable_declarations {
                     if var_decl.variable_name.is_empty() {
                         errors.push(ValidationError {
-                            message: format!("Variable name cannot be empty in procedure body"),
+                            message: "Variable name cannot be empty in procedure body".to_string(),
                             location: Some(var_decl.location.clone()),
                             error_type: ValidationErrorType::Semantic,
                         });
@@ -705,10 +705,10 @@ pub fn validate_query(
                 validate_procedure_statement(&chained.statement, &ctx, &mut errors);
             }
         }
-        &Statement::IndexStatement(ref index_stmt) => {
+        Statement::IndexStatement(index_stmt) => {
             // Validate index DDL statements
             match index_stmt {
-                crate::ast::ast::IndexStatement::CreateIndex(create_idx) => {
+                crate::ast::IndexStatement::Create(create_idx) => {
                     // Validate index name is not empty
                     if create_idx.name.is_empty() {
                         errors.push(ValidationError {
@@ -726,7 +726,7 @@ pub fn validate_query(
                         });
                     }
                 }
-                crate::ast::ast::IndexStatement::DropIndex(drop_idx) => {
+                crate::ast::IndexStatement::Drop(drop_idx) => {
                     // Validate index name is not empty
                     if drop_idx.name.is_empty() {
                         errors.push(ValidationError {
@@ -736,7 +736,7 @@ pub fn validate_query(
                         });
                     }
                 }
-                crate::ast::ast::IndexStatement::AlterIndex(alter_idx) => {
+                crate::ast::IndexStatement::Alter(alter_idx) => {
                     // Validate index name is not empty
                     if alter_idx.name.is_empty() {
                         errors.push(ValidationError {
@@ -746,7 +746,7 @@ pub fn validate_query(
                         });
                     }
                 }
-                crate::ast::ast::IndexStatement::OptimizeIndex(optimize_idx) => {
+                crate::ast::IndexStatement::Optimize(optimize_idx) => {
                     // Validate index name is not empty
                     if optimize_idx.name.is_empty() {
                         errors.push(ValidationError {
@@ -756,7 +756,7 @@ pub fn validate_query(
                         });
                     }
                 }
-                crate::ast::ast::IndexStatement::ReindexIndex(reindex) => {
+                crate::ast::IndexStatement::Reindex(reindex) => {
                     // Validate index name is not empty
                     if reindex.name.is_empty() {
                         errors.push(ValidationError {
@@ -1177,8 +1177,7 @@ fn validate_expression(
             }
 
             // Validate label expression if it's a label predicate
-            if let crate::ast::ast::IsPredicateType::Label(ref label_expr) =
-                is_predicate.predicate_type
+            if let crate::ast::IsPredicateType::Label(ref label_expr) = is_predicate.predicate_type
             {
                 // Label expressions are already validated as part of their structure
                 // but we can add specific label validation here if needed
@@ -1217,11 +1216,11 @@ fn validate_expression(
 
 /// Validate CASE expressions
 fn validate_case_expression(
-    case_expr: &crate::ast::ast::CaseExpression,
+    case_expr: &crate::ast::CaseExpression,
     ctx: &mut ValidationContext,
     errors: &mut Vec<ValidationError>,
 ) {
-    use crate::ast::ast::CaseType;
+    use crate::ast::CaseType;
 
     match &case_expr.case_type {
         CaseType::Simple(simple_case) => {
@@ -1261,7 +1260,7 @@ fn validate_simple_case_expression(
     if simple_case.when_branches.is_empty() {
         errors.push(ValidationError {
             message: "CASE expression must have at least one WHEN branch".to_string(),
-            location: Some(crate::ast::ast::Location::default()),
+            location: Some(crate::ast::Location::default()),
             error_type: ValidationErrorType::Structural,
         });
     }
@@ -1290,7 +1289,7 @@ fn validate_searched_case_expression(
     if searched_case.when_branches.is_empty() {
         errors.push(ValidationError {
             message: "CASE expression must have at least one WHEN branch".to_string(),
-            location: Some(crate::ast::ast::Location::default()),
+            location: Some(crate::ast::Location::default()),
             error_type: ValidationErrorType::Structural,
         });
     }
@@ -1298,7 +1297,7 @@ fn validate_searched_case_expression(
 
 /// Validate PATH constructor expressions
 fn validate_path_constructor(
-    path_constructor: &crate::ast::ast::PathConstructor,
+    path_constructor: &crate::ast::PathConstructor,
     ctx: &mut ValidationContext,
     errors: &mut Vec<ValidationError>,
 ) {
@@ -1324,7 +1323,7 @@ fn validate_path_constructor(
                             "PATH constructor element must be a string or number type, got: {:?}",
                             element_type
                         ),
-                        location: Some(crate::ast::ast::Location::default()),
+                        location: Some(crate::ast::Location::default()),
                         error_type: ValidationErrorType::Type,
                     });
                 }
@@ -1333,7 +1332,7 @@ fn validate_path_constructor(
     }
 
     // PATH elements should follow node-edge-node pattern (optional validation)
-    if path_constructor.elements.len() % 2 == 0 && path_constructor.elements.len() > 2 {
+    if path_constructor.elements.len().is_multiple_of(2) && path_constructor.elements.len() > 2 {
         // Even number of elements > 2 might indicate incomplete path
         // This is a warning rather than an error since PATH[node, edge] might be valid
         // in some contexts
@@ -1342,7 +1341,7 @@ fn validate_path_constructor(
 
 /// Validate CAST expressions
 fn validate_cast_expression(
-    cast_expr: &crate::ast::ast::CastExpression,
+    cast_expr: &crate::ast::CastExpression,
     ctx: &mut ValidationContext,
     errors: &mut Vec<ValidationError>,
 ) {
@@ -1350,26 +1349,22 @@ fn validate_cast_expression(
     validate_expression(&cast_expr.expression, ctx, errors);
 
     // Check if the cast is valid (basic validation - runtime will handle detailed conversion)
-    if let Ok(source_type) = infer_expression_type(&cast_expr.expression, ctx) {
+    if let Ok(_source_type) = infer_expression_type(&cast_expr.expression, ctx) {
         // Check for obviously invalid casts
-        match (&source_type, &cast_expr.target_type) {
-            // Allow most casts - runtime will handle specifics
-            // Add specific validation rules here if needed
-            _ => {} // Most casts are allowed for now
-        }
+        {}
     }
 
     // Validate that the target type is well-formed
     match &cast_expr.target_type {
-        GqlType::String { max_length } => {
-            if let Some(len) = max_length {
-                if *len == 0 {
-                    errors.push(ValidationError {
-                        message: "String type cannot have max_length of 0".to_string(),
-                        location: Some(crate::ast::ast::Location::default()),
-                        error_type: ValidationErrorType::Type,
-                    });
-                }
+        GqlType::String {
+            max_length: Some(len),
+        } => {
+            if *len == 0 {
+                errors.push(ValidationError {
+                    message: "String type cannot have max_length of 0".to_string(),
+                    location: Some(crate::ast::Location::default()),
+                    error_type: ValidationErrorType::Type,
+                });
             }
         }
         GqlType::Decimal { precision, scale } => {
@@ -1377,7 +1372,7 @@ fn validate_cast_expression(
                 if *s > *p {
                     errors.push(ValidationError {
                         message: "DECIMAL scale cannot be greater than precision".to_string(),
-                        location: Some(crate::ast::ast::Location::default()),
+                        location: Some(crate::ast::Location::default()),
                         error_type: ValidationErrorType::Type,
                     });
                 }
@@ -1475,7 +1470,7 @@ fn infer_expression_type(
         }
         Expression::Binary(binary) => {
             // For binary expressions, infer type based on operator and operands
-            use crate::ast::ast::Operator;
+            use crate::ast::Operator;
             match &binary.operator {
                 // Arithmetic operators return numeric types
                 Operator::Plus
@@ -1828,7 +1823,7 @@ fn validate_function_call(
         }
 
         // Validate argument types (simplified - in real implementation, infer types)
-        for (_i, arg) in func_call.arguments.iter().enumerate() {
+        for arg in func_call.arguments.iter() {
             validate_expression(arg, ctx, errors);
         }
     } else {
@@ -2288,7 +2283,7 @@ fn extract_variable_references(
             }
         }
         Expression::Case(case_expr) => match &case_expr.case_type {
-            crate::ast::ast::CaseType::Simple(simple) => {
+            crate::ast::CaseType::Simple(simple) => {
                 extract_variable_references(&simple.test_expression, variables);
                 for branch in &simple.when_branches {
                     for when_val in &branch.when_values {
@@ -2300,7 +2295,7 @@ fn extract_variable_references(
                     extract_variable_references(else_expr, variables);
                 }
             }
-            crate::ast::ast::CaseType::Searched(searched) => {
+            crate::ast::CaseType::Searched(searched) => {
                 for branch in &searched.when_branches {
                     extract_variable_references(&branch.condition, variables);
                     extract_variable_references(&branch.then_expression, variables);

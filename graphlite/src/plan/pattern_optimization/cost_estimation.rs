@@ -6,7 +6,7 @@
 //! This module provides cost estimation functionality for different pattern execution strategies.
 //! It helps the query planner choose between path traversal, joins, and Cartesian products.
 
-use crate::ast::ast::PathPattern;
+use crate::ast::PathPattern;
 use crate::plan::pattern_optimization::pattern_analysis::{
     JoinStep, LinearPath, PatternPlanStrategy,
 };
@@ -18,7 +18,7 @@ use std::collections::HashMap;
 /// See ROADMAP.md: "Pattern Optimization System"
 /// Target: v0.3.0
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct GraphStatistics {
     /// Number of nodes per label
     pub node_counts: HashMap<String, u64>,
@@ -28,17 +28,6 @@ pub struct GraphStatistics {
     pub avg_relationships_per_node: HashMap<String, f64>,
     /// Selectivity estimates for common patterns
     pub pattern_selectivity: HashMap<String, f64>,
-}
-
-impl Default for GraphStatistics {
-    fn default() -> Self {
-        Self {
-            node_counts: HashMap::new(),
-            relationship_counts: HashMap::new(),
-            avg_relationships_per_node: HashMap::new(),
-            pattern_selectivity: HashMap::new(),
-        }
-    }
 }
 
 /// Cost estimates for different execution strategies
@@ -399,7 +388,7 @@ mod tests {
         let mut estimator = PlanCostEstimator::new(stats);
 
         // Test with a Cartesian product strategy (simpler to create)
-        use crate::ast::ast::{Location, PathPattern};
+        use crate::ast::{Location, PathPattern};
 
         let pattern = PathPattern {
             assignment: None,

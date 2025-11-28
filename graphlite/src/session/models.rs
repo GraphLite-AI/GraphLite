@@ -397,8 +397,6 @@ impl Session {
     /// Create or get a graph by name
     #[allow(dead_code)] // ROADMAP v0.2.0 - Session management for multi-user support (see ROADMAP.md §2)
     pub fn get_or_create_graph(&mut self, name: &str) -> &mut GraphCache {
-        self.graphs
-            .entry(name.to_string())
-            .or_insert_with(GraphCache::new)
+        self.graphs.entry(name.to_string()).or_default()
     }
 }

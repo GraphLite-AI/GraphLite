@@ -282,7 +282,7 @@ fn parse_data_type(tokens: &[Token]) -> IResult<&[Token], DataType> {
         // TIMESTAMP type
         map(tag_identifier("TIMESTAMP"), |_| DataType::Timestamp),
         // UUID type
-        map(tag_identifier("UUID"), |_| DataType::UUID),
+        map(tag_identifier("UUID"), |_| DataType::Uuid),
         // Array type: ARRAY<ElementType>
         map(
             preceded(

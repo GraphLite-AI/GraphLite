@@ -1,8 +1,8 @@
 // Copyright (c) 2024-2025 DeepGraph Inc.
 // SPDX-License-Identifier: Apache-2.0
 //
-use crate::ast::ast::CatalogPath;
-use crate::ast::ast::TruncateGraphStatement;
+use crate::ast::CatalogPath;
+use crate::ast::TruncateGraphStatement;
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::{CatalogOperation, EntityType};
 use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
@@ -45,7 +45,7 @@ impl DDLStatementExecutor for TruncateGraphExecutor {
     ) -> Result<(String, usize), ExecutionError> {
         let catalog_path = CatalogPath::new(
             self.statement.graph_path.segments.clone(),
-            crate::ast::ast::Location {
+            crate::ast::Location {
                 line: 0,
                 column: 0,
                 offset: 0,
@@ -102,9 +102,9 @@ impl DDLStatementExecutor for TruncateGraphExecutor {
                             full_path, message
                         )))
                     }
-                    _ => Err(ExecutionError::CatalogError(format!(
-                        "Unexpected response from graph_metadata catalog"
-                    ))),
+                    _ => Err(ExecutionError::CatalogError(
+                        "Unexpected response from graph_metadata catalog".to_string(),
+                    )),
                 }
             }
             Err(e) => Err(ExecutionError::CatalogError(format!(

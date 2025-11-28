@@ -238,15 +238,13 @@ impl ExecutionContext {
         self.current_transaction = Some(transaction_id);
     }
 
-    /// Start tracking a new query, creating query metadata
-
     /// Evaluate a simple expression (literals and function calls) for INSERT/SET operations
     /// This is a lightweight evaluator for property expressions that don't require full row context
     pub fn evaluate_simple_expression(
         &self,
-        expr: &crate::ast::ast::Expression,
+        expr: &crate::ast::Expression,
     ) -> Result<Value, crate::exec::error::ExecutionError> {
-        use crate::ast::ast::Expression;
+        use crate::ast::Expression;
         use crate::exec::result::Row;
         use crate::functions::FunctionContext;
 
@@ -322,22 +320,21 @@ impl ExecutionContext {
     }
 
     /// Convert AST literal to storage value
-    fn literal_to_value(literal: &crate::ast::ast::Literal) -> Value {
+    fn literal_to_value(literal: &crate::ast::Literal) -> Value {
         match literal {
-            crate::ast::ast::Literal::String(s) => Value::String(s.clone()),
-            crate::ast::ast::Literal::Integer(i) => Value::Number(*i as f64),
-            crate::ast::ast::Literal::Float(f) => Value::Number(*f),
-            crate::ast::ast::Literal::Boolean(b) => Value::Boolean(*b),
-            crate::ast::ast::Literal::Null => Value::Null,
-            crate::ast::ast::Literal::DateTime(dt) => Value::String(dt.clone()),
-            crate::ast::ast::Literal::Duration(dur) => Value::String(dur.clone()),
-            crate::ast::ast::Literal::TimeWindow(tw) => Value::String(tw.clone()),
-            crate::ast::ast::Literal::Vector(vec) => {
+            crate::ast::Literal::String(s) => Value::String(s.clone()),
+            crate::ast::Literal::Integer(i) => Value::Number(*i as f64),
+            crate::ast::Literal::Float(f) => Value::Number(*f),
+            crate::ast::Literal::Boolean(b) => Value::Boolean(*b),
+            crate::ast::Literal::Null => Value::Null,
+            crate::ast::Literal::DateTime(dt) => Value::String(dt.clone()),
+            crate::ast::Literal::Duration(dur) => Value::String(dur.clone()),
+            crate::ast::Literal::TimeWindow(tw) => Value::String(tw.clone()),
+            crate::ast::Literal::Vector(vec) => {
                 Value::Vector(vec.iter().map(|&f| f as f32).collect())
             }
-            crate::ast::ast::Literal::List(list) => {
-                let converted: Vec<Value> =
-                    list.iter().map(|lit| Self::literal_to_value(lit)).collect();
+            crate::ast::Literal::List(list) => {
+                let converted: Vec<Value> = list.iter().map(Self::literal_to_value).collect();
                 Value::List(converted)
             }
         }

@@ -2,6 +2,16 @@
 
 Get GraphLite running and execute your first graph queries in **5 minutes**!
 
+## Choose Your Path
+
+**For Rust Applications:**
+- **[Using GraphLite as a Crate](Using%20GraphLite%20as%20a%20Crate.md)** - Embed GraphLite in your app (simpler, faster setup)
+
+**For CLI Usage:**
+- Continue below for interactive console and development
+
+---
+
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
@@ -16,19 +26,41 @@ Get GraphLite running and execute your first graph queries in **5 minutes**!
 ## Prerequisites
 
 **Required:**
+
 - **Rust 1.70 or later** - Install from [rustup.rs](https://rustup.rs/)
-  ```bash
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-  ```
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
 
 **Optional:**
+
 - Git - For cloning the repository
 
 ---
 
 ## Installation
 
-### Option 1: Build from Source (Recommended)
+This section covers installing the GraphLite CLI tool. If you want to use GraphLite as a library in your Rust application, see **[Using GraphLite as a Crate](Using%20GraphLite%20as%20a%20Crate.md)** instead.
+
+### Option 1: Install from crates.io (Easiest)
+
+Install the GraphLite CLI directly from crates.io:
+
+```bash
+cargo install graphlite-cli
+```
+
+**Install time**: ~2-5 minutes on first installation
+
+After installation, the `graphlite` binary will be available in your PATH (usually `~/.cargo/bin/graphlite`).
+
+**Benefits:**
+- No need to clone the repository
+- Automatic PATH setup
+- Easy updates with `cargo install graphlite-cli --force`
+
+### Option 2: Build from Source (For Development)
 
 ```bash
 # Clone the repository
@@ -43,7 +75,7 @@ cargo build --release
 
 After building, the binary will be available at `target/release/graphlite`.
 
-### Option 2: Using the Build Script
+### Option 3: Using the Build Script
 
 GraphLite includes a comprehensive build script that simplifies the build process:
 
@@ -59,20 +91,19 @@ GraphLite includes a comprehensive build script that simplifies the build proces
 
 # Build and run tests to verify installation
 ./scripts/build_all.sh --release --test
-
-# Show help
-./scripts/build_all.sh --help
 ```
 
 **Benefits of the build script**:
-- ✅ Automatically detects and adds Rust/Cargo to PATH if needed
-- ✅ Release builds are optimized for production use (significantly faster execution)
-- ✅ Builds both the library and CLI binary in one command
-- ✅ Optional clean build support (`--clean` flag)
-- ✅ Optional test execution after build (`--test` flag)
-- ✅ Colored output with build summary and next steps
+
+- Automatically detects and adds Rust/Cargo to PATH if needed
+- Release builds are optimized for production use (significantly faster execution)
+- Builds both the library and CLI binary in one command
+- Optional clean build support (`--clean` flag)
+- Optional test execution after build (`--test` flag)
+- Colored output with build summary and next steps
 
 **Build output locations**:
+
 - **Debug mode**: `target/debug/libgraphlite.rlib` and `target/debug/graphlite`
 - **Release mode**: `target/release/libgraphlite.rlib` and `target/release/graphlite`
 
@@ -83,25 +114,27 @@ GraphLite includes a comprehensive build script that simplifies the build proces
 Create a new GraphLite database with an admin user:
 
 ```bash
-# If installed globally
+# If installed via 'cargo install graphlite-cli' (Option 1)
 graphlite install --path ./my_db --admin-user admin --admin-password secret
 
-# Or run from build directory
+# If built from source (Options 2-3)
 ./target/release/graphlite install --path ./my_db --admin-user admin --admin-password secret
 ```
 
 **What this does:**
-- ✅ Creates the database files in `./my_db` directory
-- ✅ Sets up the admin user with the specified password
-- ✅ Creates default admin and user roles
-- ✅ Initializes the default schema
+
+- Creates the database files in `./my_db` directory
+- Sets up the admin user with the specified password
+- Creates default admin and user roles
+- Initializes the default schema
 
 **Expected output:**
-```
-✅ Database installed successfully at ./my_db
-✅ Admin user 'admin' created
-✅ Default roles created: admin, user
-✅ Default schema initialized
+
+```text
+Database installed successfully at ./my_db
+Admin user 'admin' created
+Default roles created: admin, user
+Default schema initialized
 ```
 
 ---
@@ -111,15 +144,16 @@ graphlite install --path ./my_db --admin-user admin --admin-password secret
 Launch the interactive GraphLite console:
 
 ```bash
-# If installed globally
+# If installed via 'cargo install graphlite-cli' (Option 1)
 graphlite gql --path ./my_db -u admin -p secret
 
-# Or run from build directory
+# If built from source (Options 2-3)
 ./target/release/graphlite gql --path ./my_db -u admin -p secret
 ```
 
 **You should see:**
-```
+
+```text
 GraphLite v0.1.0 - ISO GQL Interactive Console
 Connected to: ./my_db
 User: admin
@@ -155,10 +189,10 @@ SESSION SET GRAPH /social/network;
 ### Step 2: Insert Some Data
 
 ```gql
--- Create people
-INSERT (:Person {name: 'Alice', age: 30, city: 'New York'});
-INSERT (:Person {name: 'Bob', age: 25, city: 'San Francisco'});
-INSERT (:Person {name: 'Carol', age: 28, city: 'Chicago'});
+-- Create people (multiple nodes in one INSERT statement)
+INSERT (:Person {name: 'Alice', age: 30, city: 'New York'}),
+       (:Person {name: 'Bob', age: 25, city: 'San Francisco'}),
+       (:Person {name: 'Carol', age: 28, city: 'Chicago'});
 
 -- Create friendships
 MATCH (alice:Person {name: 'Alice'}), (bob:Person {name: 'Bob'})
@@ -179,7 +213,8 @@ RETURN p.name, p.age, p.city;
 ```
 
 **Expected output:**
-```
+
+```text
 +-------+-----+---------------+
 | name  | age | city          |
 +-------+-----+---------------+
@@ -197,7 +232,8 @@ RETURN friend.name, friend.city;
 ```
 
 **Expected output:**
-```
+
+```text
 +------+---------------+
 | name | city          |
 +------+---------------+
@@ -208,13 +244,13 @@ RETURN friend.name, friend.city;
 
 ```gql
 -- Find friends of friends (2-hop path)
-MATCH (p:Person {name: 'Alice'})-[:KNOWS]->(friend)
-NEXT MATCH (friend)-[:KNOWS]->(fof)
+MATCH (p:Person {name: 'Alice'})-[:KNOWS]->(friend)-[:KNOWS]->(fof)
 RETURN fof.name AS friend_of_friend;
 ```
 
 **Expected output:**
-```
+
+```text
 +------------------+
 | friend_of_friend |
 +------------------+
@@ -234,7 +270,8 @@ ORDER BY population DESC;
 ```
 
 **Expected output:**
-```
+
+```text
 +---------------+------------+
 | city          | population |
 +---------------+------------+
@@ -250,6 +287,8 @@ ORDER BY population DESC;
 ## CLI Quick Reference
 
 ### Essential Commands
+
+**Note:** Replace `graphlite` with `./target/release/graphlite` if you built from source.
 
 ```bash
 # Show help
@@ -275,6 +314,7 @@ graphlite --log-level debug gql --path ./db -u admin -p pwd
 ### Global Options
 
 Available for all commands:
+
 - `-u, --user <USER>` - Username for authentication
 - `-p, --password <PASSWORD>` - Password for authentication
 - `-l, --log-level <LEVEL>` - Set log level (error, warn, info, debug, trace, off)
@@ -289,6 +329,7 @@ Available for all commands:
 ### "Cargo not found" Error
 
 **Solution**: Make sure Rust is installed and in your PATH
+
 ```bash
 # Install Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -300,6 +341,7 @@ source $HOME/.cargo/env
 ### Build Fails with "linker error"
 
 **Solution**: Install build essentials
+
 ```bash
 # Ubuntu/Debian
 sudo apt-get install build-essential
@@ -311,43 +353,57 @@ xcode-select --install
 ### Database Already Exists Error
 
 **Solution**: Remove existing database or use different path
+
 ```bash
 # Remove existing database
 rm -rf ./my_db
 
-# Or use different path
+# Or use different path (adjust command based on installation method)
 graphlite install --path ./new_db --admin-user admin --admin-password secret
+# OR
+./target/release/graphlite install --path ./new_db --admin-user admin --admin-password secret
 ```
 
 ---
 
 ## Next Steps
 
+### Embed GraphLite in Your Application
+
+**Using GraphLite as a Crate (Recommended):**
+
+**[Using GraphLite as a Crate](Using%20GraphLite%20as%20a%20Crate.md)** - Complete integration guide:
+- Add GraphLite to your Rust project with `cargo add graphlite`
+- No cloning or building required
+- SDK vs Core Library comparison
+- Complete working examples
+
 ### Learn More About GQL
 
-📚 **[Getting Started With GQL.md](docs/Getting%20Started%20With%20GQL.md)** - Comprehensive GQL query language tutorial covering:
+**[Getting Started With GQL.md](Getting%20Started%20With%20GQL.md)** - Comprehensive GQL query language tutorial covering:
 - Pattern matching and graph traversal
 - Aggregations (GROUP BY, HAVING)
 - String and date/time functions
 - ORDER BY and LIMIT
 - Advanced query examples
 
-### Integrate GraphLite in Your Application
+### Code Examples
 
 **For Rust Applications:**
 
-🎯 **[SDK Examples](graphlite-sdk/examples/)** - Recommended high-level API
+**[SDK Examples](/graphlite-sdk/examples/)** - Recommended high-level API
 - `basic_usage.rs` - Complete SDK walkthrough
 - Transaction management
 - Query builder API
 - Typed result deserialization
 
-🔧 **[Core Library Examples](examples-core/)** - Advanced low-level usage
+**[Core Library Examples](/examples-core/)** - Advanced low-level usage
 - Direct QueryCoordinator API
 - Fine-grained control
 - Advanced features
 
 **SDK Quick Example:**
+
 ```rust
 use graphlite_sdk::GraphLite;
 
@@ -370,27 +426,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### Advanced Configuration
-
-⚙️ **[Configuration Guide.md](docs/Configuration%20Guide.md)** - Advanced topics:
-- Logging configuration (RUST_LOG, CLI flags)
-- Performance tuning
-- Cache configuration
-- Production deployment
-
 ### For Contributors
 
-👥 **[Contribution Guide.md](docs/Contribution%20Guide.md)** - How to contribute:
+**[Contribution Guide.md](/CONTRIBUTING.md)** - How to contribute:
 - Development setup
-- Testing guidelines (see also [Testing Guide.md](docs/Testing%20Guide.md))
+- Testing guidelines
 - Code style and quality standards
 - Pull request process
-
-🧪 **[Testing Guide.md](docs/Testing%20Guide.md)** - Comprehensive testing:
-- Running tests (single-threaded mode)
-- Test categories
-- Writing tests
-- Test runner scripts
 
 ---
 
@@ -399,8 +441,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Data Insertion
 
 ```gql
--- Insert node
+-- Insert single node
 INSERT (:Label {property: 'value'});
+
+-- Insert multiple nodes (comma-separated)
+INSERT (:Person {name: 'Alice'}),
+       (:Person {name: 'Bob'}),
+       (:Person {name: 'Carol'});
 
 -- Insert relationship
 MATCH (a:Label1 {id: 1}), (b:Label2 {id: 2})
@@ -444,9 +491,8 @@ HAVING AVG(n.age) > 30;
 ### Multi-hop Queries
 
 ```gql
--- 2-hop path with NEXT
-MATCH (a:Person {name: 'Alice'})-[:KNOWS]->(b)
-NEXT MATCH (b)-[:KNOWS]->(c)
+-- 2-hop path (chained relationships)
+MATCH (a:Person {name: 'Alice'})-[:KNOWS]->(b)-[:KNOWS]->(c)
 RETURN c.name;
 ```
 
@@ -457,10 +503,10 @@ RETURN c.name;
 - **Documentation**: See links in [Next Steps](#next-steps) section above
 - **Issues**: Report bugs on [GitHub Issues](https://github.com/GraphLite-AI/GraphLite/issues)
 - **Questions**: Check existing issues or open a new one
-- **Contributing**: See [Contribution Guide.md](docs/Contribution%20Guide.md)
+- **Contributing**: See [Contribution Guide.md](/CONTRIBUTING.md)
 
 ---
 
-**Congratulations! You now have GraphLite up and running! 🎉**
+**Congratulations! You now have GraphLite up and running!**
 
-Start exploring graph queries with [Getting Started With GQL.md](docs/Getting%20Started%20With%20GQL.md) or integrate GraphLite into your application with our [SDK examples](graphlite-sdk/examples/).
+Start exploring graph queries with [Getting Started With GQL.md](Getting%20Started%20With%20GQL.md) or integrate GraphLite into your application with our [SDK examples](/graphlite-sdk/examples/).

@@ -1,5 +1,5 @@
 [package]
-name = "graphlite-sdk"
+name = "graphlite-rust-sdk"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

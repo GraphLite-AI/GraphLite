@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 DeepGraph Inc.
 // SPDX-License-Identifier: Apache-2.0
 //
-use crate::ast::ast::DropGraphStatement;
+use crate::ast::DropGraphStatement;
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::operations::{CatalogOperation, EntityType};
 use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
@@ -156,9 +156,9 @@ impl DDLStatementExecutor for DropGraphExecutor {
                             full_path, message
                         )))
                     }
-                    _ => Err(ExecutionError::CatalogError(format!(
-                        "Unexpected response from graph_metadata catalog"
-                    ))),
+                    _ => Err(ExecutionError::CatalogError(
+                        "Unexpected response from graph_metadata catalog".to_string(),
+                    )),
                 }
             }
             Err(e) => Err(ExecutionError::CatalogError(format!(

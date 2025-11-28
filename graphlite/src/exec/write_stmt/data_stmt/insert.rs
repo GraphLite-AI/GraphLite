@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use crate::ast::ast::{InsertStatement, PatternElement};
+use crate::ast::{InsertStatement, PatternElement};
 use crate::catalog::manager::CatalogManager;
 use crate::exec::write_stmt::data_stmt::DataStatementExecutor;
 use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
@@ -45,33 +45,32 @@ impl InsertExecutor {
     }
 
     /// Convert AST literal to storage value
-    fn literal_to_value(literal: &crate::ast::ast::Literal) -> Value {
+    fn literal_to_value(literal: &crate::ast::Literal) -> Value {
         match literal {
-            crate::ast::ast::Literal::String(s) => Value::String(s.clone()),
-            crate::ast::ast::Literal::Integer(i) => Value::Number(*i as f64),
-            crate::ast::ast::Literal::Float(f) => Value::Number(*f),
-            crate::ast::ast::Literal::Boolean(b) => Value::Boolean(*b),
-            crate::ast::ast::Literal::Null => Value::Null,
-            crate::ast::ast::Literal::DateTime(dt) => Value::String(dt.clone()),
-            crate::ast::ast::Literal::Duration(dur) => Value::String(dur.clone()),
-            crate::ast::ast::Literal::TimeWindow(tw) => Value::String(tw.clone()),
-            crate::ast::ast::Literal::Vector(vec) => {
+            crate::ast::Literal::String(s) => Value::String(s.clone()),
+            crate::ast::Literal::Integer(i) => Value::Number(*i as f64),
+            crate::ast::Literal::Float(f) => Value::Number(*f),
+            crate::ast::Literal::Boolean(b) => Value::Boolean(*b),
+            crate::ast::Literal::Null => Value::Null,
+            crate::ast::Literal::DateTime(dt) => Value::String(dt.clone()),
+            crate::ast::Literal::Duration(dur) => Value::String(dur.clone()),
+            crate::ast::Literal::TimeWindow(tw) => Value::String(tw.clone()),
+            crate::ast::Literal::Vector(vec) => {
                 Value::Vector(vec.iter().map(|&f| f as f32).collect())
             }
-            crate::ast::ast::Literal::List(list) => {
-                let converted: Vec<Value> =
-                    list.iter().map(|lit| Self::literal_to_value(lit)).collect();
+            crate::ast::Literal::List(list) => {
+                let converted: Vec<Value> = list.iter().map(Self::literal_to_value).collect();
                 Value::List(converted)
             }
         }
     }
 
     /// Extract properties from a property map
-    fn extract_properties(prop_map: &crate::ast::ast::PropertyMap) -> HashMap<String, Value> {
+    fn extract_properties(prop_map: &crate::ast::PropertyMap) -> HashMap<String, Value> {
         let mut properties = HashMap::new();
 
         for property in &prop_map.properties {
-            if let crate::ast::ast::Expression::Literal(literal) = &property.value {
+            if let crate::ast::Expression::Literal(literal) = &property.value {
                 properties.insert(property.key.clone(), Self::literal_to_value(literal));
             } else {
                 log::warn!(
@@ -263,7 +262,7 @@ impl DataStatementExecutor for InsertExecutor {
                 "INSERT processing pattern {} for nodes (pass 1)",
                 pattern_idx
             );
-            for (_i, element) in pattern.elements.iter().enumerate() {
+            for element in pattern.elements.iter() {
                 if let PatternElement::Node(node_pattern) = element {
                     // Check if this is a reference to an existing node
                     if let Some(ref user_identifier) = node_pattern.identifier {

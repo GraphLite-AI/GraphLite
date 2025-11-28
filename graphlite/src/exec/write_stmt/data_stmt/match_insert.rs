@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::ast::ast::{Expression, Literal, MatchInsertStatement, PatternElement};
+use crate::ast::{Expression, Literal, MatchInsertStatement, PatternElement};
 use crate::exec::with_clause_processor::WithClauseProcessor;
 use crate::exec::write_stmt::data_stmt::DataStatementExecutor;
 use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
@@ -38,8 +38,7 @@ impl MatchInsertExecutor {
             Literal::TimeWindow(tw) => Value::String(tw.clone()),
             Literal::Vector(vec) => Value::Vector(vec.iter().map(|&f| f as f32).collect()),
             Literal::List(list) => {
-                let converted: Vec<Value> =
-                    list.iter().map(|lit| Self::literal_to_value(lit)).collect();
+                let converted: Vec<Value> = list.iter().map(Self::literal_to_value).collect();
                 Value::List(converted)
             }
         }
@@ -48,7 +47,7 @@ impl MatchInsertExecutor {
     /// Match a path pattern (including relationships) and return all binding combinations
     fn match_path_pattern(
         graph: &GraphCache,
-        pattern: &crate::ast::ast::PathPattern,
+        pattern: &crate::ast::PathPattern,
     ) -> Result<Vec<HashMap<String, Node>>, ExecutionError> {
         let mut matches = Vec::new();
 
@@ -59,7 +58,7 @@ impl MatchInsertExecutor {
                 Some(PatternElement::Edge(edge_pattern)),
                 Some(PatternElement::Node(target_pattern)),
             ) = (
-                pattern.elements.get(0),
+                pattern.elements.first(),
                 pattern.elements.get(1),
                 pattern.elements.get(2),
             ) {
@@ -79,7 +78,7 @@ impl MatchInsertExecutor {
                         if let Some(ref prop_map) = edge_pattern.properties {
                             for property in &prop_map.properties {
                                 if let Expression::Literal(literal) = &property.value {
-                                    let expected_value = Self::literal_to_value(&literal);
+                                    let expected_value = Self::literal_to_value(literal);
                                     if edge.properties.get(&property.key) != Some(&expected_value) {
                                         return false;
                                     }
@@ -138,7 +137,7 @@ impl MatchInsertExecutor {
 
         // Fallback to single node pattern matching for simpler patterns
         if pattern.elements.len() == 1 {
-            if let Some(PatternElement::Node(node_pattern)) = pattern.elements.get(0) {
+            if let Some(PatternElement::Node(node_pattern)) = pattern.elements.first() {
                 if let Some(ref identifier) = node_pattern.identifier {
                     let matching_nodes: Vec<Node> = graph
                         .get_all_nodes()
@@ -160,7 +159,7 @@ impl MatchInsertExecutor {
     }
 
     /// Check if a node matches a node pattern
-    fn node_matches_pattern(node: &Node, node_pattern: &crate::ast::ast::Node) -> bool {
+    fn node_matches_pattern(node: &Node, node_pattern: &crate::ast::Node) -> bool {
         // Check if labels match
         if !node_pattern.labels.is_empty()
             && !node_pattern
@@ -175,7 +174,7 @@ impl MatchInsertExecutor {
         if let Some(ref prop_map) = node_pattern.properties {
             for property in &prop_map.properties {
                 if let Expression::Literal(literal) = &property.value {
-                    let expected_value = Self::literal_to_value(&literal);
+                    let expected_value = Self::literal_to_value(literal);
                     if node.properties.get(&property.key) != Some(&expected_value) {
                         return false;
                     }
@@ -233,7 +232,7 @@ impl MatchInsertExecutor {
     /// Evaluate WHERE clause against a variable combination
     fn evaluate_where_clause_on_combination(
         combination: &HashMap<String, Node>,
-        where_clause: &crate::ast::ast::WhereClause,
+        where_clause: &crate::ast::WhereClause,
     ) -> bool {
         Self::evaluate_where_expression_on_combination(combination, &where_clause.condition)
     }
@@ -241,40 +240,40 @@ impl MatchInsertExecutor {
     /// Evaluate WHERE expression against a variable combination
     fn evaluate_where_expression_on_combination(
         combination: &HashMap<String, Node>,
-        expr: &crate::ast::ast::Expression,
+        expr: &crate::ast::Expression,
     ) -> bool {
         match expr {
-            crate::ast::ast::Expression::Binary(binary_op) => {
+            crate::ast::Expression::Binary(binary_op) => {
                 let left_val =
                     Self::evaluate_expression_on_combination(combination, &binary_op.left);
                 let right_val =
                     Self::evaluate_expression_on_combination(combination, &binary_op.right);
 
                 match &binary_op.operator {
-                    crate::ast::ast::Operator::Equal => left_val == right_val,
-                    crate::ast::ast::Operator::NotEqual => left_val != right_val,
-                    crate::ast::ast::Operator::GreaterThan => {
+                    crate::ast::Operator::Equal => left_val == right_val,
+                    crate::ast::Operator::NotEqual => left_val != right_val,
+                    crate::ast::Operator::GreaterThan => {
                         if let (Value::Number(l), Value::Number(r)) = (&left_val, &right_val) {
                             l > r
                         } else {
                             false
                         }
                     }
-                    crate::ast::ast::Operator::LessThan => {
+                    crate::ast::Operator::LessThan => {
                         if let (Value::Number(l), Value::Number(r)) = (&left_val, &right_val) {
                             l < r
                         } else {
                             false
                         }
                     }
-                    crate::ast::ast::Operator::And => {
+                    crate::ast::Operator::And => {
                         Self::evaluate_where_expression_on_combination(combination, &binary_op.left)
                             && Self::evaluate_where_expression_on_combination(
                                 combination,
                                 &binary_op.right,
                             )
                     }
-                    crate::ast::ast::Operator::Or => {
+                    crate::ast::Operator::Or => {
                         Self::evaluate_where_expression_on_combination(combination, &binary_op.left)
                             || Self::evaluate_where_expression_on_combination(
                                 combination,
@@ -300,14 +299,14 @@ impl MatchInsertExecutor {
     /// Evaluate expression on combination to get value
     fn evaluate_expression_on_combination(
         combination: &HashMap<String, Node>,
-        expr: &crate::ast::ast::Expression,
+        expr: &crate::ast::Expression,
     ) -> Value {
         match expr {
-            crate::ast::ast::Expression::Variable(var) => combination
+            crate::ast::Expression::Variable(var) => combination
                 .get(&var.name)
                 .map(|node| Value::String(node.id.clone()))
                 .unwrap_or(Value::Null),
-            crate::ast::ast::Expression::PropertyAccess(prop_access) => {
+            crate::ast::Expression::PropertyAccess(prop_access) => {
                 log::debug!(
                     "INSERT PropertyAccess: Looking for {}.{} in combination with variables: {:?}",
                     prop_access.object,
@@ -340,7 +339,7 @@ impl MatchInsertExecutor {
                     Value::Null
                 }
             }
-            crate::ast::ast::Expression::Literal(literal) => Self::literal_to_value(&literal),
+            crate::ast::Expression::Literal(literal) => Self::literal_to_value(literal),
             _ => {
                 log::warn!("Unsupported expression type in combination evaluation");
                 Value::Null
@@ -350,7 +349,7 @@ impl MatchInsertExecutor {
 
     /// Extract properties with variable substitution
     fn extract_properties(
-        prop_map: &crate::ast::ast::PropertyMap,
+        prop_map: &crate::ast::PropertyMap,
         variable_bindings: &HashMap<String, Node>,
         context: &ExecutionContext,
     ) -> HashMap<String, Value> {
@@ -481,10 +480,7 @@ impl DataStatementExecutor for MatchInsertExecutor {
                             var_name,
                             node.id
                         );
-                        variable_candidates
-                            .entry(var_name)
-                            .or_insert_with(Vec::new)
-                            .push(node);
+                        variable_candidates.entry(var_name).or_default().push(node);
                     }
                 }
             } else {
@@ -527,7 +523,7 @@ impl DataStatementExecutor for MatchInsertExecutor {
                                         for property in &prop_map.properties {
                                             if let Expression::Literal(literal) = &property.value {
                                                 let expected_value =
-                                                    Self::literal_to_value(&literal);
+                                                    Self::literal_to_value(literal);
                                                 if node.properties.get(&property.key)
                                                     != Some(&expected_value)
                                                 {
@@ -843,7 +839,7 @@ impl DataStatementExecutor for MatchInsertExecutor {
         // Process each combination
         for mut variable_bindings in processed_combinations {
             // Step 2: Execute INSERT patterns - only insert edges, use matched nodes
-            for (_pattern_idx, pattern) in self.statement.insert_graph_patterns.iter().enumerate() {
+            for pattern in self.statement.insert_graph_patterns.iter() {
                 for (i, element) in pattern.elements.iter().enumerate() {
                     match element {
                         PatternElement::Node(node_pattern) => {
