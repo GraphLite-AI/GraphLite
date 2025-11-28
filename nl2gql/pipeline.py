@@ -22,8 +22,10 @@ from __future__ import annotations
 
 import argparse
 import os
+import random
 import sys
 import tempfile
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -154,6 +156,18 @@ def _clean_query_text(text: str) -> str:
     if stripped.endswith("```"):
         stripped = stripped[: stripped.rfind("```")]
     return stripped.strip()
+
+
+def _shuffle_schema_context(schema_context: str) -> str:
+    """Shuffle schema lines to reduce positional bias during validation."""
+
+    lines = schema_context.splitlines()
+    if len(lines) < 2:
+        return schema_context
+
+    shuffled = lines[:]
+    random.shuffle(shuffled)
+    return "\n".join(shuffled)
 
 
 # ---------------------------------------------------------------------------
@@ -348,15 +362,68 @@ def fix_isogql_syntax_with_model(
 def validate_logical_correctness(
     nl: str, schema_context: str, query: str, model: str = DEFAULT_OPENAI_MODEL_FIX
 ) -> Tuple[bool, Optional[str], Optional[Dict[str, Any]]]:
-    user = USER_VALIDATE_LOGIC_TEMPLATE.format(schema_context=schema_context, nl=nl, query=query)
-    result, usage = chat_complete(model, SYSTEM_VALIDATE_LOGIC, user, temperature=0.1, top_p=0.9)
+    temperatures = [0.0, 0.2, 0.4, 0.2, 0.0]
+    sample_results: List[Dict[str, Any]] = []
+    usage_totals = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    valid_votes = 0
+    invalid_reasons: List[str] = []
+    any_usage = False
 
-    verdict = result.strip().upper()
-    if verdict.startswith("VALID"):
-        return True, None, usage
-    if verdict.startswith("INVALID:"):
-        return False, verdict[len("INVALID:") :].strip(), usage
-    return False, f"Unexpected validation response: {verdict}", usage
+    for temp in temperatures:
+        shuffled_schema = _shuffle_schema_context(schema_context)
+        user = USER_VALIDATE_LOGIC_TEMPLATE.format(schema_context=shuffled_schema, nl=nl, query=query)
+        result, usage = chat_complete(model, SYSTEM_VALIDATE_LOGIC, user, temperature=temp, top_p=0.9)
+
+        verdict_raw = result.strip()
+        verdict_upper = verdict_raw.upper()
+        is_valid = False
+        reason: Optional[str] = None
+
+        if verdict_upper.startswith("VALID"):
+            is_valid = True
+            valid_votes += 1
+        elif verdict_upper.startswith("INVALID:"):
+            reason = verdict_raw[len("INVALID:") :].strip()
+            invalid_reasons.append(reason or "unspecified reason")
+        else:
+            reason = f"Unexpected validation response: {verdict_raw}"
+            invalid_reasons.append(reason)
+
+        sample_entry: Dict[str, Any] = {"temperature": temp, "verdict": "VALID" if is_valid else "INVALID"}
+        if reason:
+            sample_entry["reason"] = reason
+        sample_results.append(sample_entry)
+
+        if usage:
+            any_usage = True
+            usage_totals["prompt_tokens"] += usage.get("prompt_tokens", 0)
+            usage_totals["completion_tokens"] += usage.get("completion_tokens", 0)
+            usage_totals["total_tokens"] += usage.get("total_tokens", 0)
+
+    total_votes = len(temperatures)
+    majority_valid = valid_votes > total_votes // 2
+    usage_summary: Optional[Dict[str, Any]] = None
+    if any_usage or sample_results:
+        usage_summary = {
+            **usage_totals,
+            "samples": sample_results,
+            "valid_votes": valid_votes,
+            "total_votes": total_votes,
+        }
+
+    if majority_valid:
+        return True, None, usage_summary
+
+    reason_summary = (
+        f"Validator majority INVALID ({valid_votes}/{len(temperatures)} VALID)."
+        if invalid_reasons
+        else f"Validator consensus missing ({valid_votes}/{total_votes} VALID)."
+    )
+    if invalid_reasons:
+        top_reason, _ = Counter(invalid_reasons).most_common(1)[0]
+        reason_summary += f" Top reason: {top_reason}"
+
+    return False, reason_summary, usage_summary
 
 
 def generate_isogql(
@@ -453,6 +520,8 @@ def generate_isogql_with_models(
                 "query": query,
                 "valid": logic_valid,
                 "error": logic_error,
+                "valid_votes": (logic_usage or {}).get("valid_votes"),
+                "total_votes": (logic_usage or {}).get("total_votes"),
             }
         )
 
@@ -503,6 +572,8 @@ def generate_isogql_with_models(
                         "query": fixed_query,
                         "valid": logic_valid,
                         "error": logic_error,
+                        "valid_votes": (logic_usage or {}).get("valid_votes"),
+                        "total_votes": (logic_usage or {}).get("total_votes"),
                     }
                 )
 
@@ -603,7 +674,11 @@ def print_verbose_info(
                 block = "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"])
                 print(f"      ```gql\n      {block}\n      ```")
             elif action == "validated_logic":
-                prefix = "✓ LOGIC VALID" if valid else "✗ LOGIC INVALID"
+                vote_prefix = ""
+                if entry.get("valid_votes") is not None and entry.get("total_votes"):
+                    vote_prefix = f" ({entry['valid_votes']}/{entry['total_votes']} VALID)"
+
+                prefix = f"{'✓ LOGIC VALID' if valid else '✗ LOGIC INVALID'}{vote_prefix}"
                 note = ""
                 if syntax_status is False:
                     note = " (evaluated despite syntax failure)"
