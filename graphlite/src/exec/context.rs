@@ -4,17 +4,19 @@
 //! Execution context for variable management and session lookup
 
 use crate::functions::FunctionRegistry;
-use crate::session::manager::get_session;
 use crate::session::models::{Session, UserSession};
+use crate::session::SessionProvider;
 use crate::storage::{StorageManager, Value};
 use crate::types::GqlType;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ExecutionContext {
     /// Session ID for global session lookup
     pub session_id: String,
+    /// Session provider for session management
+    pub session_provider: Option<Arc<dyn SessionProvider>>,
     /// Local query variables
     pub variables: HashMap<String, Value>,
     /// Type information for variables
@@ -37,11 +39,31 @@ pub struct ExecutionContext {
     pub warnings: Vec<String>,
 }
 
+// Manual Debug implementation to avoid SessionProvider Debug requirement
+impl std::fmt::Debug for ExecutionContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExecutionContext")
+            .field("session_id", &self.session_id)
+            .field("session_provider", &self.session_provider.as_ref().map(|_| "Some(SessionProvider)"))
+            .field("variables", &self.variables)
+            .field("variable_types", &self.variable_types)
+            .field("schema_types", &self.schema_types)
+            .field("current_graph", &self.current_graph)
+            .field("storage_manager", &self.storage_manager)
+            .field("function_registry", &self.function_registry)
+            .field("current_user", &self.current_user)
+            .field("current_transaction", &self.current_transaction)
+            .field("warnings", &self.warnings)
+            .finish()
+    }
+}
+
 impl ExecutionContext {
     /// Create a new execution context with a session ID
     pub fn new(session_id: String, storage_manager: Arc<StorageManager>) -> Self {
         Self {
             session_id,
+            session_provider: None,
             variables: HashMap::new(),
             variable_types: HashMap::new(),
             schema_types: HashMap::new(),
@@ -52,6 +74,12 @@ impl ExecutionContext {
             current_transaction: None,
             warnings: Vec::new(),
         }
+    }
+
+    /// Set the session provider
+    pub fn with_session_provider(mut self, session_provider: Arc<dyn SessionProvider>) -> Self {
+        self.session_provider = Some(session_provider);
+        self
     }
 
     /// Add a warning to the execution context
@@ -76,9 +104,9 @@ impl ExecutionContext {
         self
     }
 
-    /// Get the user session from global session manager
+    /// Get the user session from session provider
     pub fn get_session(&self) -> Option<Arc<std::sync::RwLock<UserSession>>> {
-        get_session(&self.session_id)
+        self.session_provider.as_ref()?.get_session(&self.session_id)
     }
 
     /// Get a variable value, checking session parameters first, then local variables

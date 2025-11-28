@@ -2,29 +2,22 @@
 //!
 //! Tests cache clearing (gql.clear_cache) and cache statistics (gql.cache_stats)
 //! Also tests data persistence across cache clears and sessions
+//!
+//! Note: All tests use isolated fixtures to avoid race conditions when running in parallel
 
 #[path = "testutils/mod.rs"]
 mod testutils;
 
 use graphlite::Value;
-use std::sync::OnceLock;
 use testutils::test_fixture::TestFixture;
-
-static SHARED_FIXTURE: OnceLock<TestFixture> = OnceLock::new();
-
-fn get_shared_fixture() -> &'static TestFixture {
-    SHARED_FIXTURE.get_or_init(|| {
-        log::debug!("🚀 Cache Tests: Initializing shared database with fraud data for performance optimization...");
-        TestFixture::with_fraud_data()
-            .expect("Failed to create shared fraud data fixture")
-    })
-}
 
 #[test]
 fn test_cache_clearing_procedure() {
     log::debug!("🧪 Testing cache clearing procedure");
 
-    let fixture = get_shared_fixture();
+    // Use isolated fixture instead of shared one to avoid cache clearing interference
+    // when tests run in parallel
+    let fixture = TestFixture::new().expect("Failed to create test fixture");
 
     // Create test graph - use a completely separate schema to avoid conflicts
     let unique_id = std::time::SystemTime::now()
@@ -170,9 +163,10 @@ fn test_cache_clearing_procedure() {
 fn test_data_persistence_across_sessions() {
     log::debug!("🔄 Testing data persistence across sessions");
 
+    // Use isolated fixture to avoid interference from parallel tests
     // Session 1: Create data
     log::debug!("  📝 Session 1: Creating data...");
-    let fixture1 = get_shared_fixture();
+    let fixture1 = TestFixture::new().expect("Failed to create test fixture");
 
     let unique_id = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -235,20 +229,20 @@ fn test_data_persistence_across_sessions() {
 
     log::debug!("  📊 Session 1 complete - data persisted through cache clear");
 
-    // Session 2: Access same data (simulating new session)
+    // Session 2: Access same data (simulating new session by setting graph again)
+    // Note: Using same fixture (not truly separate session, but tests persistence within same instance)
     log::debug!("  🔄 Session 2: Accessing persisted data...");
-    let fixture2 = get_shared_fixture();
 
     // Set same graph in session 2 (data should be persisted)
-    fixture2
+    fixture1
         .query(&format!("SESSION SET SCHEMA {}", test_schema))
         .unwrap();
-    fixture2
+    fixture1
         .query(&format!("SESSION SET GRAPH {}", test_graph))
         .unwrap();
 
     // Query data in session 2 - should find persisted data
-    let session2_result = fixture2
+    let session2_result = fixture1
         .query("MATCH (p:Person) RETURN p.id, p.name, p.age ORDER BY p.id")
         .unwrap();
 
@@ -287,10 +281,10 @@ fn test_data_persistence_across_sessions() {
     }
 
     // Test relationships persist across sessions
-    let session2_rel_result = fixture2
+    let session2_rel_result = fixture1
         .query(
-            "MATCH (p:Person)-[w:WORKS_FOR]->(c:Company) 
-         RETURN p.name, w.position, w.salary, c.name 
+            "MATCH (p:Person)-[w:WORKS_FOR]->(c:Company)
+         RETURN p.name, w.position, w.salary, c.name
          ORDER BY p.name",
         )
         .unwrap();
@@ -313,18 +307,18 @@ fn test_data_persistence_across_sessions() {
 
     // Clear cache in session 2
     log::debug!("  🧹 Session 2: Clearing cache...");
-    fixture2.query("CALL gql.clear_cache()").unwrap();
+    fixture1.query("CALL gql.clear_cache()").unwrap();
 
     // Add new data in session 2
     log::debug!("  ➕ Session 2: Adding new data...");
-    fixture2.assert_query_succeeds("INSERT (:Person {id: 3, name: 'Charlie', age: 28})");
-    fixture2.assert_query_succeeds(
+    fixture1.assert_query_succeeds("INSERT (:Person {id: 3, name: 'Charlie', age: 28})");
+    fixture1.assert_query_succeeds(
         "MATCH (person3:Person {name: 'Charlie'}), (company:Company {name: 'TechCorp'})
          INSERT (person3)-[:WORKS_FOR {position: 'Manager', salary: 95000}]->(company)",
     );
 
     // Verify all 3 people exist in session 2
-    let session2_final = fixture2
+    let session2_final = fixture1
         .query("MATCH (p:Person) RETURN p.id, p.name ORDER BY p.id")
         .unwrap();
     assert_eq!(
@@ -337,16 +331,15 @@ fn test_data_persistence_across_sessions() {
 
     // Session 3: Verify session 2's additions persisted
     log::debug!("  🔍 Session 3: Verifying session 2's additions persisted...");
-    let fixture3 = get_shared_fixture();
 
-    fixture3
+    fixture1
         .query(&format!("SESSION SET SCHEMA {}", test_schema))
         .unwrap();
-    fixture3
+    fixture1
         .query(&format!("SESSION SET GRAPH {}", test_graph))
         .unwrap();
 
-    let session3_result = fixture3
+    let session3_result = fixture1
         .query("MATCH (p:Person) RETURN p.id, p.name ORDER BY p.id")
         .unwrap();
 
@@ -377,7 +370,8 @@ fn test_data_persistence_across_sessions() {
 fn test_cache_stats_procedure() {
     log::debug!("📊 Testing cache stats procedure");
 
-    let fixture = get_shared_fixture();
+    // Use isolated fixture to avoid interference from cache clearing in parallel tests
+    let fixture = TestFixture::new().expect("Failed to create test fixture");
 
     // Create test graph - use separate schema to avoid conflicts
     let unique_id = std::time::SystemTime::now()
@@ -480,7 +474,8 @@ fn test_cache_stats_procedure() {
 fn test_is_valid_procedure() {
     log::debug!("🔍 Testing system procedure validation");
 
-    let fixture = get_shared_fixture();
+    // Use isolated fixture for consistency (this test doesn't need fraud data)
+    let fixture = TestFixture::new().expect("Failed to create test fixture");
 
     // Test all valid procedures - they should all execute without "not found" errors
     let valid_procedures = vec![
