@@ -5,24 +5,18 @@
 //! - User creation, listing, and deletion
 //! - System procedure calls for security catalog introspection
 //! - Error handling and edge cases
+//!
+//! Note: All tests use isolated fixtures to avoid race conditions when running in parallel
 
 #[path = "testutils/mod.rs"]
 mod testutils;
 
 use graphlite::Value;
-use std::sync::OnceLock;
 use testutils::test_fixture::TestFixture;
-
-static SECURITY_FIXTURE: OnceLock<TestFixture> = OnceLock::new();
-
-fn get_security_fixture() -> &'static TestFixture {
-    SECURITY_FIXTURE
-        .get_or_init(|| TestFixture::empty().expect("Failed to create security test fixture"))
-}
 
 #[test]
 fn test_role_lifecycle() {
-    let fixture = get_security_fixture();
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Test CREATE ROLE
     fixture.assert_query_succeeds("CREATE ROLE 'data_scientist'");
@@ -53,7 +47,7 @@ fn test_role_lifecycle() {
 
 #[test]
 fn test_role_listing() {
-    let fixture = get_security_fixture();
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Create some test roles
     let if_not_exists_result = fixture.query("CREATE ROLE IF NOT EXISTS 'test_role_1'");
@@ -108,7 +102,7 @@ fn test_role_listing() {
 
 #[test]
 fn test_user_lifecycle() {
-    let fixture = get_security_fixture();
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Test CREATE USER
     fixture.assert_query_succeeds("CREATE USER 'alice' PASSWORD 'password123'");
@@ -140,7 +134,7 @@ fn test_user_lifecycle() {
 
 #[test]
 fn test_user_listing() {
-    let fixture = get_security_fixture();
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Create some test users
     let if_not_exists_result =
@@ -198,7 +192,7 @@ fn test_user_listing() {
 
 #[test]
 fn test_role_assignment() {
-    let fixture = get_security_fixture();
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Create roles and users for assignment testing
     let if_not_exists_result = fixture.query("CREATE ROLE IF NOT EXISTS 'admin'");
@@ -251,7 +245,7 @@ fn test_role_assignment() {
 
 #[test]
 fn test_authentication() {
-    let fixture = get_security_fixture();
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Create a test user
     let if_not_exists_result =
@@ -288,7 +282,7 @@ fn test_authentication() {
 
 #[test]
 fn test_security_edge_cases() {
-    let fixture = get_security_fixture();
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Test empty role names (this might not be validated in current implementation)
     let empty_role_result = fixture.query("CREATE ROLE ''");
@@ -357,7 +351,7 @@ fn test_security_edge_cases() {
 
 #[test]
 fn test_procedure_argument_validation() {
-    let fixture = get_security_fixture();
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Test gql.list_roles with arguments (should work with no args)
     fixture.assert_query_succeeds("CALL gql.list_roles()");
@@ -390,7 +384,7 @@ fn test_procedure_argument_validation() {
 
 #[test]
 fn test_transaction_integrity() {
-    let fixture = get_security_fixture();
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Test that role creation is transactional
     fixture.assert_query_succeeds("BEGIN");

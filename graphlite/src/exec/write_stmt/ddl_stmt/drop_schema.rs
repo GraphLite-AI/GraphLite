@@ -8,7 +8,6 @@ use crate::catalog::operations::{CatalogOperation, EntityType};
 use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
 use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
 use crate::exec::ExecutionError;
-use crate::session::manager;
 use crate::storage::StorageManager;
 use crate::txn::state::OperationType;
 
@@ -38,7 +37,7 @@ impl StatementExecutor for DropSchemaExecutor {
 impl DDLStatementExecutor for DropSchemaExecutor {
     fn execute_ddl_operation(
         &self,
-        _context: &ExecutionContext,
+        context: &ExecutionContext,
         catalog_manager: &mut CatalogManager,
         _storage: &StorageManager,
     ) -> Result<(String, usize), ExecutionError> {
@@ -150,11 +149,11 @@ impl DDLStatementExecutor for DropSchemaExecutor {
                 match response {
                     crate::catalog::operations::CatalogResponse::Success { data: _ } => {
                         // Reset sessions that were using this schema
-                        if let Some(session_manager) = manager::get_session_manager() {
-                            let sessions = session_manager.get_active_session_ids();
+                        if let Some(session_provider) = &context.session_provider {
+                            let sessions = session_provider.list_sessions();
 
                             for session_id in sessions {
-                                if let Some(session_arc) = session_manager.get_session(&session_id)
+                                if let Some(session_arc) = session_provider.get_session(&session_id)
                                 {
                                     if let Ok(mut session) = session_arc.write() {
                                         let mut reset_session = false;

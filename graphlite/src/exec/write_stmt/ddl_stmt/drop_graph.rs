@@ -123,16 +123,16 @@ impl DDLStatementExecutor for DropGraphExecutor {
 
                         // CRITICAL FIX: Invalidate sessions using the dropped graph
                         // This prevents stale data from being returned after graph deletion
-                        if let Some(session_manager) = crate::session::get_session_manager() {
+                        if let Some(session_provider) = &context.session_provider {
                             let sessions_invalidated =
-                                session_manager.invalidate_sessions_for_graph(&full_path);
+                                session_provider.invalidate_sessions_for_graph(&full_path);
                             log::info!(
                                 "Invalidated {} sessions using dropped graph '{}'",
                                 sessions_invalidated,
                                 full_path
                             );
                         } else {
-                            log::warn!("No session manager available for session invalidation after dropping graph '{}'", full_path);
+                            log::warn!("No session provider available for session invalidation after dropping graph '{}'", full_path);
                         }
 
                         // TODO: Cache invalidation for query results, plans, and subqueries

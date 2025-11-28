@@ -10,7 +10,6 @@ use crate::catalog::manager::CatalogManager;
 use crate::session::models::{SessionPermissionCache, UserSession};
 use crate::storage::StorageManager;
 use crate::txn::TransactionManager;
-use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
@@ -291,78 +290,6 @@ impl SessionManager {
         }
 
         log::info!("SessionManager shutdown completed");
-        Ok(())
-    }
-}
-
-/// Global session manager instance
-/// This will be initialized when the application starts
-pub static SESSION_MANAGER: Lazy<RwLock<Option<Arc<SessionManager>>>> =
-    Lazy::new(|| RwLock::new(None));
-
-/// Get the global session manager instance
-/// Returns None if not initialized
-pub fn get_session_manager() -> Option<Arc<SessionManager>> {
-    SESSION_MANAGER.read().ok()?.clone()
-}
-
-/// Clear the global session manager (for force reinstall/cleanup)
-/// This will reset the global SessionManager to None
-#[allow(dead_code)] // Utility function for cleanup during testing and reinstall operations
-pub fn clear_session_manager() -> Result<(), String> {
-    if let Ok(mut global_manager) = SESSION_MANAGER.write() {
-        *global_manager = None;
-        Ok(())
-    } else {
-        Err("Failed to acquire write lock on session manager".to_string())
-    }
-}
-
-/// Set the global session manager
-/// This should be called once during application initialization
-pub fn set_session_manager(manager: Arc<SessionManager>) -> Result<(), String> {
-    if let Ok(mut global_manager) = SESSION_MANAGER.write() {
-        *global_manager = Some(manager);
-        log::info!("✅ Global session manager initialized");
-        Ok(())
-    } else {
-        Err("Failed to acquire write lock on session manager".to_string())
-    }
-}
-
-/// Convenience function to get a session by ID from global manager
-pub fn get_session(session_id: &str) -> Option<Arc<RwLock<UserSession>>> {
-    get_session_manager()?.get_session(session_id)
-}
-
-/// Convenience function to create a session using global manager
-#[allow(dead_code)] // Convenience wrapper for session creation from global manager
-pub fn create_session(
-    username: String,
-    roles: Vec<String>,
-    permissions: SessionPermissionCache,
-) -> Result<String, String> {
-    get_session_manager()
-        .ok_or("Session manager not initialized")?
-        .create_session(username, roles, permissions)
-}
-
-/// Convenience function to create anonymous session using global manager
-#[allow(dead_code)] // Convenience wrapper for anonymous session creation
-pub fn create_anonymous_session() -> Result<String, String> {
-    get_session_manager()
-        .ok_or("Session manager not initialized")?
-        .create_anonymous_session()
-}
-
-/// Graceful shutdown of the global session manager
-/// This should be called when the application is shutting down
-#[allow(dead_code)] // Graceful shutdown handler for application termination
-pub fn shutdown_session_manager() -> Result<(), String> {
-    if let Some(session_manager) = get_session_manager() {
-        session_manager.shutdown()
-    } else {
-        log::warn!("No session manager to shutdown");
         Ok(())
     }
 }

@@ -16,10 +16,14 @@
 //! - Session parameter management
 //! - Multi-tenancy and user isolation
 
+pub mod instance_provider;
 pub mod manager;
 pub mod models;
+pub mod provider;
 pub mod transaction_state;
 
-pub use manager::{get_session_manager, SessionManager};
+pub use instance_provider::InstanceSessionProvider;
+pub use manager::SessionManager;
 pub use models::{SessionPermissionCache, UserSession};
+pub use provider::SessionProvider;
 pub use transaction_state::SessionTransactionState;
