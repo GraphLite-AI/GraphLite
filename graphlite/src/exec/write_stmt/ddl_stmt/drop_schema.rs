@@ -199,6 +199,19 @@ impl DDLStatementExecutor for DropSchemaExecutor {
                             }
                         }
 
+                        // Invalidate catalog cache - schema and possibly graphs dropped
+                        if let Some(cache_mgr) = &context.cache_manager {
+                            cache_mgr.invalidate_on_schema_change(
+                                schema_name.clone(),
+                                "schema_dropped".to_string(),
+                            );
+                            if self.statement.cascade {
+                                // Also invalidate graph cache since CASCADE drops dependent graphs
+                                cache_mgr.invalidate_on_data_change(None, 0);
+                            }
+                            log::debug!("Invalidated catalog cache after DROP SCHEMA '{}' cascade={}", schema_name, self.statement.cascade);
+                        }
+
                         let message = if self.statement.if_exists {
                             format!("Schema '{}' dropped (if exists)", schema_name)
                         } else {

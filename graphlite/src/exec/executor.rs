@@ -112,6 +112,9 @@ pub struct QueryExecutor {
     // Session management
     session_provider: Arc<dyn SessionProvider>,
 
+    // Cache management
+    cache_manager: Option<Arc<CacheManager>>,
+
     // Transaction management (session-agnostic)
     transaction_manager: Arc<TransactionManager>,
     current_transaction: Arc<std::sync::RwLock<Option<TransactionId>>>,
@@ -285,7 +288,13 @@ impl QueryExecutor {
             ExecutionContext::new("anonymous_session".to_string(), self.storage.clone())
         };
 
-        // Set function registry and session provider
+        // Set function registry, cache manager, and session provider
+        let context = if let Some(cache_mgr) = &self.cache_manager {
+            context.with_cache_manager(cache_mgr.clone())
+        } else {
+            context
+        };
+
         context
             .with_function_registry(self.function_registry.clone())
             .with_session_provider(self.session_provider.clone())
@@ -413,13 +422,13 @@ impl QueryExecutor {
         catalog_manager: Arc<std::sync::RwLock<CatalogManager>>,
         transaction_manager: Arc<TransactionManager>,
         session_provider: Arc<dyn SessionProvider>,
-        _cache_manager: Option<Arc<CacheManager>>,
+        cache_manager: Option<Arc<CacheManager>>,
     ) -> Result<Self, ExecutionError> {
         // Create system procedures with the provided managers
         let system_procedures = SystemProcedures::new(
             catalog_manager.clone(),
             storage_manager.clone(),
-            None,
+            cache_manager.clone(),
         )
         .with_session_provider(session_provider.clone());
 
@@ -429,6 +438,7 @@ impl QueryExecutor {
             catalog_manager,
             system_procedures,
             session_provider,
+            cache_manager,
             transaction_manager,
             current_transaction: Arc::new(std::sync::RwLock::new(None)),
             transaction_logs: Arc::new(std::sync::RwLock::new(std::collections::HashMap::new())),

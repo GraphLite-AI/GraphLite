@@ -74,8 +74,8 @@ impl SystemProcedures {
         let normalized_name = procedure_name.to_string();
 
         match normalized_name.as_str() {
-            "gql.list_schemas" => self.list_schemas(args),
-            "gql.list_graphs" => self.list_graphs(args),
+            "gql.list_schemas" => self.list_schemas(args, session_id),
+            "gql.list_graphs" => self.list_graphs(args, session_id),
             "gql.list_graph_types" => self.list_graph_types(args),
             "gql.list_functions" => self.list_functions(args),
             "gql.list_roles" => self.list_roles(args),
@@ -121,7 +121,10 @@ impl SystemProcedures {
     }
 
     /// CALL gql.list_schemas() YIELD schema_name, schema_path, created_at, modified_at, description
-    fn list_schemas(&self, _args: Vec<Value>) -> Result<QueryResult, ExecutionError> {
+    fn list_schemas(&self, _args: Vec<Value>, session_id: Option<&str>) -> Result<QueryResult, ExecutionError> {
+        // Note: For this procedure, we always query the catalog since we need full schema objects
+        // (name, path, created_at, modified_at, description). Future optimization could cache
+        // full objects, but for now we just update the cache after querying.
         let mut catalog_manager = self.catalog_manager.write().map_err(|_| {
             ExecutionError::RuntimeError("Failed to acquire catalog manager lock".to_string())
         })?;
@@ -135,6 +138,31 @@ impl SystemProcedures {
                 },
             )
             .map_err(|e| ExecutionError::CatalogError(format!("Failed to list schemas: {}", e)))?;
+
+        // Update session cache with schema names if we have a session
+        if let (Some(cache_mgr), Some(sess_id), Some(sess_provider)) =
+            (&self.cache_manager, session_id, &self.session_provider)
+        {
+            if let CatalogResponse::List { items } = &response {
+                let schema_names: Vec<String> = items
+                    .iter()
+                    .filter_map(|item| {
+                        item.as_object()
+                            .and_then(|schema| schema.get("id"))
+                            .and_then(|id| id.get("name"))
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                    })
+                    .collect();
+
+                let current_version = cache_mgr.get_schema_version();
+                if let Some(session_arc) = sess_provider.get_session(sess_id) {
+                    if let Ok(mut session) = session_arc.write() {
+                        session.catalog_cache_mut().set_schema_list(schema_names, current_version);
+                    }
+                }
+            }
+        }
 
         let mut rows = Vec::new();
         let columns = vec![
@@ -209,7 +237,7 @@ impl SystemProcedures {
     }
 
     /// CALL gql.list_graphs() YIELD graph_name, schema_name
-    fn list_graphs(&self, _args: Vec<Value>) -> Result<QueryResult, ExecutionError> {
+    fn list_graphs(&self, _args: Vec<Value>, session_id: Option<&str>) -> Result<QueryResult, ExecutionError> {
         let mut catalog_manager = self.catalog_manager.write().map_err(|_| {
             ExecutionError::RuntimeError("Failed to acquire catalog manager lock".to_string())
         })?;
@@ -223,6 +251,51 @@ impl SystemProcedures {
                 },
             )
             .map_err(|e| ExecutionError::CatalogError(format!("Failed to list graphs: {}", e)))?;
+
+        // Update session cache with graph names by schema if we have a session
+        if let (Some(cache_mgr), Some(sess_id), Some(sess_provider)) =
+            (&self.cache_manager, session_id, &self.session_provider)
+        {
+            if let CatalogResponse::List { items } = &response {
+                // Group graphs by schema
+                let mut graphs_by_schema: std::collections::HashMap<String, Vec<String>> =
+                    std::collections::HashMap::new();
+
+                for item in items.iter() {
+                    if let Some(graph) = item.as_object() {
+                        let graph_name = graph
+                            .get("id")
+                            .and_then(|id| id.get("name"))
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+
+                        let schema_name = graph
+                            .get("id")
+                            .and_then(|id| id.get("schema_name"))
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+
+                        if let (Some(g_name), Some(s_name)) = (graph_name, schema_name) {
+                            graphs_by_schema
+                                .entry(s_name)
+                                .or_insert_with(Vec::new)
+                                .push(g_name);
+                        }
+                    }
+                }
+
+                let current_version = cache_mgr.get_graph_version();
+                if let Some(session_arc) = sess_provider.get_session(sess_id) {
+                    if let Ok(mut session) = session_arc.write() {
+                        for (schema_name, graph_names) in graphs_by_schema {
+                            session
+                                .catalog_cache_mut()
+                                .set_graph_list(schema_name, graph_names, current_version);
+                        }
+                    }
+                }
+            }
+        }
 
         let mut rows = Vec::new();
         let columns = vec!["graph_name".to_string(), "schema_name".to_string()];

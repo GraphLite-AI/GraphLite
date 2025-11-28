@@ -30,6 +30,8 @@ pub struct ExecutionContext {
     pub storage_manager: Option<Arc<StorageManager>>,
     /// Function registry for executing functions
     pub function_registry: Option<Arc<FunctionRegistry>>,
+    /// Cache manager for invalidation on schema/data changes
+    pub cache_manager: Option<Arc<crate::cache::CacheManager>>,
     /// Current user for metadata tracking
     pub current_user: Option<String>,
     /// Current transaction ID for transaction metadata tracking (planned feature)
@@ -51,6 +53,7 @@ impl std::fmt::Debug for ExecutionContext {
             .field("current_graph", &self.current_graph)
             .field("storage_manager", &self.storage_manager)
             .field("function_registry", &self.function_registry)
+            .field("cache_manager", &self.cache_manager.as_ref().map(|_| "Some(CacheManager)"))
             .field("current_user", &self.current_user)
             .field("current_transaction", &self.current_transaction)
             .field("warnings", &self.warnings)
@@ -70,6 +73,7 @@ impl ExecutionContext {
             current_graph: None,
             storage_manager: Some(storage_manager),
             function_registry: None,
+            cache_manager: None,
             current_user: None,
             current_transaction: None,
             warnings: Vec::new(),
@@ -79,6 +83,12 @@ impl ExecutionContext {
     /// Set the session provider
     pub fn with_session_provider(mut self, session_provider: Arc<dyn SessionProvider>) -> Self {
         self.session_provider = Some(session_provider);
+        self
+    }
+
+    /// Set the cache manager
+    pub fn with_cache_manager(mut self, cache_manager: Arc<crate::cache::CacheManager>) -> Self {
+        self.cache_manager = Some(cache_manager);
         self
     }
 
