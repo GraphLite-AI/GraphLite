@@ -243,7 +243,7 @@ $ gql>
 
 ## Testing
 
-GraphLite includes comprehensive test coverage with **189 unit tests** and **250+ integration tests**.
+GraphLite includes comprehensive test coverage with **189 unit tests** and **537 total tests** (including integration and benchmark tests).
 
 **Note**: Tests now run in parallel by default thanks to instance-based session isolation, providing ~10x faster test execution compared to the previous single-threaded approach.
 
