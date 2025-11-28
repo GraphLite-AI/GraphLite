@@ -11,6 +11,7 @@ use crate::storage::{GraphCache, StorageManager, Value};
 use crate::txn::TransactionManager;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 /// Stub for session permission cache
 #[derive(Clone, Default)]
@@ -35,6 +36,139 @@ impl SessionPermissionCache {
     pub fn can_perform_operation(&self, _operation: &str) -> bool {
         true // Stub: allow all operations
     }
+}
+
+/// Per-session catalog metadata cache
+///
+/// Caches frequently accessed catalog metadata to reduce contention on the
+/// global CatalogManager. Uses version-based invalidation to ensure consistency.
+#[derive(Clone, Debug)]
+pub struct SessionCatalogCache {
+    /// Cached list of schema names
+    schema_list: Option<Vec<String>>,
+    /// Version of cached schema list
+    schema_list_version: u64,
+
+    /// Cached graph names by schema
+    graphs_by_schema: HashMap<String, Vec<String>>,
+    /// Version of cached graph lists
+    graphs_version: u64,
+
+    /// Last time schema list was accessed (for metrics)
+    last_schema_access: Option<Instant>,
+    /// Last time graph list was accessed (for metrics)
+    last_graph_access: Option<Instant>,
+}
+
+impl SessionCatalogCache {
+    /// Create a new empty catalog cache
+    pub fn new() -> Self {
+        Self {
+            schema_list: None,
+            schema_list_version: 0,
+            graphs_by_schema: HashMap::new(),
+            graphs_version: 0,
+            last_schema_access: None,
+            last_graph_access: None,
+        }
+    }
+
+    /// Check if schema list cache is valid for the given version
+    pub fn is_schema_list_valid(&self, current_version: u64) -> bool {
+        self.schema_list.is_some() && self.schema_list_version == current_version
+    }
+
+    /// Get cached schema list if valid
+    pub fn get_schema_list(&mut self, current_version: u64) -> Option<Vec<String>> {
+        if self.is_schema_list_valid(current_version) {
+            self.last_schema_access = Some(Instant::now());
+            self.schema_list.clone()
+        } else {
+            None
+        }
+    }
+
+    /// Update schema list cache
+    pub fn set_schema_list(&mut self, schemas: Vec<String>, version: u64) {
+        self.schema_list = Some(schemas);
+        self.schema_list_version = version;
+        self.last_schema_access = Some(Instant::now());
+    }
+
+    /// Invalidate schema list cache
+    pub fn invalidate_schema_list(&mut self) {
+        self.schema_list = None;
+        self.schema_list_version = 0;
+    }
+
+    /// Check if graph list cache is valid for the given schema and version
+    pub fn is_graph_list_valid(&self, schema_name: &str, current_version: u64) -> bool {
+        self.graphs_by_schema.contains_key(schema_name)
+            && self.graphs_version == current_version
+    }
+
+    /// Get cached graph list for a schema if valid
+    pub fn get_graph_list(&mut self, schema_name: &str, current_version: u64) -> Option<Vec<String>> {
+        if self.is_graph_list_valid(schema_name, current_version) {
+            self.last_graph_access = Some(Instant::now());
+            self.graphs_by_schema.get(schema_name).cloned()
+        } else {
+            None
+        }
+    }
+
+    /// Update graph list cache for a schema
+    pub fn set_graph_list(&mut self, schema_name: String, graphs: Vec<String>, version: u64) {
+        self.graphs_by_schema.insert(schema_name, graphs);
+        self.graphs_version = version;
+        self.last_graph_access = Some(Instant::now());
+    }
+
+    /// Invalidate graph list cache (all schemas)
+    pub fn invalidate_graph_lists(&mut self) {
+        self.graphs_by_schema.clear();
+        self.graphs_version = 0;
+    }
+
+    /// Invalidate graph list cache for a specific schema
+    pub fn invalidate_graph_list_for_schema(&mut self, schema_name: &str) {
+        self.graphs_by_schema.remove(schema_name);
+    }
+
+    /// Clear all cached data
+    pub fn clear(&mut self) {
+        self.schema_list = None;
+        self.schema_list_version = 0;
+        self.graphs_by_schema.clear();
+        self.graphs_version = 0;
+        self.last_schema_access = None;
+        self.last_graph_access = None;
+    }
+
+    /// Get cache statistics (for monitoring)
+    pub fn get_stats(&self) -> CatalogCacheStats {
+        CatalogCacheStats {
+            schema_list_cached: self.schema_list.is_some(),
+            graph_schemas_cached: self.graphs_by_schema.len(),
+            last_schema_access: self.last_schema_access,
+            last_graph_access: self.last_graph_access,
+        }
+    }
+}
+
+impl Default for SessionCatalogCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Cache statistics for monitoring
+#[derive(Debug, Clone)]
+pub struct CatalogCacheStats {
+    pub schema_list_cached: bool,
+    pub graph_schemas_cached: usize,
+    pub last_schema_access: Option<Instant>,
+    pub last_graph_access: Option<Instant>,
 }
 
 /// Unified user session that combines authentication and database session management
@@ -65,6 +199,8 @@ pub struct UserSession {
     pub permissions: SessionPermissionCache,
     /// Transaction state for this session (shared reference)
     pub transaction_state: Arc<SessionTransactionState>,
+    /// Catalog metadata cache (reduces contention on CatalogManager)
+    pub catalog_cache: SessionCatalogCache,
 
     // === Session Lifecycle ===
     /// When the session was created
@@ -98,6 +234,7 @@ impl UserSession {
             parameters: HashMap::new(),
             permissions,
             transaction_state,
+            catalog_cache: SessionCatalogCache::new(),
             created_at: now,
             last_activity: now,
             active: true,
@@ -278,6 +415,24 @@ impl UserSession {
                 self.parameters.clear();
             }
         }
+        self.update_activity();
+    }
+
+    // === Catalog Cache Management ===
+
+    /// Get mutable reference to catalog cache
+    pub fn catalog_cache_mut(&mut self) -> &mut SessionCatalogCache {
+        &mut self.catalog_cache
+    }
+
+    /// Get immutable reference to catalog cache
+    pub fn catalog_cache_ref(&self) -> &SessionCatalogCache {
+        &self.catalog_cache
+    }
+
+    /// Clear catalog cache (called on schema/graph changes)
+    pub fn clear_catalog_cache(&mut self) {
+        self.catalog_cache.clear();
         self.update_activity();
     }
 
