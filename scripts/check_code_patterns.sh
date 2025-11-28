@@ -65,16 +65,20 @@ fi
 
 # Rule #4: CatalogManager Singleton Pattern
 echo "🔍 Rule #4: CatalogManager singleton pattern..."
-rule4_violations=$(grep -rn "Arc::new(RwLock::new(CatalogManager::new" $all_rust_files 2>/dev/null || true)
-if [ -n "$rule4_violations" ]; then
-    echo "❌ RULE #4 VIOLATIONS: Creating new CatalogManager instances"
-    echo "$rule4_violations" | head -10
-    violation_count=$(echo "$rule4_violations" | wc -l | tr -d ' ')
-    echo "   Found $violation_count occurrence(s)"
-    echo "   💡 Use existing CatalogManager from SessionManager"
-    echo "   📖 See Rule #4"
-    echo ""
-    violations=$((violations + 1))
+# Exclude infrastructure files (coordinator, session providers) from this check
+non_infrastructure_files=$(echo "$all_rust_files" | grep -v "coordinator" | grep -v "session_provider" | grep -v "session/instance_provider" | grep -v "session/global_provider" || true)
+if [ -n "$non_infrastructure_files" ]; then
+    rule4_violations=$(grep -rn "Arc::new(RwLock::new(CatalogManager::new" $non_infrastructure_files 2>/dev/null || true)
+    if [ -n "$rule4_violations" ]; then
+        echo "❌ RULE #4 VIOLATIONS: Creating new CatalogManager instances"
+        echo "$rule4_violations" | head -10
+        violation_count=$(echo "$rule4_violations" | wc -l | tr -d ' ')
+        echo "   Found $violation_count occurrence(s)"
+        echo "   💡 Use existing CatalogManager from QueryCoordinator/SessionProvider"
+        echo "   📖 See Rule #4"
+        echo ""
+        violations=$((violations + 1))
+    fi
 fi
 
 # Rule #5: Async Runtime Management
@@ -138,19 +142,37 @@ if [ -n "$test_files" ]; then
     fi
 fi
 
-# Rule #10: Session Manager Test Isolation Pattern
-echo "🔍 Rule #10: Session Manager test isolation..."
+# Rule #10: Session Provider Test Pattern
+echo "🔍 Rule #10: Session provider test pattern..."
 if [ -n "$test_files" ]; then
-    # Check for SessionManager::new in tests
-    rule10_violations=$(grep -rn "SessionManager::new" $test_files 2>/dev/null | grep -v "get_session_manager" || true)
-    if [ -n "$rule10_violations" ]; then
-        echo "⚠️  RULE #10 POTENTIAL VIOLATIONS: SessionManager in tests"
-        echo "$rule10_violations" | head -10
-        violation_count=$(echo "$rule10_violations" | wc -l | tr -d ' ')
-        echo "   Found $violation_count occurrence(s)"
-        echo "   💡 Use get_session_manager() instead of creating new instances"
-        echo "   📖 See Rule #10"
-        echo ""
+    # Check for SessionManager::new in test functions (excluding coordinator/infrastructure)
+    non_infrastructure_tests=$(echo "$test_files" | grep -v "coordinator" | grep -v "session_provider" || true)
+
+    if [ -n "$non_infrastructure_tests" ]; then
+        # Check for direct SessionManager::new() in test functions
+        rule10a_violations=$(grep -rn "SessionManager::new\|SessionManager::instance" $non_infrastructure_tests 2>/dev/null || true)
+        if [ -n "$rule10a_violations" ]; then
+            echo "❌ RULE #10a VIOLATION: Direct SessionManager creation in tests"
+            echo "$rule10a_violations" | head -10
+            violation_count=$(echo "$rule10a_violations" | wc -l | tr -d ' ')
+            echo "   Found $violation_count occurrence(s)"
+            echo "   💡 Use QueryCoordinator instead of creating SessionManager directly"
+            echo "   💡 Example: let coord = QueryCoordinator::from_path(path)?;"
+            echo "   📖 See Rule #10: Session Provider Test Pattern"
+            echo ""
+            violations=$((violations + 1))
+        fi
+
+        # Check for SessionManager fields in test structs
+        rule10b_violations=$(grep -rn "session_manager:.*SessionManager" $test_files 2>/dev/null || true)
+        if [ -n "$rule10b_violations" ]; then
+            echo "⚠️  RULE #10b WARNING: SessionManager field in test struct"
+            echo "$rule10b_violations" | head -5
+            echo "   💡 Store QueryCoordinator or session_id instead"
+            echo "   💡 Avoid coupling tests to internal SessionManager implementation"
+            echo "   📖 See Rule #10: Session Provider Test Pattern"
+            echo ""
+        fi
     fi
 fi
 

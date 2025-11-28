@@ -119,11 +119,15 @@ fi
 
 # Rule #4: CatalogManager Singleton Pattern
 echo "  🔍 Rule #4: CatalogManager singleton pattern..."
-if check_staged_content "Arc::new(RwLock::new(CatalogManager::new" "$staged_rust_files"; then
-    echo "❌ RULE #4 VIOLATION: Creating new CatalogManager instance"
-    echo "   💡 Use existing CatalogManager from SessionManager"
-    echo "   📖 See Rule #4: CatalogManager Singleton Pattern"
-    violations=$((violations + 1))
+# Exclude infrastructure files (coordinator, session providers)
+non_infrastructure_files=$(echo "$staged_rust_files" | grep -v "coordinator" | grep -v "session_provider" | grep -v "session/instance_provider" | grep -v "session/global_provider" || true)
+if [ -n "$non_infrastructure_files" ]; then
+    if check_staged_content "Arc::new(RwLock::new(CatalogManager::new" "$non_infrastructure_files"; then
+        echo "❌ RULE #4 VIOLATION: Creating new CatalogManager instance"
+        echo "   💡 Use existing CatalogManager from QueryCoordinator/SessionProvider"
+        echo "   📖 See Rule #4: CatalogManager Singleton Pattern"
+        violations=$((violations + 1))
+    fi
 fi
 
 # Rule #5: Async Runtime Management
@@ -182,44 +186,32 @@ if [ -n "$test_files" ]; then
     fi
 fi
 
-# Rule #10: Session Manager Test Isolation Pattern
-echo "  🔍 Rule #10: Session Manager test isolation..."
+# Rule #10: Session Provider Test Pattern
+echo "  🔍 Rule #10: Session provider test pattern..."
 test_files=$(echo "$staged_rust_files" | grep -E "(test|spec)" | grep -v -E "\.md$" || true)
 if [ -n "$test_files" ]; then
-    # Check for SessionManager::new in tests (should use get_session_manager instead)
-    if check_staged_content "SessionManager::new" "$test_files"; then
-        echo "❌ RULE #10 VIOLATION: SessionManager::new detected in tests"
-        echo "   💡 Use get_session_manager() instead of creating new instances"
-        echo "   💡 Use schema-level or database-level isolation instead"
-        echo "   📚 See Rule #10: Session Manager Test Isolation Pattern"
-        violations=$((violations + 1))
-    fi
+    # Exclude coordinator and session provider infrastructure files
+    non_infrastructure_tests=$(echo "$test_files" | grep -v "coordinator" | grep -v "session_provider" || true)
 
-    # Check for SessionManager field declarations in test structs
-    if check_staged_content "session_manager:.*SessionManager" "$test_files"; then
-        echo "❌ RULE #10 VIOLATION: SessionManager field in test struct detected"
-        echo "   💡 Store session_id and schema_name instead of SessionManager instance"
-        echo "   💡 Get SessionManager via get_session_manager() when needed"
-        echo "   📚 See Rule #10: Session Manager Test Isolation Pattern"
-        violations=$((violations + 1))
-    fi
+    if [ -n "$non_infrastructure_tests" ]; then
+        # Check for direct SessionManager::new() or SessionManager::instance() in test functions
+        if check_staged_content "SessionManager::new\|SessionManager::instance" "$non_infrastructure_tests"; then
+            echo "❌ RULE #10a VIOLATION: Direct SessionManager creation in tests"
+            echo "   💡 Use QueryCoordinator instead of creating SessionManager directly"
+            echo "   💡 Example: let coord = QueryCoordinator::from_path(path)?;"
+            echo "   💡 The coordinator manages session providers (Instance or Global mode)"
+            echo "   📚 See Rule #10: Session Provider Test Pattern"
+            violations=$((violations + 1))
+        fi
 
-    # Check for direct SessionManager instantiation in tests
-    if check_staged_content "SessionManager::new" "$test_files"; then
-        echo "❌ RULE #10 VIOLATION: Direct SessionManager instantiation in tests"
-        echo "   💡 Use the global SessionManager singleton instead"
-        echo "   💡 Call get_session_manager() to get the global instance"
-        echo "   📚 See Rule #10: Session Manager Test Isolation Pattern"
-        violations=$((violations + 1))
-    fi
-
-    # Check for multiple session manager variables in tests
-    if check_staged_content "let.*session_manager.*=.*SessionManager" "$test_files"; then
-        echo "❌ RULE #10 VIOLATION: Creating SessionManager variables in tests"
-        echo "   💡 Use get_session_manager() to access the global singleton"
-        echo "   💡 Do not create test-specific SessionManager instances"
-        echo "   📚 See Rule #10: Session Manager Test Isolation Pattern"
-        violations=$((violations + 1))
+        # Check for SessionManager fields in test structs
+        if check_staged_content "session_manager:.*SessionManager" "$test_files"; then
+            echo "⚠️  RULE #10b WARNING: SessionManager field in test struct"
+            echo "   💡 Store QueryCoordinator or session_id instead"
+            echo "   💡 Avoid coupling tests to internal SessionManager implementation"
+            echo "   📚 See Rule #10: Session Provider Test Pattern"
+            # Note: This is a warning, not blocking
+        fi
     fi
 fi
 
@@ -259,7 +251,7 @@ echo "   • Rule #5: Async Runtime Management"
 echo "   • Rule #6: Helper Method Recursion"
 echo "   • Rule #7: Async Runtime Context Detection"
 echo "   • Rule #9: Test Case Integrity"
-echo "   • Rule #10: Session Manager Test Isolation"
+echo "   • Rule #10: Session Provider Test Pattern"
 echo ""
 echo ""
 echo "💡 To bypass hook (use sparingly): git commit --no-verify"
