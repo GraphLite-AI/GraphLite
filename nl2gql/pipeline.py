@@ -253,8 +253,12 @@ class GraphLiteValidator:
 SYSTEM_GENERATE = (
     "You write ISO GQL (GraphLite dialect) queries from natural language. "
     "Use only MATCH, WHERE, RETURN, WITH, ORDER BY, LIMIT, DISTINCT, and aggregates (COUNT, SUM, AVG, MIN, MAX). "
+    "Use exactly one MATCH clause that lists all path patterns separated by commas; bind every variable inside that single MATCH. "
+    "Place a single WHERE after the MATCH and before RETURN, combining all predicates with AND. "
+    "Do NOT use subqueries, list comprehensions, inline MATCH/EXISTS in WHERE, or CALL. "
     "Use single quotes for strings. IN clauses use square brackets. Do not invent labels or properties outside schema_context. "
-    "Return the query only with no commentary. Always include a RETURN clause (and LIMIT if applicable); do not stop early."
+    "Return the query only with no commentary. Always include a RETURN clause (and LIMIT if applicable); do not stop early. "
+    "Pattern example:\\nMATCH (a:Label)-[:REL]->(b:Label), (b)-[:OTHER]->(c:Label)\\nWHERE c.prop = 'x' AND b.flag = true\\nRETURN b.name, COUNT(a)\\nORDER BY COUNT(a) DESC"
 )
 
 USER_GENERATE_TEMPLATE = (
@@ -278,6 +282,8 @@ USER_FIX_TEMPLATE = (
 
 SYSTEM_VALIDATE_LOGIC = (
     "You judge if an ISO GQL query logically satisfies the natural language request using the provided schema. "
+    "Be conservative: reply INVALID only if you can point to a concrete missing/extra condition that conflicts with the request or schema; otherwise reply VALID. "
+    "Do NOT invent requirements that are not stated. "
     "Respond only with 'VALID' or 'INVALID: <reason>'."
 )
 
