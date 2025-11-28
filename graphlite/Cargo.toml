@@ -60,6 +60,11 @@ serial_test = { workspace = true }
 name = "simple_usage"
 path = "../examples-core/simple_usage.rs"
 
+[[bench]]
+name = "session_throughput"
+path = "../benches/session_throughput.rs"
+harness = false
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
