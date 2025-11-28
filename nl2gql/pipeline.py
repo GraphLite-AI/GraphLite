@@ -144,6 +144,18 @@ def chat_complete(
     return text, None
 
 
+def _clean_query_text(text: str) -> str:
+    """Normalize model output to a plain query (strip fences, keep full body)."""
+
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        # Drop leading fence
+        stripped = stripped[stripped.find("\n") + 1 :] if "\n" in stripped else stripped.lstrip("`")
+    if stripped.endswith("```"):
+        stripped = stripped[: stripped.rfind("```")]
+    return stripped.strip()
+
+
 # ---------------------------------------------------------------------------
 # GraphLite syntax validation
 # ---------------------------------------------------------------------------
@@ -323,8 +335,7 @@ def fix_isogql_syntax_with_model(
 ) -> Tuple[str, Optional[Dict[str, Any]]]:
     user = USER_FIX_TEMPLATE.format(schema_context=schema_context, nl=nl, query=query, error=error)
     fixed, usage = chat_complete(model, SYSTEM_FIX, user, temperature=0.2, top_p=0.9)
-    if "\n" in fixed:
-        fixed = fixed.splitlines()[0].strip()
+    fixed = _clean_query_text(fixed)
     return fixed, usage
 
 
@@ -519,16 +530,19 @@ def print_verbose_info(
     gen_model: str,
     fix_model: str,
 ) -> None:
-    def _fmt_feedback(fb: Optional[List[Dict[str, str]]]) -> str:
+    def _fmt_feedback(fb: Optional[List[Dict[str, str]]]) -> List[str]:
         if not fb:
-            return "none"
-        formatted = []
+            return []
+        formatted: List[str] = []
         for item in fb:
             if isinstance(item, dict):
-                formatted.append(f"{item.get('type', 'note')}: {item.get('reason', '')}".strip())
+                line = f"{item.get('type', 'note')}: {item.get('reason', '')}".strip()
+                if item.get("query"):
+                    line += f" | query: {item['query']}"
+                formatted.append(line)
             else:
                 formatted.append(str(item))
-        return "; ".join(formatted)
+        return formatted
 
     print("\n" + "=" * 80)
     print("PIPELINE EXECUTION SUMMARY")
@@ -546,43 +560,62 @@ def print_verbose_info(
     for attempt in sorted(grouped.keys()):
         print("-" * 80)
         print(f"Attempt {attempt}")
+        # Track whether syntax already failed to annotate later logic checks.
+        syntax_status: Optional[bool] = None
         for entry in grouped[attempt]:
             action = entry["action"]
             valid = entry.get("valid")
 
             if action == "generated":
-                fb_text = _fmt_feedback(entry.get("feedback"))
-                print(f"  • Generated (used feedback: {fb_text})")
+                fb_list = _fmt_feedback(entry.get("feedback"))
+                if fb_list:
+                    print("  • Generated (feedback used):")
+                    for fb_item in fb_list:
+                        for line in fb_item.splitlines():
+                            print(f"      - {line}")
+                else:
+                    print("  • Generated (no feedback used)")
                 print("    Query:")
-                print("      " + "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"]))
+                block = "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"])
+                print(f"      ```gql\n      {block}\n      ```")
             elif action == "incomplete_generation":
                 print("  • Incomplete generation (missing RETURN or too short)")
                 print("    Query:")
-                print("      " + "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"]))
+                block = "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"])
+                print(f"      ```gql\n      {block}\n      ```")
             elif action == "validated_syntax":
                 status = "✓ SYNTAX VALID" if valid else "✗ SYNTAX INVALID"
+                syntax_status = bool(valid)
                 print(f"  • {status}")
                 if entry.get("error"):
                     print("    Error:")
-                    print("      " + "\n      ".join(str(entry["error"]).splitlines()))
+                    err_block = "\n      ".join(str(entry["error"]).splitlines())
+                    print(f"      ```\n      {err_block}\n      ```")
             elif action == "fixed_syntax":
                 print("  • Applied syntax fix")
                 print("    Query:")
-                print("      " + "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"]))
+                block = "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"])
+                print(f"      ```gql\n      {block}\n      ```")
             elif action == "validated_logic":
-                status = "✓ LOGIC VALID" if valid else "✗ LOGIC INVALID"
-                print(f"  • {status}")
+                prefix = "✓ LOGIC VALID" if valid else "✗ LOGIC INVALID"
+                note = ""
+                if syntax_status is False:
+                    note = " (evaluated despite syntax failure)"
+                print(f"  • {prefix}{note}")
                 if entry.get("error"):
                     print("    Error:")
-                    print("      " + "\n      ".join(str(entry["error"]).splitlines()))
+                    err_block = "\n      ".join(str(entry["error"]).splitlines())
+                    print(f"      ```\n      {err_block}\n      ```")
             elif action == "fixed_logic":
                 print("  • Applied logic fix")
                 print("    Query:")
-                print("      " + "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"]))
+                block = "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"])
+                print(f"      ```gql\n      {block}\n      ```")
             elif action == "auto_fixed_syntax_hint":
                 print("  • Auto-applied property correction")
                 print("    Query:")
-                print("      " + "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"]))
+                block = "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"])
+                print(f"      ```gql\n      {block}\n      ```")
 
     total_tokens = sum(item.get("total_tokens", 0) for item in usage_data)
     print("\nAPI Usage:")
