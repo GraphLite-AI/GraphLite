@@ -210,6 +210,12 @@ impl DDLStatementExecutor for CreateGraphExecutor {
                             log::info!("Successfully persisted graph_metadata catalog after creating graph '{}'", graph_name);
                         }
 
+                        // Invalidate catalog cache - graph list has changed
+                        if let Some(cache_mgr) = &context.cache_manager {
+                            cache_mgr.invalidate_on_data_change(Some(graph_name.clone()), 1);
+                            log::debug!("Invalidated catalog cache after CREATE GRAPH '{}'", graph_name);
+                        }
+
                         let message = if self.statement.if_not_exists {
                             format!("Graph '{}' created (if not exists)", graph_name)
                         } else if self.statement.or_replace {

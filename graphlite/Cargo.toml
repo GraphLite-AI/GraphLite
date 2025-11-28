@@ -69,6 +69,11 @@ name = "session_throughput"
 path = "../benches/session_throughput.rs"
 harness = false
 
+[[bench]]
+name = "catalog_cache_throughput"
+path = "../benches/catalog_cache_throughput.rs"
+harness = false
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]

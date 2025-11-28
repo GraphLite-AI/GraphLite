@@ -39,7 +39,7 @@ impl StatementExecutor for CreateSchemaExecutor {
 impl DDLStatementExecutor for CreateSchemaExecutor {
     fn execute_ddl_operation(
         &self,
-        _context: &ExecutionContext,
+        context: &ExecutionContext,
         catalog_manager: &mut CatalogManager,
         _storage: &StorageManager,
     ) -> Result<(String, usize), ExecutionError> {
@@ -84,6 +84,15 @@ impl DDLStatementExecutor for CreateSchemaExecutor {
                     let persist_result = catalog_manager.persist_catalog("schema");
                     if let Err(e) = persist_result {
                         log::error!("Failed to persist schema catalog: {}", e);
+                    }
+
+                    // Invalidate catalog cache - schema list has changed
+                    if let Some(cache_mgr) = &context.cache_manager {
+                        cache_mgr.invalidate_on_schema_change(
+                            schema_name.clone(),
+                            "schema_created".to_string(),
+                        );
+                        log::debug!("Invalidated catalog cache after CREATE SCHEMA '{}'", schema_name);
                     }
 
                     let message = if self.statement.if_not_exists {
