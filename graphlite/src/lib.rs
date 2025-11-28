@@ -52,6 +52,9 @@ pub(crate) mod types;
 // Re-export the public API - QueryCoordinator is the only entry point
 pub use coordinator::{QueryCoordinator, QueryInfo, QueryPlan, QueryResult, QueryType, Row};
 
+// Re-export session types for SessionMode configuration
+pub use session::SessionMode;
+
 // Re-export Value type (needed for inspecting query results in Row.values)
 pub use storage::Value;
 
