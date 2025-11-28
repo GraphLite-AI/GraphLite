@@ -1,0 +1,21 @@
+python3 nl2gql/pipeline.py --nl "List the top 10 companies (by headcount) of employees older than 30 earning over 120k who work in San Francisco; also return average salary, and sort by headcount then average salary." --schema-file nl2gql/sample_schema.txt --verbose
+
+python3 nl2gql/pipeline.py --nl "Find companies that have employees living in Boston but working in a different city; return company name and count of such employees, sorted by count desc." --schema-file nl2gql/sample_schema.txt --verbose
+
+python3 nl2gql/pipeline.py --nl "Find the average salary and count of people older than 25 grouped by city, ordered by average salary descending, limit 5." --schema-file nl2gql/sample_schema.txt --verbose
+
+python3 nl2gql/pipeline.py --nl "List distinct job titles of people earning over 150k who work in companies located in New York City, sorted alphabetically." --schema-file nl2gql/sample_schema.txt --verbose
+
+python3 nl2gql/pipeline.py --nl "Return the top 5 industries by total headcount of employees living in California and making more than 90k; include headcount and average salary, sorted by headcount then average salary." --schema-file nl2gql/sample_schema.txt --verbose
+
+# Additional complex queries
+
+python3 nl2gql/pipeline.py --nl "For companies located in California, find those with employees whose home state differs from the company's state; return company name, count of such employees, and average salary; include only companies with at least 5 such employees; order by count desc then average salary desc." --schema-file nl2gql/sample_schema.txt --verbose
+
+python3 nl2gql/pipeline.py --nl "List the top 3 cities by headcount of employees working there while living in a different city; return work city name/state, headcount, and average salary; sort by headcount desc then average salary desc." --schema-file nl2gql/sample_schema.txt --verbose
+
+python3 nl2gql/pipeline.py --nl "Return the top 5 industries by headcount of employees aged between 30 and 50 earning between 80k and 200k who live in New York state; include headcount and average salary; order by headcount desc then average salary desc." --schema-file nl2gql/sample_schema.txt --verbose
+
+python3 nl2gql/pipeline.py --nl "Find companies that employ people living in multiple states; return company name, number of distinct home states of employees, number of distinct states where the company is located, and total headcount; order by distinct home states desc then headcount desc." --schema-file nl2gql/sample_schema.txt --verbose
+
+python3 nl2gql/pipeline.py --nl "Return the top 5 (home city, work city) pairs where employees live in one city but work for companies located in another; include headcount and average salary, sorted by headcount desc then average salary desc." --schema-file nl2gql/sample_schema.txt --verbose
