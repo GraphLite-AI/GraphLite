@@ -59,7 +59,7 @@ fn test_simple_rollback_debug() {
 
     match after_result {
         Ok(result) => {
-            if result.rows.len() > 0 {
+            if !result.rows.is_empty() {
                 assert_eq!(
                     result.rows[0].values.get("age"),
                     Some(&Value::Number(40.0)),

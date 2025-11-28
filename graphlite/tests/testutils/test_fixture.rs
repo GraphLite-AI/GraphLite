@@ -42,12 +42,12 @@ impl TestFixture {
         // Use public API - QueryCoordinator::from_path()
         // This initializes ALL internal components automatically
         let coordinator = QueryCoordinator::from_path(db_path)
-            .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
+            .map_err(Box::<dyn std::error::Error>::from)?;
 
         // Create session using public API
         let session_id = coordinator
             .create_simple_session("admin")
-            .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
+            .map_err(Box::<dyn std::error::Error>::from)?;
 
         // Use a unique schema name for test isolation (prevents concurrent test interference)
         let schema_name = format!("test_schema_{}", fastrand::u64(..));

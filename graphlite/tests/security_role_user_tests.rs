@@ -201,7 +201,7 @@ fn test_role_assignment() {
     } else {
         // Try creating the roles, but handle the case where they already exist
         let admin_result = fixture.query("CREATE ROLE 'admin'");
-        if admin_result.is_err() {}
+        admin_result.is_err();
         let editor_result = fixture.query("CREATE ROLE 'editor'");
         if editor_result.is_err() {}
     }
@@ -214,32 +214,29 @@ fn test_role_assignment() {
     // Test role assignment (if GRANT ROLE is implemented)
     // Note: This might not be implemented yet, so we'll make it conditional
     let grant_result = fixture.query("GRANT ROLE 'admin' TO 'testuser'");
-    match grant_result {
-        Ok(_) => {
-            // Test multiple role assignment
-            fixture.assert_query_succeeds("GRANT ROLE 'editor' TO 'testuser'");
+    if let Ok(_) = grant_result {
+        // Test multiple role assignment
+        fixture.assert_query_succeeds("GRANT ROLE 'editor' TO 'testuser'");
 
-            // Verify roles in user listing
-            let result = fixture.assert_query_succeeds("CALL gql.list_users()");
-            let test_user_row = result.rows.iter().find(|row| {
-                if let Some(Value::String(username)) = row.values.get("username") {
-                    username == "testuser"
-                } else {
-                    false
-                }
-            });
-
-            if let Some(user_row) = test_user_row {
-                if let Some(Value::String(roles)) = user_row.values.get("roles") {
-                    assert!(roles.contains("admin"), "User should have admin role");
-                    assert!(roles.contains("editor"), "User should have editor role");
-                }
+        // Verify roles in user listing
+        let result = fixture.assert_query_succeeds("CALL gql.list_users()");
+        let test_user_row = result.rows.iter().find(|row| {
+            if let Some(Value::String(username)) = row.values.get("username") {
+                username == "testuser"
+            } else {
+                false
             }
+        });
 
-            // Test role revocation
-            fixture.assert_query_succeeds("REVOKE ROLE 'editor' FROM 'testuser'");
+        if let Some(user_row) = test_user_row {
+            if let Some(Value::String(roles)) = user_row.values.get("roles") {
+                assert!(roles.contains("admin"), "User should have admin role");
+                assert!(roles.contains("editor"), "User should have editor role");
+            }
         }
-        Err(_) => {}
+
+        // Test role revocation
+        fixture.assert_query_succeeds("REVOKE ROLE 'editor' FROM 'testuser'");
     }
 }
 
@@ -256,27 +253,24 @@ fn test_authentication() {
 
     // Test authentication procedure
     let auth_result = fixture.query("CALL gql.authenticate_user('authtest', 'testpass123')");
-    match auth_result {
-        Ok(result) => {
-            // Verify the result structure
-            assert!(
-                !result.rows.is_empty(),
-                "Authentication should return user info"
-            );
+    if let Ok(result) = auth_result {
+        // Verify the result structure
+        assert!(
+            !result.rows.is_empty(),
+            "Authentication should return user info"
+        );
 
-            // Test invalid password
-            fixture.assert_query_fails(
-                "CALL gql.authenticate_user('authtest', 'wrongpass')",
-                "Authentication failed",
-            );
+        // Test invalid password
+        fixture.assert_query_fails(
+            "CALL gql.authenticate_user('authtest', 'wrongpass')",
+            "Authentication failed",
+        );
 
-            // Test non-existent user
-            fixture.assert_query_fails(
-                "CALL gql.authenticate_user('nonexistent', 'anypass')",
-                "Authentication failed",
-            );
-        }
-        Err(_) => {}
+        // Test non-existent user
+        fixture.assert_query_fails(
+            "CALL gql.authenticate_user('nonexistent', 'anypass')",
+            "Authentication failed",
+        );
     }
 }
 
@@ -425,8 +419,7 @@ fn test_transaction_integrity() {
     if role_names_after.contains(&"tx_test_role".to_string()) {
         // Clean up the role that should have been rolled back
         let _cleanup = fixture.query("DROP ROLE 'tx_test_role'");
-    } else {
-    }
+    } 
 
     // Test committed transaction
     fixture.assert_query_succeeds("BEGIN");

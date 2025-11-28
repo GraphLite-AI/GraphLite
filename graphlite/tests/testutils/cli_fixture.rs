@@ -29,7 +29,7 @@ impl CliFixture {
 
         // Initialize database via CLI: cargo run --bin graphlite -- install
         let output = Command::new("cargo")
-            .args(&[
+            .args([
                 "run",
                 "--quiet",
                 "--package",
@@ -68,7 +68,7 @@ impl CliFixture {
     /// Execute query via CLI and expect success
     pub fn assert_query_succeeds(&self, query: &str) -> CliQueryResult {
         let output = Command::new("cargo")
-            .args(&[
+            .args([
                 "run",
                 "--quiet",
                 "--package",
@@ -109,7 +109,7 @@ impl CliFixture {
     /// Execute query via CLI and expect failure
     pub fn assert_query_fails(&self, query: &str) -> String {
         let output = Command::new("cargo")
-            .args(&[
+            .args([
                 "run",
                 "--quiet",
                 "--package",

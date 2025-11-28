@@ -1403,12 +1403,12 @@ mod tests {
             // Month should be 2 digits, 01-12
             assert_eq!(parts[1].len(), 2);
             let month = parts[1].parse::<u32>().unwrap();
-            assert!(month >= 1 && month <= 12);
+            assert!((1..=12).contains(&month));
 
             // Day should be 2 digits, 01-31
             assert_eq!(parts[2].len(), 2);
             let day = parts[2].parse::<u32>().unwrap();
-            assert!(day >= 1 && day <= 31);
+            assert!((1..=31).contains(&day));
         } else {
             panic!("Expected String value representing date");
         }

@@ -1908,8 +1908,7 @@ fn test_debug_with_clause_issue() {
                 match simple_result {
                     Ok(simple_query_result) => {
                         if simple_query_result.rows.is_empty() {
-                        } else {
-                        }
+                        } 
                     }
                     Err(_e) => {}
                 }

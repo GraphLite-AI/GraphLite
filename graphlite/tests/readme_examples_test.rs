@@ -114,7 +114,7 @@ fn test_readme_friends_of_friends() {
 
     // Should return Carol and Dave
     assert!(
-        result.rows.len() >= 1,
+        !result.rows.is_empty(),
         "Should find at least one friend of friend"
     );
 
@@ -154,7 +154,7 @@ fn test_readme_variable_length_paths() {
         )
         .expect("Variable-length paths query should succeed");
 
-    assert!(result.rows.len() > 0, "Should find paths");
+    assert!(!result.rows.is_empty(), "Should find paths");
 }
 
 #[test]
@@ -177,7 +177,7 @@ fn test_readme_multiple_patterns_coworkers() {
 
     // Should find Alice and Bob at TechCorp
     assert!(
-        result.rows.len() > 0,
+        !result.rows.is_empty(),
         "Should find coworkers who know each other"
     );
 }
@@ -494,7 +494,7 @@ fn test_readme_count_relationships() {
         )
         .expect("COUNT query should succeed");
 
-    assert!(result.rows.len() > 0, "Should have results");
+    assert!(!result.rows.is_empty(), "Should have results");
 
     // Verify Alice has 2 friends
     let alice_row = result
