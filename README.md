@@ -224,7 +224,7 @@ $ gql>
 
 ## Testing
 
-GraphLite includes comprehensive test coverage with **185 unit tests** and **250+ integration tests**.
+GraphLite includes comprehensive test coverage with **189 unit tests** and **537 total tests** (including integration and benchmark tests).
 
 **Note**: Tests are configured to run single-threaded by default (via `.cargo/config.toml`) to avoid database state conflicts.
 
