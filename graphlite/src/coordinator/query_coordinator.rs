@@ -10,7 +10,7 @@ use crate::ast::parser::parse_query;
 use crate::cache::CacheManager;
 use crate::catalog::manager::CatalogManager;
 use crate::exec::{ExecutionRequest, QueryExecutor, QueryResult};
-use crate::session::{InstanceSessionProvider, SessionManager, SessionProvider};
+use crate::session::{GlobalSessionProvider, InstanceSessionProvider, SessionManager, SessionMode, SessionProvider};
 use crate::storage::{StorageManager, StorageMethod, StorageType};
 use crate::txn::TransactionManager;
 use std::panic::{RefUnwindSafe, UnwindSafe};
@@ -97,6 +97,109 @@ impl QueryCoordinator {
             storage.clone(),
             catalog_manager.clone(),
         ));
+
+        // Create query executor
+        let executor = Arc::new(
+            QueryExecutor::new(
+                storage.clone(),
+                catalog_manager.clone(),
+                transaction_manager.clone(),
+                session_provider.clone(),
+                cache_manager,
+            )
+            .map_err(|e| format!("Failed to initialize query executor: {}", e))?,
+        );
+
+        Ok(Arc::new(Self::new(executor, session_provider)))
+    }
+
+    /// Create a new QueryCoordinator with specified session mode
+    ///
+    /// This method allows you to choose between Instance and Global session management.
+    ///
+    /// # Arguments
+    /// * `db_path` - Path to the database directory
+    /// * `mode` - Session management mode (Instance or Global)
+    ///
+    /// # Returns
+    /// * `Ok(Arc<QueryCoordinator>)` - Initialized coordinator ready for use
+    /// * `Err(String)` - Error message if initialization fails
+    ///
+    /// # Session Modes
+    ///
+    /// - **SessionMode::Instance** (default): Each QueryCoordinator instance has its own
+    ///   isolated session pool. Sessions are not shared between instances. Use this mode
+    ///   for embedded databases where each application instance needs complete isolation.
+    ///
+    /// - **SessionMode::Global**: All QueryCoordinator instances share a process-wide
+    ///   session pool. Sessions created in one coordinator are visible to all coordinators
+    ///   in the same process. Use this mode for server/daemon applications where multiple
+    ///   coordinators need to access the same user sessions.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use graphlite::QueryCoordinator;
+    /// use graphlite::session::SessionMode;
+    ///
+    /// // Embedded mode - each instance isolated (default behavior)
+    /// let coord1 = QueryCoordinator::from_path_with_mode("db1.graphlite", SessionMode::Instance)?;
+    /// let coord2 = QueryCoordinator::from_path_with_mode("db2.graphlite", SessionMode::Instance)?;
+    /// // coord1 and coord2 have separate session pools
+    ///
+    /// // Server mode - shared session pool
+    /// let coord1 = QueryCoordinator::from_path_with_mode("db.graphlite", SessionMode::Global)?;
+    /// let coord2 = QueryCoordinator::from_path_with_mode("db.graphlite", SessionMode::Global)?;
+    /// // coord1 and coord2 share the same session pool
+    /// # Ok::<(), String>(())
+    /// ```
+    pub fn from_path_with_mode(
+        db_path: impl AsRef<Path>,
+        mode: SessionMode,
+    ) -> Result<Arc<Self>, String> {
+        let path = db_path.as_ref().to_path_buf();
+
+        // Initialize storage
+        let storage = Arc::new(
+            StorageManager::new(path.clone(), StorageMethod::DiskOnly, StorageType::Sled)
+                .map_err(|e| format!("Failed to initialize storage: {}", e))?,
+        );
+
+        // Initialize catalog manager
+        let catalog_manager = Arc::new(RwLock::new(CatalogManager::new(storage.clone())));
+
+        // Initialize transaction manager with database path
+        let transaction_manager = Arc::new(
+            TransactionManager::new(path.clone())
+                .map_err(|e| format!("Failed to initialize transaction manager: {}", e))?,
+        );
+
+        // Initialize cache manager
+        let cache_config = crate::cache::CacheConfig::default();
+        let cache_manager =
+            Some(Arc::new(CacheManager::new(cache_config).map_err(|e| {
+                format!("Failed to initialize cache manager: {}", e)
+            })?));
+
+        // Create session provider based on mode
+        let session_provider: Arc<dyn SessionProvider> = match mode {
+            SessionMode::Instance => {
+                // Instance mode: Each coordinator has isolated sessions
+                Arc::new(InstanceSessionProvider::new(
+                    transaction_manager.clone(),
+                    storage.clone(),
+                    catalog_manager.clone(),
+                ))
+            }
+            SessionMode::Global => {
+                // Global mode: All coordinators share process-wide session pool
+                Arc::new(GlobalSessionProvider::new(
+                    transaction_manager.clone(),
+                    storage.clone(),
+                    catalog_manager.clone(),
+                ))
+            }
+        };
 
         // Create query executor
         let executor = Arc::new(

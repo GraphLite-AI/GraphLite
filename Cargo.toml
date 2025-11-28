@@ -62,3 +62,4 @@ petgraph = "0.6"
 
 # Dev dependencies
 tempfile = "3.8"
+serial_test = "3.0"
