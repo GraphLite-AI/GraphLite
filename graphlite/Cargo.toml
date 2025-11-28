@@ -64,6 +64,11 @@ path = "../examples/rust/bindings/simple_usage.rs"
 name = "drug_discovery"
 path = "../examples/rust/bindings/drug_discovery/main.rs"
 
+[[bench]]
+name = "session_throughput"
+path = "../benches/session_throughput.rs"
+harness = false
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
