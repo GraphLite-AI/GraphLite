@@ -1,0 +1,140 @@
+# .dockerignore - Optimize Docker build context
+# Exclude files not needed for building the Docker image
+
+# Build artifacts and cache
+target/
+**/target/
+**/*.rs.bk
+*.pdb
+# Cargo.lock - NEEDED for reproducible builds
+
+# Git repository
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# IDE and editor files
+.vscode/
+.idea/
+.gradle/
+*.swp
+*.swo
+*~
+*.iml
+.claude/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Documentation and assets (comment out if needed in image)
+*.md
+docs/
+CONTRIBUTING.md
+CHANGELOG.md
+README.md
+LICENSE
+NOTICE
+
+# Scripts (exclude unless needed in image)
+scripts/
+*.sh
+!entrypoint.sh
+
+# Test files and data
+**/tests/
+**/*_test.rs
+**/*_tests.rs
+**/testdata/
+**/test_data/
+*.test
+test_db/
+testdb/
+
+# Database files and runtime data
+*.db
+mydb/
+my_db/
+*.wal
+*.log
+graphlite-ffi/data/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+dist/
+build/
+.venv/
+venv/
+*.so
+
+# Java artifacts
+*.class
+.gradle/
+gradle/
+
+# Bindings (exclude if not needed)
+bindings/
+
+# Examples (exclude if not needed)
+examples/
+examples-core/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+
+# Docker files themselves
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Environment and secrets
+.env
+.env.*
+.secrets
+*.key
+*.pem
+*.crt
+
+# CI/CD
+.actrc
+.github/workflows/
+
+# Grammar files (if not needed at runtime)
+grammar/
+
+# Cargo metadata cache
+.cargo/
+!.cargo/config.toml
+
+# macOS specific
+.Trashes
+.Spotlight-V100
+.TemporaryItems
+
+# Windows specific
+$RECYCLE.BIN/
+
+# Linux specific
+.directory
+
+# Logs and monitoring
+*.log
+logs/
+*.out
+*.err
+
+# Coverage reports
+coverage/
+*.profraw
+*.profdata

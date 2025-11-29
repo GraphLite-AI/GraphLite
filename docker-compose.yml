@@ -1,0 +1,161 @@
+# GraphLite Docker Compose - Development Configuration
+# This configuration is optimized for local development and testing
+
+version: '3.8'
+
+services:
+  graphlite:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        RUST_VERSION: 1.83
+      # Uncomment to build for specific platform
+      # platforms:
+      #   - linux/amd64
+      #   - linux/arm64
+
+    image: graphlite:dev
+    container_name: graphlite-dev
+
+    # Override default command for interactive use
+    stdin_open: true
+    tty: true
+
+    # Mount volumes for persistent data and development
+    volumes:
+      # Database storage
+      - graphlite-data:/data
+
+      # Configuration files
+      - graphlite-config:/config
+
+      # Optional: Mount local directory for development
+      # - ./local-db:/data/local-db
+
+      # Optional: Mount scripts for easy access
+      # - ./scripts:/home/graphlite/scripts:ro
+
+    # Environment variables
+    environment:
+      # Logging level (trace, debug, info, warn, error, off)
+      - RUST_LOG=info
+
+      # Data and config paths
+      - GRAPHLITE_DATA_PATH=/data
+      - GRAPHLITE_CONFIG_PATH=/config
+
+      # Database configuration (set these to auto-start GQL shell)
+      # Uncomment and configure after initializing database:
+      # - GRAPHLITE_DB_PATH=/data/mydb
+      # - GRAPHLITE_USER=admin
+      # - GRAPHLITE_PASSWORD=secret
+
+      # Optional: Set timezone
+      - TZ=UTC
+
+    # Network configuration
+    # networks:
+    #   - graphlite-network
+
+    # Uncomment if HTTP API is added in the future
+    # ports:
+    #   - "8080:8080"
+
+    # Resource limits (adjust based on your needs)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Health check (adapt when HTTP API is available)
+    healthcheck:
+      test: ["CMD", "graphlite", "--version"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+    # No command needed - entrypoint handles default behavior
+    # To use GQL shell: set GRAPHLITE_DB_PATH, GRAPHLITE_USER, GRAPHLITE_PASSWORD above
+    # Or attach to container: docker-compose exec graphlite bash
+
+  # Optional: Add a second instance for testing replication/clustering
+  # graphlite-replica:
+  #   image: graphlite:dev
+  #   container_name: graphlite-replica
+  #   stdin_open: true
+  #   tty: true
+  #   volumes:
+  #     - graphlite-replica-data:/data
+  #     - graphlite-config:/config:ro
+  #   environment:
+  #     - RUST_LOG=info
+  #     - GRAPHLITE_DATA_PATH=/data
+  #   restart: unless-stopped
+  #   command: tail -f /dev/null
+
+# Volumes for persistent storage
+volumes:
+  graphlite-data:
+    driver: local
+    name: graphlite-dev-data
+
+  graphlite-config:
+    driver: local
+    name: graphlite-dev-config
+
+  # graphlite-replica-data:
+  #   driver: local
+  #   name: graphlite-replica-data
+
+# Optional: Custom network
+# networks:
+#   graphlite-network:
+#     driver: bridge
+#     name: graphlite-network
+
+# ==============================================================================
+# Usage Examples:
+# ==============================================================================
+# Start services:
+#   docker-compose up -d
+#
+# View logs:
+#   docker-compose logs -f
+#
+# Initialize database (first time):
+#   docker-compose run --rm graphlite graphlite install \
+#     --path /data/mydb --admin-user admin --admin-password secret
+#
+# Start interactive GQL shell (after configuring environment variables above):
+#   docker-compose run --rm graphlite
+#
+# Or start GQL shell directly:
+#   docker-compose run --rm graphlite graphlite gql \
+#     --path /data/mydb -u admin -p secret
+#
+# Execute other GraphLite commands:
+#   docker-compose exec graphlite graphlite --version
+#   docker-compose exec graphlite bash
+#
+# Attach to running container:
+#   docker attach graphlite-dev
+#
+# Stop services:
+#   docker-compose down
+#
+# Stop and remove volumes (WARNING: deletes all data):
+#   docker-compose down -v
+#
+# Rebuild images:
+#   docker-compose build
+#   docker-compose up -d --build
+# ==============================================================================
