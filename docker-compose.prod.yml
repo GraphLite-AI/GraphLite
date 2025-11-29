@@ -1,0 +1,226 @@
+# GraphLite Docker Compose - Production Configuration
+# This configuration is optimized for production deployments
+
+version: '3.8'
+
+services:
+  graphlite:
+    image: graphlite:latest
+    container_name: graphlite-prod
+
+    # Production: no tty/stdin
+    stdin_open: false
+    tty: false
+
+    # Mount volumes for persistent data
+    volumes:
+      # Database storage - use named volume or bind mount to backup location
+      - type: volume
+        source: graphlite-data
+        target: /data
+
+      # Configuration files
+      - type: volume
+        source: graphlite-config
+        target: /config
+
+      # Optional: Bind mount for backups
+      # - type: bind
+      #   source: /path/to/backups
+      #   target: /backups
+      #   read_only: false
+
+    # Environment variables
+    environment:
+      # Production logging (info or warn recommended)
+      - RUST_LOG=info
+
+      # Data and config paths
+      - GRAPHLITE_DATA_PATH=/data
+      - GRAPHLITE_CONFIG_PATH=/config
+
+      # Database configuration for GQL shell
+      # Set these for automatic GQL shell startup:
+      - GRAPHLITE_DB_PATH=/data/production_db
+      - GRAPHLITE_USER=admin
+      # IMPORTANT: Use Docker secrets or external secret manager in production
+      # DO NOT hardcode passwords here in production!
+      - GRAPHLITE_PASSWORD=${GRAPHLITE_PASSWORD:-}
+
+      # Timezone
+      - TZ=UTC
+
+    # Network configuration
+    networks:
+      - graphlite-network
+
+    # Uncomment if HTTP API is added in the future
+    # ports:
+    #   - "8080:8080"
+
+    # Production resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+      # Deployment mode (for Swarm)
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: stop-first
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+    # Restart policy for docker-compose
+    restart: unless-stopped
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "graphlite", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+
+    # Read-only root filesystem (uncomment if applicable)
+    # read_only: true
+    # tmpfs:
+    #   - /tmp
+
+    # No command needed - entrypoint handles startup
+    # Configure GRAPHLITE_DB_PATH, GRAPHLITE_USER, GRAPHLITE_PASSWORD above
+    # for automatic GQL shell, or override command as needed
+
+  # Optional: Monitoring/Metrics container (Prometheus exporter)
+  # graphlite-exporter:
+  #   image: prom/node-exporter:latest
+  #   container_name: graphlite-exporter
+  #   networks:
+  #     - graphlite-network
+  #   volumes:
+  #     - /proc:/host/proc:ro
+  #     - /sys:/host/sys:ro
+  #     - /:/rootfs:ro
+  #   command:
+  #     - '--path.procfs=/host/proc'
+  #     - '--path.sysfs=/host/sys'
+  #     - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+  #   restart: unless-stopped
+
+  # Optional: Backup service
+  # graphlite-backup:
+  #   image: graphlite:latest
+  #   container_name: graphlite-backup
+  #   volumes:
+  #     - graphlite-data:/data:ro
+  #     - /path/to/backups:/backups
+  #   environment:
+  #     - BACKUP_SCHEDULE=0 2 * * *  # Daily at 2 AM
+  #   command: >
+  #     bash -c "while true; do
+  #       tar czf /backups/graphlite-backup-$$(date +%Y%m%d-%H%M%S).tar.gz -C /data . &&
+  #       find /backups -name 'graphlite-backup-*.tar.gz' -mtime +7 -delete;
+  #       sleep 86400;
+  #     done"
+  #   restart: unless-stopped
+
+# Volumes for persistent storage
+volumes:
+  graphlite-data:
+    driver: local
+    name: graphlite-prod-data
+    # Optional: Use specific driver options for production
+    # driver_opts:
+    #   type: none
+    #   o: bind
+    #   device: /mnt/data/graphlite
+
+  graphlite-config:
+    driver: local
+    name: graphlite-prod-config
+
+# Network configuration
+networks:
+  graphlite-network:
+    driver: bridge
+    name: graphlite-prod-network
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# ==============================================================================
+# Production Deployment Guide:
+# ==============================================================================
+#
+# 1. Set password environment variable:
+#    export GRAPHLITE_PASSWORD="your-secure-password"
+#
+# 2. Build and tag production image:
+#    docker build -t graphlite:latest .
+#    docker tag graphlite:latest your-registry/graphlite:latest
+#    docker push your-registry/graphlite:latest
+#
+# 3. Initialize database (first time):
+#    docker-compose -f docker-compose.prod.yml run --rm graphlite \
+#      graphlite install --path /data/production_db --admin-user admin --admin-password "$GRAPHLITE_PASSWORD"
+#
+# 4. Deploy with docker-compose:
+#    docker-compose -f docker-compose.prod.yml up -d
+#
+# 5. Deploy with Docker Swarm:
+#    docker stack deploy -c docker-compose.prod.yml graphlite-stack
+#
+# 6. Start interactive GQL shell:
+#    docker-compose -f docker-compose.prod.yml run --rm graphlite
+#    # Or attach to running container:
+#    docker attach graphlite-prod
+#
+# 7. Health monitoring:
+#    docker-compose -f docker-compose.prod.yml ps
+#    docker-compose -f docker-compose.prod.yml logs -f
+#
+# 8. Backup data:
+#    docker run --rm -v graphlite-prod-data:/data -v $(pwd):/backup ubuntu \
+#      tar czf /backup/graphlite-backup-$(date +%Y%m%d).tar.gz -C /data .
+#
+# 9. Restore data:
+#    docker run --rm -v graphlite-prod-data:/data -v $(pwd):/backup ubuntu \
+#      tar xzf /backup/graphlite-backup-YYYYMMDD.tar.gz -C /data
+#
+# 10. Update deployment:
+#     docker-compose -f docker-compose.prod.yml pull
+#     docker-compose -f docker-compose.prod.yml up -d
+#
+# 9. Scale services (if needed):
+#    docker-compose -f docker-compose.prod.yml up -d --scale graphlite=3
+#
+# 10. Monitoring and Logs:
+#     docker-compose -f docker-compose.prod.yml logs --tail=100 -f graphlite
+#     docker stats graphlite-prod
+#
+# ==============================================================================
+# Security Best Practices:
+# ==============================================================================
+# - Use secrets management for passwords (Docker Secrets or external vault)
+# - Enable TLS/SSL for network communication
+# - Regular security updates: rebuild images with latest base image
+# - Limit container capabilities
+# - Use read-only root filesystem where possible
+# - Implement network segmentation
+# - Regular backups with encryption
+# - Monitor logs for suspicious activity
+# ==============================================================================
