@@ -99,7 +99,26 @@ cargo add graphlite
 
 **See:** **[Using GraphLite as a Crate](docs/Using%20GraphLite%20as%20a%20Crate.md)** for complete integration guide.
 
-#### Option B: Install CLI from crates.io (Easiest for CLI Usage)
+#### Option B: Use Docker (Easiest for Quick Start)
+
+Run GraphLite instantly with Docker - no installation required:
+
+```bash
+# Initialize database
+docker run -it -v $(pwd)/mydb:/data ghcr.io/graphlite-ai/graphlite:latest \
+  graphlite install --path /data/mydb --admin-user admin --admin-password secret
+
+# Start interactive GQL shell
+docker run -it -v $(pwd)/mydb:/data \
+  -e GRAPHLITE_DB_PATH=/data/mydb \
+  -e GRAPHLITE_USER=admin \
+  -e GRAPHLITE_PASSWORD=secret \
+  ghcr.io/graphlite-ai/graphlite:latest
+```
+
+**See:** **[Docker Guide](docs/Docker.md)** for complete Docker setup including multi-architecture builds and Docker Compose.
+
+#### Option C: Install CLI from crates.io
 
 Install the GraphLite CLI tool directly from crates.io:
 
@@ -109,7 +128,7 @@ cargo install graphlite-cli
 
 After installation, the `graphlite` binary will be available in your PATH.
 
-#### Option C: Clone and Build (For Development/Contributing)
+#### Option D: Clone and Build (For Development/Contributing)
 
 ```bash
 # Clone the repository
