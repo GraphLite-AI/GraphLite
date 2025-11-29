@@ -104,7 +104,7 @@ cargo add graphlite
 Install the GraphLite CLI tool directly from crates.io:
 
 ```bash
-cargo install graphlite-cli
+cargo install gql-cli
 ```
 
 After installation, the `graphlite` binary will be available in your PATH.
@@ -162,7 +162,7 @@ If you prefer to build manually without the script:
 **Note:** If you're using GraphLite as a crate in your application, skip to **[Using GraphLite as a Crate](docs/Using%20GraphLite%20as%20a%20Crate.md)** instead.
 
 ```bash
-# If you installed via 'cargo install graphlite-cli' (Option B)
+# If you installed via 'cargo install gql-cli' (Option B)
 graphlite install --path ./my_db --admin-user admin --admin-password secret
 
 # If you built from source (Option C)
@@ -178,7 +178,7 @@ This command:
 ### Step 3: Start Using GQL (CLI)
 
 ```bash
-# If you installed via 'cargo install graphlite-cli' (Option B)
+# If you installed via 'cargo install gql-cli' (Option B)
 graphlite gql --path ./my_db -u admin -p secret
 
 # If you built from source (Option C)
@@ -386,12 +386,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Examples and Documentation
 
 **For Rust Applications:**
-- **[SDK Examples](graphlite-sdk/examples/)** - Recommended high-level API (start here!)
+- **[SDK Examples](sdk-rust/examples/)** - Recommended high-level API (start here!)
 - **[Core Library Examples](examples-core/)** - Advanced low-level usage
 
 **See also:**
 - [Getting Started With GQL.md](docs/Getting%20Started%20With%20GQL.md) - Complete query language reference
-- [graphlite-sdk/README.md](graphlite-sdk/README.md) - Full SDK documentation
+- [sdk-rust/README.md](sdk-rust/README.md) - Full SDK documentation
 
 <details>
 <summary><b>Uninstall options</b></summary>
@@ -443,7 +443,7 @@ GraphLite provides comprehensive documentation for all skill levels:
 - "Contribution Guide.md" - How to contribute
 
 **Code Examples:**
-- **[SDK Examples](graphlite-sdk/examples/)** - High-level API examples (recommended)
+- **[SDK Examples](sdk-rust/examples/)** - High-level API examples (recommended)
 - **[Core Library Examples](examples-core/)** - Advanced low-level usage
 
 **Legal:**

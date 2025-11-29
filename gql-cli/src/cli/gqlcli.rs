@@ -72,8 +72,8 @@ pub fn handle_install(
         .set_user_password(&admin_user, &password)
         .map_err(|e| format!("Failed to set admin password: {}", e))?;
 
-    println!("    ✓ Password set for user '{}'", admin_user);
-    println!("    ✓ Security catalog saved to disk");
+    println!("    Password set for user '{}'", admin_user);
+    println!("    Security catalog saved to disk");
 
     // Create a system session for additional setup operations
     let session_id = coordinator.create_simple_session("system")?;
@@ -81,8 +81,8 @@ pub fn handle_install(
     // Create default schema
     println!("  → Creating default schema...");
     match coordinator.process_query("CREATE SCHEMA IF NOT EXISTS /default", &session_id) {
-        Ok(_) => println!("    ✓ Default schema created"),
-        Err(e) => println!("    ℹ Schema creation: {}", e),
+        Ok(_) => println!("    Default schema created"),
+        Err(e) => println!("    Schema creation: {}", e),
     }
 
     // Close the system session
@@ -91,7 +91,7 @@ pub fn handle_install(
     // Print success message
     println!(
         "{}",
-        format!("\n✓ GraphLite initialized at {:?}", path).green()
+        format!("\nGraphLite initialized at {:?}", path).green()
     );
     println!("{}", "\nDatabase is ready to use!".bold().green());
     println!("{}", "\nStart the GQL console with:".yellow());
@@ -154,8 +154,8 @@ pub fn handle_gql(
     println!("{}", "GraphLite".bold().green());
     println!("Type 'help' for commands, 'exit' or 'quit' to exit");
     println!("Multi-line queries supported - use ';' to terminate\n");
-    println!("{}", format!("✅ Authenticated as: {}", username).cyan());
-    println!("📋 Session ID: {}", session_id);
+    println!("{}", format!("Authenticated as: {}", username).cyan());
+    println!("Session ID: {}", session_id);
 
     // Create REPL editor
     let config = Config::builder()

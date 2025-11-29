@@ -170,8 +170,8 @@ jobs:
 
   # TODO: Re-enable doc-tests once SDK documentation examples are updated
   # Currently disabled because SDK docs use outdated API methods that fail tests:
-  # - graphlite-sdk/src/lib.rs uses create_session() which no longer exists (should be session())
-  # - graphlite-sdk/src/query.rs and result.rs examples need updating
+  # - sdk-rust/src/lib.rs uses create_session() which no longer exists (should be session())
+  # - sdk-rust/src/query.rs and result.rs examples need updating
   # See issue: https://github.com/GraphLite-AI/GraphLite/issues/[TO_BE_CREATED]
   # To test locally: cargo test --doc
   #

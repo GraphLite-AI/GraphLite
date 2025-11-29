@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Path Expressions** - Property access on nodes and relationships
 
 #### API & SDK
-- **Rust SDK** - High-level ergonomic API (`graphlite-sdk` crate)
+- **Rust SDK** - High-level ergonomic API (`sdk-rust` crate)
 - **Connection Management** - `GraphLite::open()` for database connections
 - **Session Management** - `session()` for user context and permissions
 - **Transaction API** - `transaction()` with auto-rollback on drop
@@ -112,7 +112,7 @@ If you were using development builds before v0.0.1:
 1. **Update Cargo.toml**
    ```toml
    [dependencies]
-   graphlite-sdk = "0.0.1"
+   sdk-rust = "0.0.1"
    ```
 
 2. **Rebuild your project**
@@ -134,7 +134,7 @@ If you were using development builds before v0.0.1:
 - **Source Code**: https://github.com/GraphLite-AI/GraphLite
 - **Issue Tracker**: https://github.com/GraphLite-AI/GraphLite/issues
 - **Documentation**: [docs/](docs/)
-- **Examples**: [graphlite-sdk/examples/](graphlite-sdk/examples/)
+- **Examples**: [sdk-rust/examples/](sdk-rust/examples/)
 
 ---
 

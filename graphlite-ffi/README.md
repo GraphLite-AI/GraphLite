@@ -1,6 +1,6 @@
 # GraphLite FFI - C-Compatible Foreign Function Interface
 
-This crate provides a C-compatible API for GraphLite, enabling language bindings for Python, Java, JavaScript, Kotlin, and other languages.
+This crate provides a C-compatible API for GraphLite, enabling language bindings for Python, Swift, Java, JavaScript, Go, WASM, and other languages.
 
 ## Overview
 
@@ -236,9 +236,11 @@ graphlite_close(db);
 This FFI layer is designed as the foundation for language-specific bindings:
 
 - **Python**: Use `ctypes` or PyO3
-- **Java**: Use JNI
+- **Swift**: Use C interop or UniFFI
+- **Java**: Use JNA (Java Native Access)
 - **JavaScript**: Use Node.js N-API (neon)
-- **Kotlin**: Use JNI or UniFFI
+- **Go**: Use `cgo`
+- **WASM**: Use `wasm-bindgen`
 
 See the `bindings/` directory for language-specific implementations.
 
