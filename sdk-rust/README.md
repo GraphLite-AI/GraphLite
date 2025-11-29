@@ -23,7 +23,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-sdk-rust = "0.1"
+graphlite-sdk = "0.1"
 ```
 
 Basic usage:
@@ -260,7 +260,7 @@ fn get_users(db: &GraphLite) -> Result<Vec<User>, Box<dyn std::error::Error>> {
 
 GraphLite SDK follows similar patterns to rusqlite but adapted for graph databases:
 
-| Operation | rusqlite (SQLite) | sdk-rust (GraphLite) |
+| Operation | rusqlite (SQLite) | graphlite-sdk (GraphLite) |
 |-----------|-------------------|---------------------------|
 | Open DB | `Connection::open()` | `GraphLite::open()` |
 | Execute | `conn.execute()` | `session.execute()` |
@@ -278,36 +278,34 @@ GraphLite SDK follows similar patterns to rusqlite but adapted for graph databas
 
 ```text
 Your Application
-       
-       
-
-   GraphLite SDK         
-   - GraphLite             ← You are here
-   - Session             
-   - Transaction         
-   - QueryBuilder        
-   - TypedResult         
-
-       
-       
-
-   GraphLite Core        
-   - QueryCoordinator    
-   - Storage Engine      
-   - Catalog Manager     
-
+       │
+       ▼
+┌─────────────────────────┐
+│   GraphLite SDK         │
+│   - GraphLite           │  ← You are here
+│   - Session             │
+│   - Transaction         │
+│   - QueryBuilder        │
+│   - TypedResult         │
+└─────────────────────────┘
+       │
+       ▼
+┌─────────────────────────┐
+│   GraphLite Core        │
+│   - QueryCoordinator    │
+│   - Storage Engine      │
+│   - Catalog Manager     │
+└─────────────────────────┘
 ```
 
 ## Language Bindings
 
 The GraphLite SDK is specifically for **Rust applications**. For other languages:
 
-- **Python** - Use `../sdk-python/` (high-level Python SDK)
-- **Swift** - Use `bindings/swift/` (via FFI)
-- **Java** - Use `bindings/java/` (via FFI)
+- **Python** - Use `bindings/python/` (via FFI)
+- **Java** - Use `bindings/java/` (via JNI)
 - **JavaScript/Node.js** - Use `bindings/javascript/` (via FFI/WASM)
-- **Go** - Use `bindings/go/` (via FFI)
-- **WASM** - Use `bindings/wasm/` (for browser/web)
+- **Kotlin** - Use `bindings/kotlin/` (via JNI)
 
 See the main [MULTI_LANGUAGE_BINDINGS_DESIGN.md](../MULTI_LANGUAGE_BINDINGS_DESIGN.md) for details.
 
@@ -326,7 +324,7 @@ Benchmark comparison:
 
 ## Documentation
 
-- [API Documentation](https://docs.rs/sdk-rust)
+- [API Documentation](https://docs.rs/graphlite-sdk)
 - [Examples](examples-core/)
 - [GraphLite Core](../graphlite/)
 - [Language Bindings](../bindings/)

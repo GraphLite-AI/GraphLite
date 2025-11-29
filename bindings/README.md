@@ -10,13 +10,11 @@ GraphLite provides bindings for multiple programming languages, all built on top
 
 | Language | Directory | Status | Performance | Installation |
 |----------|-----------|--------|-------------|--------------|
-| **Rust** | [../sdk-rust](../sdk-rust/) | Stable | ~100% native | `cargo add sdk-rust` |
-| **Python** | [../sdk-python](../sdk-python/) | Stable | ~80-90% native | `pip install graphlite` |
-| **Swift** | [swift/](swift/) | Planned | ~95% native | Swift Package Manager |
-| **Java** | [java/](java/) | Planned | ~75-85% native | Maven/Gradle |
-| **JavaScript** | [javascript/](javascript/) | Planned | ~70-80% native (WASM) | `npm install graphlite` |
-| **Go** | [go/](go/) | Planned | ~85-95% native | `go get` |
-| **WASM** | [wasm/](wasm/) | Planned | ~70-80% native | `npm install graphlite-wasm` |
+| **Rust** | [../graphlite-sdk](../graphlite-sdk/) | Stable | ~100% native | `cargo add graphlite-sdk` |
+| **Python** | [python/](python/) | Stable | ~80-90% native | `pip install graphlite` |
+| **Java** | [java/](java/) | Stable | ~75-85% native | Maven/Gradle |
+| **JavaScript** | javascript/ | Planned | ~70-80% native (WASM) | `npm install graphlite` |
+| **Kotlin** | kotlin/ | Planned | ~75-85% native | Maven/Gradle |
 
 ## Quick Start by Language
 
@@ -32,7 +30,7 @@ let session = db.session("admin")?;
 let result = session.query("MATCH (n:Person) RETURN n")?;
 ```
 
-**See**: [sdk-rust/README.md](../sdk-rust/README.md)
+**See**: [graphlite-sdk/README.md](../graphlite-sdk/README.md)
 
 ### Python
 
@@ -68,31 +66,31 @@ try (GraphLite db = GraphLite.open("./mydb")) {
 All language bindings follow the same architecture:
 
 ```
-
-   Your Application                  
-   (Python, Java, JavaScript, etc.)  
-
-              
-              
-
-   Language Binding                  
-   (Python: ctypes, Java: JNA)       
-
-               FFI calls
-              
-
-   graphlite-ffi                     
-   (C-compatible API)                
-   - JSON serialization              
-   - Panic safety                    
-   - Memory management               
-
-              
-              
-
-   GraphLite Core                    
-   (Rust implementation)             
-
+┌─────────────────────────────────────┐
+│   Your Application                  │
+│   (Python, Java, JavaScript, etc.)  │
+└─────────────────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────┐
+│   Language Binding                  │
+│   (Python: ctypes, Java: JNA)       │
+└─────────────────────────────────────┘
+              │ FFI calls
+              ▼
+┌─────────────────────────────────────┐
+│   graphlite-ffi                     │
+│   (C-compatible API)                │
+│   - JSON serialization              │
+│   - Panic safety                    │
+│   - Memory management               │
+└─────────────────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────┐
+│   GraphLite Core                    │
+│   (Rust implementation)             │
+└─────────────────────────────────────┘
 ```
 
 ### Why FFI?
@@ -164,7 +162,7 @@ All language bindings provide the same conceptual API:
 
 Each binding includes comprehensive examples:
 
-- **Rust**: [sdk-rust/examples/](../sdk-rust/examples/)
+- **Rust**: [graphlite-sdk/examples/](../graphlite-sdk/examples/)
 - **Python**: [python/examples/](python/examples/)
 - **Java**: [java/examples/](java/examples/)
 
@@ -220,7 +218,8 @@ mvn clean deploy
 ### Choose Java if:
 - Enterprise Java application
 - Spring Boot integration
-- JVM ecosystem (can be used from Scala, Kotlin, Groovy)
+- Android development
+- JVM ecosystem (Scala, Kotlin, Groovy)
 
 ### Choose JavaScript if:
 - Web application (browser or Node.js)

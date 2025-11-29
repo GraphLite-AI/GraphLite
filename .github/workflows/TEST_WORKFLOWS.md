@@ -309,30 +309,30 @@ echo ""
 echo "1. Validating workflow syntax..."
 if command -v actionlint &> /dev/null; then
     actionlint .github/workflows/*.yml
-    echo " Workflow syntax valid"
+    echo "Workflow syntax valid"
 else
-    echo "  actionlint not installed, skipping syntax check"
+    echo "actionlint not installed, skipping syntax check"
 fi
 echo ""
 
 echo "2. Checking code formatting..."
 cargo fmt --all -- --check
-echo " Code formatting passed"
+echo "Code formatting passed"
 echo ""
 
 echo "3. Running clippy..."
 cargo clippy --all-targets --all-features -- -D warnings
-echo " Clippy passed"
+echo "Clippy passed"
 echo ""
 
 echo "4. Building project (release)..."
 ./scripts/build_all.sh --release
-echo " Build successful"
+echo "Build successful"
 echo ""
 
 echo "5. Running tests..."
 ./scripts/run_tests.sh --release
-echo " Tests passed"
+echo "Tests passed"
 echo ""
 
 echo "=== All CI component tests passed! ==="

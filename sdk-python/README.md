@@ -20,7 +20,7 @@ The GraphLite Python SDK provides a developer-friendly API for working with Grap
 
 ```bash
 # Install from source (for now)
-cd sdk-python
+cd python-sdk
 pip install -e .
 ```
 
@@ -268,7 +268,7 @@ print(f"Total persons: {count_obj.count}")
 
 GraphLite SDK follows similar patterns to Python's sqlite3 but adapted for graph databases:
 
-| Operation | sqlite3 (SQLite) | sdk-rust (GraphLite) |
+| Operation | sqlite3 (SQLite) | graphlite-sdk (GraphLite) |
 |-----------|------------------|---------------------------|
 | Open DB | `sqlite3.connect()` | `GraphLite.open()` |
 | Execute | `conn.execute()` | `session.execute()` |
@@ -286,42 +286,40 @@ GraphLite SDK follows similar patterns to Python's sqlite3 but adapted for graph
 
 ```text
 Your Application
-       
-       
-
-  GraphLite SDK (this package)           
-  - GraphLite (main API)                   ← You are here
-  - Session (session management)         
-  - Transaction (ACID support)           
-  - QueryBuilder (fluent queries)        
-  - TypedResult (deserialization)        
-
-       
-       
-
-  GraphLite FFI Bindings                 
-  (Low-level ctypes wrapper)             
-
-       
-       
-
-  GraphLite Core (Rust)                  
-  - QueryCoordinator                     
-  - Storage Engine                       
-  - Catalog Manager                      
-
+       │
+       ▼
+┌─────────────────────────────────────────┐
+│  GraphLite SDK (this package)           │
+│  - GraphLite (main API)                 │  ← You are here
+│  - Session (session management)         │
+│  - Transaction (ACID support)           │
+│  - QueryBuilder (fluent queries)        │
+│  - TypedResult (deserialization)        │
+└─────────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────────┐
+│  GraphLite FFI Bindings                 │
+│  (Low-level ctypes wrapper)             │
+└─────────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────────┐
+│  GraphLite Core (Rust)                  │
+│  - QueryCoordinator                     │
+│  - Storage Engine                       │
+│  - Catalog Manager                      │
+└─────────────────────────────────────────┘
 ```
 
 ## Language Bindings
 
 The GraphLite Python SDK is specifically for **Python applications**. For other languages:
 
-- **Rust** - Use `../sdk-rust/` (native Rust SDK, zero-overhead)
-- **Swift** - Use `bindings/swift/` (via FFI)
-- **Java** - Use `bindings/java/` (via FFI)
+- **Rust** - Use `graphlite-sdk/` (native Rust SDK)
+- **Java** - Use `bindings/java/` (via JNI)
 - **JavaScript/Node.js** - Use `bindings/javascript/` (via FFI/WASM)
-- **Go** - Use `bindings/go/` (via FFI)
-- **WASM** - Use `bindings/wasm/` (for browser/web)
+- **Kotlin** - Use `bindings/kotlin/` (via JNI)
 
 See the main [MULTI_LANGUAGE_BINDINGS_DESIGN.md](../MULTI_LANGUAGE_BINDINGS_DESIGN.md) for details.
 
@@ -380,7 +378,7 @@ To work on the SDK:
 
 ```bash
 # Install in development mode
-cd sdk-python
+cd python-sdk
 pip install -e .
 
 # Run tests (coming soon)
