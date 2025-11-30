@@ -32,17 +32,31 @@ libgraphlite_ffi.so (Rust)
 
 1. **Build the GraphLite FFI library**:
    ```bash
-   cd ~/github/deepgraphai/GraphLite
+   cd ~/github/graphlite-ai/GraphLite
    cargo build --release -p graphlite-ffi
    ```
 
 2. **Install the low-level bindings**:
    ```bash
-   cd ~/github/deepgraphai/GraphLite/bindings/python
-   pip install -e .
+   cd ~/github/graphlite-ai/GraphLite/bindings/python
+   pip install --break-system-packages -e .
    ```
 
-3. **The python-sdk is imported directly** from the GraphLite repository (no installation needed for examples)
+3. **Python SDK Dependency** ⚠️
+
+   The high-level Python SDK is currently in the `deepgraphai/GraphLite` repository on the `python-sdk` branch:
+
+   ```bash
+   # Clone and checkout python-sdk branch
+   cd ~/github/deepgraphai
+   git clone https://github.com/deepgraphai/GraphLite.git  # if not already cloned
+   cd GraphLite
+   git checkout python-sdk
+   ```
+
+   The examples will automatically find the SDK at `~/github/deepgraphai/GraphLite/python-sdk/`
+
+   Alternatively, edit the `drug_discovery.py` file to update the path to your python-sdk location.
 
 ## Examples
 

@@ -29,8 +29,18 @@ import shutil
 from pathlib import Path
 
 # Add the python-sdk to the path
+# Note: The python-sdk is currently in the deepgraphai/GraphLite repository
+# on the python-sdk branch. You may need to adjust this path based on your setup.
 graphlite_repo = Path.home() / "github" / "deepgraphai" / "GraphLite"
 sdk_path = graphlite_repo / "python-sdk"
+
+# Check if SDK exists
+if not sdk_path.exists():
+    print(f"ERROR: Python SDK not found at {sdk_path}")
+    print("Please checkout the python-sdk branch from deepgraphai/GraphLite")
+    print("Or update the path in this script to point to your python-sdk location")
+    sys.exit(1)
+
 sys.path.insert(0, str(sdk_path))
 
 from src.connection import GraphLite
