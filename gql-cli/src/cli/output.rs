@@ -25,7 +25,7 @@ impl ResultFormatter {
         // Check if this is a session command
         if result.is_session_command() {
             if let Some(msg) = result.get_session_message() {
-                return format!("{}\n", format!("✅ {}", msg).green());
+                return format!("{}\n", format!("{}", msg).green());
             }
         }
 
