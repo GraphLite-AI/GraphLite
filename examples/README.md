@@ -42,10 +42,10 @@ cargo run --example drug_discovery -p graphlite
 High-level ergonomic API:
 ```bash
 # Basic usage
-cargo run --example basic_usage -p graphlite-sdk
+cargo run --example basic_usage -p graphlite-rust-sdk
 
 # Drug discovery
-cargo run --example drug_discovery -p graphlite-sdk
+cargo run --example drug_discovery -p graphlite-rust-sdk
 ```
 
 ### Python Examples
