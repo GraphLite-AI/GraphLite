@@ -1,17 +1,17 @@
 # GraphLite SDK Examples (Recommended)
 
-✅ **These examples show the recommended way to use GraphLite in your Rust applications.**
+**These examples show the recommended way to use GraphLite in your Rust applications.**
 
 This directory contains examples using the **high-level GraphLite SDK** - an ergonomic, SQLite-inspired API for embedded graph databases.
 
 ## Why Use the SDK?
 
 The SDK provides:
-- 🎯 **Ergonomic API** - Clean, intuitive interface following rusqlite patterns
-- 🔒 **Transaction Safety** - RAII pattern with automatic rollback
-- 🏗️ **Query Builder** - Fluent API for constructing queries
-- 📦 **Typed Results** - Deserialize into Rust structs
-- ⚡ **Zero Overhead** - Direct Rust calls, no FFI
+- **Ergonomic API** - Clean, intuitive interface following rusqlite patterns
+- **Transaction Safety** - RAII pattern with automatic rollback
+- **Query Builder** - Fluent API for constructing queries
+- **Typed Results** - Deserialize into Rust structs
+- **Zero Overhead** - Direct Rust calls, no FFI
 
 ## Examples Overview
 
@@ -38,16 +38,16 @@ cargo run --example basic_usage
 === GraphLite SDK Basic Usage Example ===
 
 1. Opening database...
-   ✓ Database opened at /tmp/graphlite_sdk_example
+   Database opened at /tmp/graphlite_sdk_example
 
 2. Creating session...
-   ✓ Session created for user 'admin'
+   Session created for user 'admin'
 
 3. Creating schema and graph...
-   ✓ Schema and graph created
+   Schema and graph created
 
 4. Inserting data with transaction...
-   ✓ Inserted 3 persons
+   Inserted 3 persons
 
 5. Querying data...
    Found 3 persons:
@@ -199,8 +199,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 | **Session** | `create_simple_session()` | `db.session("user")` |
 | **Query** | `process_query(query, session_id)` | `session.query(query)` |
 | **Transaction** | Manual BEGIN/COMMIT | `session.transaction()?` with RAII |
-| **Query Builder** | ❌ Not available | ✅ `session.query_builder()` |
-| **Typed Results** | ❌ Manual deserialization | ✅ `TypedResult::deserialize_rows()` |
+| **Query Builder** | Not available | `session.query_builder()` |
+| **Typed Results** | Manual deserialization | `TypedResult::deserialize_rows()` |
 | **Error Handling** | `String` errors | Rich `Error` enum |
 | **Ease of Use** | Low-level, verbose | High-level, ergonomic |
 

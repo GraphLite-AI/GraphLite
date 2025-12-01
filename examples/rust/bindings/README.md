@@ -1,8 +1,8 @@
 # GraphLite Core Library Examples (Advanced)
 
-⚠️ **Note**: These examples use the **low-level core library** (`graphlite` crate) directly. For most applications, we recommend using the **high-level SDK** instead.
+**Note**: These examples use the **low-level core library** (`graphlite` crate) directly. For most applications, we recommend using the **high-level SDK** instead.
 
-👉 **For application developers**: See [graphlite-sdk/examples/](../graphlite-sdk/examples/) for the recommended SDK examples.
+**For application developers**: See [graphlite-sdk/examples/](../graphlite-sdk/examples/) for the recommended SDK examples.
 
 This directory contains **advanced examples** showing direct usage of the GraphLite core library (`QueryCoordinator`). Use these if you need:
 - Direct access to internal components
@@ -33,36 +33,36 @@ cargo run --example simple_usage
 === GraphLite Simple Usage Example ===
 
 1. Initializing database...
-   ✓ Database initialized
+   Database initialized
 
 2. Creating session...
-   ✓ Session created: <session-id>
+   Session created: <session-id>
 
 3. Validating and analyzing queries...
-   → Validating query...
-     ✓ Query is valid
-     ✓ Query syntax check passed
-   → Analyzing query...
-     ✓ Query type: Select
-     ✓ Read-only: true
-   → Testing invalid query...
-     ✓ Correctly detected invalid query
-   → Explaining query execution plan...
-     ✓ Query Plan: ...
+   -> Validating query...
+      Query is valid
+      Query syntax check passed
+   -> Analyzing query...
+      Query type: Select
+      Read-only: true
+   -> Testing invalid query...
+      Correctly detected invalid query
+   -> Explaining query execution plan...
+      Query Plan: ...
 
 4. Executing queries...
-   → Creating schema...
-     ✓ Schema created
-   → Setting schema...
-     ✓ Schema set
-   → Creating graph...
-     ✓ Graph created
-   → Setting graph...
-     ✓ Graph set
-   → Inserting nodes...
-     ✓ Nodes inserted
-   → Querying data...
-     ✓ Query executed
+   -> Creating schema...
+      Schema created
+   -> Setting schema...
+      Schema set
+   -> Creating graph...
+      Graph created
+   -> Setting graph...
+      Graph set
+   -> Inserting nodes...
+      Nodes inserted
+   -> Querying data...
+      Query executed
 
 5. Results:
    Columns: ["p.name", "p.age"]
@@ -71,7 +71,7 @@ cargo run --example simple_usage
    Row 2: {"p.name": String("Alice"), "p.age": Integer(30)}
 
 6. Closing session...
-   ✓ Session closed
+   Session closed
 
 === Example Complete ===
 ```
@@ -103,7 +103,7 @@ The examples follow the recommended pattern for embedding GraphLite:
 graphlite = "0.1.0"
 ```
 
-**💡 Recommended** - Use the high-level SDK instead:
+**Recommended** - Use the high-level SDK instead:
 ```toml
 [dependencies]
 graphlite-sdk = "0.1.0"

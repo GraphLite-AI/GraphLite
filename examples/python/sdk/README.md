@@ -42,7 +42,7 @@ libgraphlite_ffi.so (Rust)
    pip install --break-system-packages -e .
    ```
 
-3. **Python SDK Dependency** ⚠️
+3. **Python SDK Dependency**
 
    The high-level Python SDK is currently in the `deepgraphai/GraphLite` repository on the `python-sdk` branch:
 
@@ -108,13 +108,13 @@ result = session.query("MATCH (n) RETURN n")
 ## Current Status
 
 The High-Level SDK is under development:
-- ✅ Database connection (GraphLite class)
-- ✅ Session management (Session class)
-- ✅ Query execution
-- ✅ Typed error hierarchy
-- ⏳ Transaction support (planned)
-- ⏳ Query builder (planned)
-- ⏳ Typed result deserialization (planned)
+- Database connection (GraphLite class)
+- Session management (Session class)
+- Query execution
+- Typed error hierarchy
+- Transaction support (planned)
+- Query builder (planned)
+- Typed result deserialization (planned)
 
 Currently, the SDK uses the FFI bindings' QueryResult class for results. Planned features will add transaction context managers, query builders, and dataclass deserialization.
 
