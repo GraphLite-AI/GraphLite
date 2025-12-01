@@ -315,7 +315,7 @@ tx.commit()?;  // Must commit or will panic
 
 - [SDK README](../README.md) - Full SDK documentation
 // - [API Docs](https://docs.rs/graphlite-sdk) - Complete API reference
-- [Core Library Examples](../../examples-core/) - Advanced usage with core library
+- [Bindings Examples](../bindings/) - Low-level bindings examples
 - [GQL Guide](../../GQL-GUIDE.md) - Graph Query Language reference
 
 ## Performance Tips

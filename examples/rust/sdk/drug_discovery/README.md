@@ -255,7 +255,7 @@ For large-scale data:
 
 - **GQL Guide**: [../../GQL-GUIDE.md](../../GQL-GUIDE.md)
 - **SDK Documentation**: [../README.md](../README.md)
-- **Core Example**: [../../examples-core/drug_discovery/](../../examples-core/drug_discovery/)
+- **Bindings Example**: [../../bindings/drug_discovery/](../../bindings/drug_discovery/)
 
 ## License
 

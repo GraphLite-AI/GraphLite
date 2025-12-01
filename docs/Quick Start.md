@@ -397,7 +397,7 @@ graphlite install --path ./new_db --admin-user admin --admin-password secret
 - Query builder API
 - Typed result deserialization
 
-**[Core Library Examples](/examples-core/)** - Advanced low-level usage
+**[Rust Examples](/examples/rust/)** - SDK and bindings examples
 - Direct QueryCoordinator API
 - Fine-grained control
 - Advanced features

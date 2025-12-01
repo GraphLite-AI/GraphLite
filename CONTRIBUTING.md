@@ -160,7 +160,7 @@ cargo fmt -- --check
 cargo clippy -- -D warnings
 
 # Run examples
-cd examples-core/fraud_detection
+cd examples/rust/sdk/drug_discovery
 cargo run
 ```
 
@@ -574,7 +574,7 @@ cargo fmt --all -- --check
 cargo clippy --all -- -D warnings
 
 # Test examples still work
-cd examples-core/fraud_detection
+cd examples/rust/sdk/drug_discovery
 cargo run
 ```
 

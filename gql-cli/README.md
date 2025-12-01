@@ -286,7 +286,7 @@ For embedding GraphLite in applications, use the core library directly instead o
 
 - [Main README](../README.md) - GraphLite overview
 - [GQL Guide](../Getting%20Started%20With%20GQL.md) - Complete GQL syntax reference
-- [examples/simple_usage.rs](../examples-core/simple_usage.rs) - Embedding GraphLite in Rust
+- [Examples](../examples/) - SDK and bindings examples for Rust, Python, and Java
 
 ## License
 
