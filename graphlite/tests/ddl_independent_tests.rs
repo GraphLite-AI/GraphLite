@@ -1,9 +1,9 @@
-//! DDL Tests that require independent fixtures
+//! DDL Tests with independent fixtures
 //!
-//! These tests perform operations that affect the entire database state
-//! or require complete isolation. They should be run serially to avoid conflicts.
+//! These tests use instance-based session management which provides complete
+//! isolation between test cases. They can now safely run in parallel.
 //!
-//! Run with: cargo test --test ddl_independent_tests -- --test-threads=1
+//! Run with: cargo test --test ddl_independent_tests
 
 #[path = "testutils/mod.rs"]
 mod testutils;

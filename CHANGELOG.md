@@ -54,7 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **185 Unit Tests** - Embedded tests in source files covering all modules
 - **250+ Integration Tests** - 40 test files for end-to-end scenarios
 - **TestFixture Pattern** - Reusable test setup with randomized schema/graph names
-- **Single-threaded Runner** - All tests run with `--test-threads=1` for isolation
+- **Parallel Test Execution** - Instance-based isolation enables concurrent testing (~10x speedup)
 - **Test Runner Script** - `run_tests.sh` with debug and release modes
 - **Build Script** - `build_all.sh` for automated compilation
 

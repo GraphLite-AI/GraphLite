@@ -1,10 +1,9 @@
 //! Test all examples from README.md to ensure they are correct and functional
 //!
-//! NOTE: These tests must be run with `--test-threads=1` due to shared global
-//! SessionManager in the test infrastructure. Run with:
-//! ```
-//! cargo test --test readme_examples_test -- --test-threads=1
-//! ```
+//! These tests use instance-based session management which provides complete
+//! isolation between test cases. They can now safely run in parallel.
+//!
+//! Run with: cargo test --test readme_examples_test
 
 #[path = "testutils/mod.rs"]
 mod testutils;
