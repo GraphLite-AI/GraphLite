@@ -70,7 +70,7 @@ run_test_suite() {
     fi
 
     echo "Date: $(date)"
-    echo "Single-threaded: --test-threads=1 (required for GraphLite)"
+    echo "Parallel execution: Enabled (instance-based session isolation)"
     echo ""
 
     # ISO GQL compliant integration tests
@@ -128,9 +128,9 @@ run_test_suite() {
     echo "Test File | Status | Details"
     echo "----------|--------|--------"
 
-    # Run each test
+    # Run each test (parallel execution enabled)
     for test in "${integration_tests[@]}"; do
-        output=$(cargo test $cargo_flags --test "$test" -- --test-threads=1 2>&1)
+        output=$(cargo test $cargo_flags --test "$test" 2>&1)
 
         if echo "$output" | grep -q "test result: ok"; then
             # Test passed
@@ -202,9 +202,9 @@ run_test_suite() {
         echo ""
         echo "To run a specific failed test ($mode):"
         if [ "$mode" = "release" ]; then
-            echo "  cargo test --release --test <test_name> -- --test-threads=1"
+            echo "  cargo test --release --test <test_name>"
         else
-            echo "  cargo test --test <test_name> -- --test-threads=1"
+            echo "  cargo test --test <test_name>"
         fi
         echo ""
 
@@ -217,7 +217,7 @@ run_test_suite() {
                 echo "--- $failed_test ---"
 
                 # Get error output for analysis
-                error_output=$(cargo test $cargo_flags --test "$failed_test" -- --test-threads=1 2>&1)
+                error_output=$(cargo test $cargo_flags --test "$failed_test" 2>&1)
 
                 # Extract specific error patterns
                 if echo "$error_output" | grep -q "can call blocking only when running on the multi-threaded runtime"; then

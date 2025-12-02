@@ -190,8 +190,9 @@ Add these badges to your README.md:
 ## Troubleshooting
 
 ### Tests Failing in CI but Passing Locally
-- Ensure you're running tests with `--test-threads=1` (required for GraphLite)
+- Tests now run in parallel by default (instance-based session isolation)
 - Check if the build mode matches (debug vs release)
+- Verify all test dependencies are properly isolated
 
 ### Cache Issues
 - Clear caches by changing the cache key version

@@ -1103,7 +1103,11 @@ Transaction Visibility:
 
 ---
 
-## Session Management (This is not fully implemented for multiple concurrent sessions yet)
+## Session Management
+
+GraphLite implements a unified session architecture supporting two deployment modes:
+- **Instance Mode** (default): Each QueryCoordinator has isolated session management for embedded use
+- **Global Mode**: Process-wide session pool for server/daemon deployments
 
 ### Session Architecture
 
