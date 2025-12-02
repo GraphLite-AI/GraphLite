@@ -17,7 +17,7 @@
 //!
 //! Run with: cargo run --example drug_discovery
 
-use graphlite_sdk::{GraphLite, Error};
+use graphlite_sdk::{Error, GraphLite};
 
 fn main() -> Result<(), Error> {
     println!("=== GraphLite SDK Drug Discovery Example ===\n");
@@ -26,12 +26,12 @@ fn main() -> Result<(), Error> {
     println!("1. Opening database...");
     let db_path = "./drug_discovery_sdk_db";
     let db = GraphLite::open(db_path)?;
-    println!("   ✓ Database opened\n");
+    println!("   Database opened\n");
 
     // Step 2: Create session
     println!("2. Creating session...");
     let session = db.session("researcher")?;
-    println!("   ✓ Session created\n");
+    println!("   Session created\n");
 
     // Step 3: Setup schema and graph
     println!("3. Setting up schema and graph...");
@@ -39,7 +39,7 @@ fn main() -> Result<(), Error> {
     session.execute("SESSION SET SCHEMA /drug_discovery")?;
     session.execute("CREATE GRAPH IF NOT EXISTS pharma_research")?;
     session.execute("SESSION SET GRAPH pharma_research")?;
-    println!("   ✓ Schema and graph configured\n");
+    println!("   Schema and graph configured\n");
 
     // Step 4: Insert data using transactions
     println!("4. Inserting pharmaceutical data...");
@@ -47,7 +47,7 @@ fn main() -> Result<(), Error> {
         let mut tx = session.transaction()?;
 
         // Insert Proteins (Disease Targets)
-        println!("   → Inserting target proteins...");
+        println!("   Inserting target proteins...");
         tx.execute(
             r#"INSERT
                 (:Protein {
@@ -81,7 +81,7 @@ fn main() -> Result<(), Error> {
         )?;
 
         // Insert Compounds
-        println!("   → Inserting drug compounds...");
+        println!("   Inserting drug compounds...");
         tx.execute(
             r#"INSERT
                 (:Compound {
@@ -119,7 +119,7 @@ fn main() -> Result<(), Error> {
         )?;
 
         // Insert Assays
-        println!("   → Inserting experimental assays...");
+        println!("   Inserting experimental assays...");
         tx.execute(
             r#"INSERT
                 (:Assay {
@@ -153,7 +153,7 @@ fn main() -> Result<(), Error> {
         )?;
 
         tx.commit()?;
-        println!("   ✓ Core data inserted\n");
+        println!("   Core data inserted\n");
     }
 
     // Step 5: Create relationships using query builder and transactions
@@ -162,7 +162,7 @@ fn main() -> Result<(), Error> {
         let mut tx = session.transaction()?;
 
         // Compound-Assay relationships
-        println!("   → Linking compounds to assays...");
+        println!("   Linking compounds to assays...");
         tx.execute(
             r#"MATCH (c:Compound {id: 'CP-002'}), (a:Assay {id: 'AS-001'})
                INSERT (c)-[:TESTED_IN {
@@ -200,7 +200,7 @@ fn main() -> Result<(), Error> {
         )?;
 
         // Assay-Protein relationships
-        println!("   → Linking assays to proteins...");
+        println!("   Linking assays to proteins...");
         tx.execute(
             r#"MATCH (a:Assay {id: 'AS-001'}), (p:Protein {id: 'EGFR'})
                INSERT (a)-[:MEASURES_ACTIVITY_ON {
@@ -234,7 +234,7 @@ fn main() -> Result<(), Error> {
         )?;
 
         // Direct inhibition relationships with IC50 data
-        println!("   → Creating inhibition relationships with IC50 data...");
+        println!("   Creating inhibition relationships with IC50 data...");
         tx.execute(
             r#"MATCH (c:Compound {id: 'CP-002'}), (p:Protein {id: 'EGFR'})
                INSERT (c)-[:INHIBITS {
@@ -280,7 +280,7 @@ fn main() -> Result<(), Error> {
         )?;
 
         tx.commit()?;
-        println!("   ✓ Relationships created\n");
+        println!("   Relationships created\n");
     }
 
     // Step 6: Execute analytical queries

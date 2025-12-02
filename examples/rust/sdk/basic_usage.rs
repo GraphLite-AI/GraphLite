@@ -10,7 +10,7 @@
 //!
 //! Run with: cargo run --example basic_usage
 
-use graphlite_sdk::{GraphLite, Error};
+use graphlite_sdk::{Error, GraphLite};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -26,12 +26,12 @@ fn main() -> Result<(), Error> {
     println!("1. Opening database...");
     let db_path = "/tmp/graphlite_sdk_example";
     let db = GraphLite::open(db_path)?;
-    println!("   ✓ Database opened at {}\n", db_path);
+    println!("   Database opened at {}\n", db_path);
 
     // 2. Create a session
     println!("2. Creating session...");
     let session = db.session("admin")?;
-    println!("   ✓ Session created for user 'admin'\n");
+    println!("   Session created for user 'admin'\n");
 
     // 3. Execute DDL statements
     println!("3. Creating schema and graph...");
@@ -39,7 +39,7 @@ fn main() -> Result<(), Error> {
     session.execute("SESSION SET SCHEMA /example")?;
     session.execute("CREATE GRAPH IF NOT EXISTS social")?;
     session.execute("SESSION SET GRAPH social")?;
-    println!("   ✓ Schema and graph created\n");
+    println!("   Schema and graph created\n");
 
     // 4. Insert data using transactions
     println!("4. Inserting data with transaction...");
@@ -49,7 +49,7 @@ fn main() -> Result<(), Error> {
         tx.execute("CREATE (p:Person {name: 'Bob', age: 25})")?;
         tx.execute("CREATE (p:Person {name: 'Charlie', age: 35})")?;
         tx.commit()?;
-        println!("   ✓ Inserted 3 persons\n");
+        println!("   Inserted 3 persons\n");
     }
 
     // 5. Query data directly
