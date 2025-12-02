@@ -229,7 +229,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 
-**See also:** [Core Library Examples](../examples-core/)
+**See also:** [Examples](../examples/) - Includes SDK (high-level) and bindings (low-level) examples
 
 ---
 
@@ -376,9 +376,10 @@ graphlite gql --path ./my_db -u admin -p secret
 - [basic_usage.rs](../sdk-rust/examples/basic_usage.rs) - Complete SDK walkthrough
 - [query_builder.rs](../sdk-rust/examples/query_builder.rs) - Query builder patterns
 
-**Core Library Examples (Advanced):**
-- [simple_graph.rs](../examples-core/simple_graph.rs) - Basic graph operations
-- [complex_queries.rs](../examples-core/complex_queries.rs) - Advanced querying
+**More Examples:**
+- [Rust Examples](../examples/rust/) - SDK and bindings examples
+- [Python Examples](../examples/python/) - Python SDK and bindings
+- [Java Examples](../examples/java/) - Java bindings
 
 
 ## Getting Help

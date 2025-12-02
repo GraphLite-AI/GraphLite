@@ -23,8 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Step 2: Create a session
     // Sessions track user context and graph/schema preferences
     println!("2. Creating session...");
-    let session_id = coordinator
-        .create_simple_session("example_user")
+    let session_id = coordinator.create_simple_session("example_user")
         .map_err(|e| format!("Failed to create session: {}", e))?;
     println!("   ✓ Session created: {}\n", session_id);
 
@@ -101,7 +100,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("   → Inserting nodes...");
     coordinator.process_query(
         "INSERT (:Person {name: 'Alice', age: 30}), (:Person {name: 'Bob', age: 25})",
-        &session_id,
+        &session_id
     )?;
     println!("     ✓ Nodes inserted");
 
@@ -109,7 +108,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("   → Querying data...");
     let result = coordinator.process_query(
         "MATCH (p:Person) RETURN p.name, p.age ORDER BY p.age",
-        &session_id,
+        &session_id
     )?;
     println!("     ✓ Query executed");
 

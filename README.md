@@ -387,7 +387,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 **For Rust Applications:**
 - **[SDK Examples](sdk-rust/examples/)** - Recommended high-level API (start here!)
-- **[Core Library Examples](examples-core/)** - Advanced low-level usage
+- **[Examples](examples/)** - SDK (high-level) and bindings (low-level) examples for Rust, Python, and Java
 
 **See also:**
 - [Getting Started With GQL.md](docs/Getting%20Started%20With%20GQL.md) - Complete query language reference
@@ -444,7 +444,7 @@ GraphLite provides comprehensive documentation for all skill levels:
 
 **Code Examples:**
 - **[SDK Examples](sdk-rust/examples/)** - High-level API examples (recommended)
-- **[Core Library Examples](examples-core/)** - Advanced low-level usage
+- **[Examples](examples/)** - SDK (high-level) and bindings (low-level) examples for Rust, Python, and Java
 
 **Legal:**
 - **[LICENSE](LICENSE)** - Apache License 2.0 full text

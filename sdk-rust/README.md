@@ -325,7 +325,7 @@ Benchmark comparison:
 ## Documentation
 
 - [API Documentation](https://docs.rs/graphlite-sdk)
-- [Examples](examples-core/)
+- [Examples](../examples/)
 - [GraphLite Core](../graphlite/)
 - [Language Bindings](../bindings/)
 

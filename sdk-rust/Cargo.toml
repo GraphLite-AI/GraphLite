@@ -28,3 +28,11 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
+
+[[example]]
+name = "basic_usage"
+path = "../examples/rust/sdk/basic_usage.rs"
+
+[[example]]
+name = "drug_discovery"
+path = "../examples/rust/sdk/drug_discovery/main.rs"
