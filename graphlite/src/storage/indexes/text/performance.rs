@@ -35,9 +35,9 @@ pub struct PerformanceConfig {
 impl Default for PerformanceConfig {
     fn default() -> Self {
         Self {
-            batch_commit_size: 1000,      // Commit every 1000 documents
-            cache_size: 1000,             // Cache 1000 query results
-            cache_ttl_secs: 300,          // 5-minute cache TTL
+            batch_commit_size: 1000, // Commit every 1000 documents
+            cache_size: 1000,        // Cache 1000 query results
+            cache_ttl_secs: 300,     // 5-minute cache TTL
             enable_early_termination: true,
             enable_query_cache: true,
         }
@@ -84,9 +84,12 @@ pub struct PerformanceOptimizedIndex {
 
 impl PerformanceOptimizedIndex {
     /// Create a new performance-optimized index wrapper
-    pub fn new(index: Arc<InvertedIndex>, config: PerformanceConfig) -> Result<Self, TextSearchError> {
-        let cache_size =
-            NonZeroUsize::new(config.cache_size).unwrap_or_else(|| NonZeroUsize::new(1000).unwrap());
+    pub fn new(
+        index: Arc<InvertedIndex>,
+        config: PerformanceConfig,
+    ) -> Result<Self, TextSearchError> {
+        let cache_size = NonZeroUsize::new(config.cache_size)
+            .unwrap_or_else(|| NonZeroUsize::new(1000).unwrap());
 
         Ok(Self {
             index,
@@ -98,7 +101,11 @@ impl PerformanceOptimizedIndex {
     }
 
     /// Add a document with batching support
-    pub fn add_document_batched(&self, doc_id: u64, content: String) -> Result<(), TextSearchError> {
+    pub fn add_document_batched(
+        &self,
+        doc_id: u64,
+        content: String,
+    ) -> Result<(), TextSearchError> {
         // Add to buffer
         {
             let mut buffer = self

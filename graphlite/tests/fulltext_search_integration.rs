@@ -316,10 +316,7 @@ mod fulltext_search_integration {
     #[test]
     fn test_version_compatibility() {
         // Verify critical dependencies
-        let dependencies = HashMap::from([
-            ("tantivy", "0.22"),
-            ("lru", "0.12"),
-        ]);
+        let dependencies = HashMap::from([("tantivy", "0.22"), ("lru", "0.12")]);
 
         assert!(dependencies.contains_key("tantivy"));
         assert!(dependencies.contains_key("lru"));

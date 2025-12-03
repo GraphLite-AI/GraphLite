@@ -48,12 +48,22 @@ impl InvertedIndex {
             .reader()
             .map_err(|e| TextSearchError::IndexError(format!("tantivy reader error: {}", e)))?;
 
-        Ok(Self { name: name.into(), index, reader, writer: Arc::new(Mutex::new(writer)), doc_id_field, content_field })
+        Ok(Self {
+            name: name.into(),
+            index,
+            reader,
+            writer: Arc::new(Mutex::new(writer)),
+            doc_id_field,
+            content_field,
+        })
     }
 
     /// Create a persisted index at `path` (currently creates an in-memory index)
     /// Note: persistence can be added later; tests rely on in-memory behavior.
-    pub fn create_at(name: impl Into<String>, _path: impl AsRef<Path>) -> Result<Self, TextSearchError> {
+    pub fn create_at(
+        name: impl Into<String>,
+        _path: impl AsRef<Path>,
+    ) -> Result<Self, TextSearchError> {
         // For now, create in-memory. Path is accepted for API compatibility.
         Self::new(name)
     }
@@ -68,14 +78,20 @@ impl InvertedIndex {
         // Use the `doc!` macro to build a document without referencing the concrete Document type
         let doc = tantivy::doc!(self.doc_id_field => doc_id, self.content_field => content);
 
-        let writer = self.writer.lock().map_err(|e| TextSearchError::IndexError(format!("writer lock error: {}", e)))?;
+        let writer = self
+            .writer
+            .lock()
+            .map_err(|e| TextSearchError::IndexError(format!("writer lock error: {}", e)))?;
         let _ = writer.add_document(doc);
         Ok(())
     }
 
     /// Add multiple documents (batch)
     pub fn add_documents(&self, documents: Vec<(u64, String)>) -> Result<(), TextSearchError> {
-        let writer = self.writer.lock().map_err(|e| TextSearchError::IndexError(format!("writer lock error: {}", e)))?;
+        let writer = self
+            .writer
+            .lock()
+            .map_err(|e| TextSearchError::IndexError(format!("writer lock error: {}", e)))?;
         for (doc_id, content) in documents {
             let doc = tantivy::doc!(self.doc_id_field => doc_id, self.content_field => content);
             let _ = writer.add_document(doc);
@@ -86,10 +102,17 @@ impl InvertedIndex {
     /// Commit pending changes and refresh the reader
     pub fn commit(&self) -> Result<(), TextSearchError> {
         {
-            let mut writer = self.writer.lock().map_err(|e| TextSearchError::IndexError(format!("writer lock error: {}", e)))?;
-            writer.commit().map_err(|e| TextSearchError::IndexError(format!("tantivy commit error: {}", e)))?;
+            let mut writer = self
+                .writer
+                .lock()
+                .map_err(|e| TextSearchError::IndexError(format!("writer lock error: {}", e)))?;
+            writer
+                .commit()
+                .map_err(|e| TextSearchError::IndexError(format!("tantivy commit error: {}", e)))?;
         }
-        self.reader.reload().map_err(|e| TextSearchError::IndexError(format!("tantivy reader reload error: {}", e)))?;
+        self.reader.reload().map_err(|e| {
+            TextSearchError::IndexError(format!("tantivy reader reload error: {}", e))
+        })?;
         Ok(())
     }
 
@@ -99,27 +122,48 @@ impl InvertedIndex {
     }
 
     /// Search with an optional result limit
-    pub fn search_with_limit(&self, query_text: &str, limit: Option<usize>) -> Result<Vec<SearchResult>, TextSearchError> {
+    pub fn search_with_limit(
+        &self,
+        query_text: &str,
+        limit: Option<usize>,
+    ) -> Result<Vec<SearchResult>, TextSearchError> {
         let searcher = self.reader.searcher();
         let qp = tantivy::query::QueryParser::for_index(&self.index, vec![self.content_field]);
-        let query = qp.parse_query(query_text).map_err(|e| TextSearchError::InvalidQuery(format!("tantivy parse error: {}", e)))?;
+        let query = qp
+            .parse_query(query_text)
+            .map_err(|e| TextSearchError::InvalidQuery(format!("tantivy parse error: {}", e)))?;
 
         let top_k = limit.unwrap_or(100);
-        let top_docs = searcher.search(&*query, &tantivy::collector::TopDocs::with_limit(top_k)).map_err(|e| TextSearchError::IndexError(format!("tantivy search error: {}", e)))?;
+        let top_docs = searcher
+            .search(&*query, &tantivy::collector::TopDocs::with_limit(top_k))
+            .map_err(|e| TextSearchError::IndexError(format!("tantivy search error: {}", e)))?;
 
         let mut results = Vec::new();
         for (score, doc_address) in top_docs {
             let retrieved = searcher
                 .doc::<tantivy::schema::document::TantivyDocument>(doc_address)
-                .map_err(|e| TextSearchError::IndexError(format!("tantivy doc retrieval error: {}", e)))?;
+                .map_err(|e| {
+                    TextSearchError::IndexError(format!("tantivy doc retrieval error: {}", e))
+                })?;
 
-            let doc_id = retrieved.get_first(self.doc_id_field).and_then(|v| v.as_u64()).unwrap_or(0);
-            let content = retrieved.get_first(self.content_field).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let doc_id = retrieved
+                .get_first(self.doc_id_field)
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let content = retrieved
+                .get_first(self.content_field)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
 
             let mut data = HashMap::new();
             data.insert("content".to_string(), content);
 
-            results.push(SearchResult { doc_id, score, data });
+            results.push(SearchResult {
+                doc_id,
+                score,
+                data,
+            });
         }
 
         Ok(results)

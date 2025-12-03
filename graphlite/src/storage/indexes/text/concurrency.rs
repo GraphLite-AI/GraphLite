@@ -11,9 +11,9 @@
 //! - Query metrics and monitoring
 //! - Slow query logging
 
-use std::sync::{Arc, RwLock, Mutex};
-use std::time::{Duration, Instant};
 use std::collections::VecDeque;
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
 
 /// Query execution metadata
 #[derive(Debug, Clone)]
@@ -207,11 +207,7 @@ impl ConcurrencyController {
             .lock()
             .map_err(|e| format!("Failed to access query history: {}", e))?;
 
-        Ok(history
-            .iter()
-            .filter(|q| q.is_slow())
-            .cloned()
-            .collect())
+        Ok(history.iter().filter(|q| q.is_slow()).cloned().collect())
     }
 
     /// Get active query count
@@ -280,8 +276,16 @@ impl QueryStats {
         let mut output = String::new();
         output.push_str("=== Query Statistics ===\n");
         output.push_str(&format!("Total queries: {}\n", self.total_queries));
-        output.push_str(&format!("Slow queries: {} ({:.1}%)\n", self.slow_queries, self.slow_query_rate() * 100.0));
-        output.push_str(&format!("Cache hits: {} ({:.1}%)\n", self.cache_hits, self.cache_hit_rate() * 100.0));
+        output.push_str(&format!(
+            "Slow queries: {} ({:.1}%)\n",
+            self.slow_queries,
+            self.slow_query_rate() * 100.0
+        ));
+        output.push_str(&format!(
+            "Cache hits: {} ({:.1}%)\n",
+            self.cache_hits,
+            self.cache_hit_rate() * 100.0
+        ));
         output.push_str(&format!("Average latency: {:.2}ms\n", self.avg_latency_ms));
         output.push_str(&format!(
             "Latency percentiles - P50: {:.2}ms, P95: {:.2}ms, P99: {:.2}ms\n",

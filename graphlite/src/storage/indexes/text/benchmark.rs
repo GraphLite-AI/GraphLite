@@ -190,7 +190,9 @@ impl IndexBenchmark {
         if results.search_latency.p50_ms > 0.0 {
             output.push_str(&format!(
                 "  Search latency - P50: {:.2} ms, P95: {:.2} ms, P99: {:.2} ms\n",
-                results.search_latency.p50_ms, results.search_latency.p95_ms, results.search_latency.p99_ms
+                results.search_latency.p50_ms,
+                results.search_latency.p95_ms,
+                results.search_latency.p99_ms
             ));
             output.push_str(&format!(
                 "  Search latency - Mean: {:.2} ms, Max: {:.2} ms\n",
@@ -226,7 +228,7 @@ impl FullSuitResults {
         let search_p50_target = self.search_unlimited.search_latency.p50_ms < 50.0;
         let search_p99_target = self.search_unlimited.search_latency.p99_ms < 200.0;
         let throughput_target = self.search_unlimited.query_throughput_qps > 500.0;
-        
+
         // Memory target: peak memory should be less than or equal to 1.3x (30% overhead) of baseline
         // Baseline estimate: 100 bytes per doc minimum
         let baseline_memory = (self.build.doc_count as u64) * 100;
@@ -253,11 +255,26 @@ impl FullSuitResults {
 
         let targets = self.meets_targets();
         output.push_str("\n=== Performance Targets ===\n");
-        output.push_str(&format!("Build time (<1 min for 100K): {}\n", if targets.build_time_ok { "✓" } else { "✗" }));
-        output.push_str(&format!("Search P50 (<50ms): {}\n", if targets.search_p50_ok { "✓" } else { "✗" }));
-        output.push_str(&format!("Search P99 (<200ms): {}\n", if targets.search_p99_ok { "✓" } else { "✗" }));
-        output.push_str(&format!("Throughput (>500 QPS): {}\n", if targets.throughput_ok { "✓" } else { "✗" }));
-        output.push_str(&format!("Memory (<30% overhead): {}\n", if targets.memory_ok { "✓" } else { "✗" }));
+        output.push_str(&format!(
+            "Build time (<1 min for 100K): {}\n",
+            if targets.build_time_ok { "✓" } else { "✗" }
+        ));
+        output.push_str(&format!(
+            "Search P50 (<50ms): {}\n",
+            if targets.search_p50_ok { "✓" } else { "✗" }
+        ));
+        output.push_str(&format!(
+            "Search P99 (<200ms): {}\n",
+            if targets.search_p99_ok { "✓" } else { "✗" }
+        ));
+        output.push_str(&format!(
+            "Throughput (>500 QPS): {}\n",
+            if targets.throughput_ok { "✓" } else { "✗" }
+        ));
+        output.push_str(&format!(
+            "Memory (<30% overhead): {}\n",
+            if targets.memory_ok { "✓" } else { "✗" }
+        ));
 
         output
     }

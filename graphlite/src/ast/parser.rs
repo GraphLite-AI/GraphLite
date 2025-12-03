@@ -4904,11 +4904,13 @@ fn create_index_statement(tokens: &[Token]) -> IResult<&[Token], CreateIndexStat
             expect_token(Token::LeftParen),
             opt(identifier), // optional variable like 'p'
             expect_token(Token::Colon),
-            identifier,      // label name
+            identifier, // label name
             expect_token(Token::RightParen),
         ))(tokens);
 
-        if let Ok((remaining_tokens, (_lparen, _var, _colon, label, _rparen))) = parse_pattern_result {
+        if let Ok((remaining_tokens, (_lparen, _var, _colon, label, _rparen))) =
+            parse_pattern_result
+        {
             // Successfully parsed pattern (p:Label), now look for {field} or (field)
             let (tokens, field) = parse_index_fields(remaining_tokens)?;
             (tokens, label, field)
@@ -4978,7 +4980,7 @@ fn parse_index_fields(tokens: &[Token]) -> IResult<&[Token], Vec<String>> {
             separated_list1(expect_token(Token::Comma), identifier),
             expect_token(Token::RightBrace),
         ),
-        // Parse (field1, field2, ...) syntax  
+        // Parse (field1, field2, ...) syntax
         delimited(
             expect_token(Token::LeftParen),
             separated_list1(expect_token(Token::Comma), identifier),

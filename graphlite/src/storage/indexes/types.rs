@@ -3,8 +3,8 @@
 //
 //! Type definitions for the indexing system
 
-use crate::storage::Value;
 use crate::ast::TextIndexTypeSpecifier;
+use crate::storage::Value;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

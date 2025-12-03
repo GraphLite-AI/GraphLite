@@ -1,8 +1,8 @@
 // Text index metadata for tracking index configuration
 // Stores which label, field, and index type each text index uses
 
-use serde::{Deserialize, Serialize};
 use crate::ast::TextIndexTypeSpecifier;
+use serde::{Deserialize, Serialize};
 
 /// Metadata for a text index
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,7 +23,12 @@ pub struct TextIndexMetadata {
 
 impl TextIndexMetadata {
     /// Create new text index metadata
-    pub fn new(name: String, label: String, field: String, index_type: TextIndexTypeSpecifier) -> Self {
+    pub fn new(
+        name: String,
+        label: String,
+        field: String,
+        index_type: TextIndexTypeSpecifier,
+    ) -> Self {
         Self {
             name,
             label,
@@ -33,7 +38,7 @@ impl TextIndexMetadata {
             size_bytes: 0,
         }
     }
-    
+
     /// Update document count and size
     pub fn update_stats(&mut self, doc_count: u64, size_bytes: u64) {
         self.doc_count = doc_count;
@@ -57,11 +62,14 @@ pub fn register_metadata(metadata: TextIndexMetadata) -> Result<(), String> {
     let mut registry = TEXT_INDEX_METADATA
         .write()
         .map_err(|e| format!("Failed to acquire write lock: {}", e))?;
-    
+
     if registry.contains_key(&metadata.name) {
-        return Err(format!("Metadata for index '{}' already registered", metadata.name));
+        return Err(format!(
+            "Metadata for index '{}' already registered",
+            metadata.name
+        ));
     }
-    
+
     registry.insert(metadata.name.clone(), metadata);
     Ok(())
 }
@@ -71,7 +79,7 @@ pub fn get_metadata(name: &str) -> Result<Option<TextIndexMetadata>, String> {
     let registry = TEXT_INDEX_METADATA
         .read()
         .map_err(|e| format!("Failed to acquire read lock: {}", e))?;
-    
+
     Ok(registry.get(name).cloned())
 }
 
@@ -80,7 +88,7 @@ pub fn update_metadata(name: &str, doc_count: u64, size_bytes: u64) -> Result<()
     let mut registry = TEXT_INDEX_METADATA
         .write()
         .map_err(|e| format!("Failed to acquire write lock: {}", e))?;
-    
+
     if let Some(metadata) = registry.get_mut(name) {
         metadata.update_stats(doc_count, size_bytes);
         Ok(())
@@ -94,7 +102,7 @@ pub fn get_metadata_for_label(label: &str) -> Result<Vec<TextIndexMetadata>, Str
     let registry = TEXT_INDEX_METADATA
         .read()
         .map_err(|e| format!("Failed to acquire read lock: {}", e))?;
-    
+
     Ok(registry
         .values()
         .filter(|m| m.label == label)
@@ -107,7 +115,7 @@ pub fn unregister_metadata(name: &str) -> Result<bool, String> {
     let mut registry = TEXT_INDEX_METADATA
         .write()
         .map_err(|e| format!("Failed to acquire write lock: {}", e))?;
-    
+
     Ok(registry.remove(name).is_some())
 }
 
@@ -117,7 +125,7 @@ pub fn clear_all_metadata() -> Result<(), String> {
     let mut registry = TEXT_INDEX_METADATA
         .write()
         .map_err(|e| format!("Failed to acquire write lock: {}", e))?;
-    
+
     registry.clear();
     Ok(())
 }
@@ -129,16 +137,16 @@ mod tests {
     #[test]
     fn test_register_and_retrieve_metadata() {
         let _ = clear_all_metadata();
-        
+
         let metadata = TextIndexMetadata::new(
             "test_idx".to_string(),
             "User".to_string(),
             "bio".to_string(),
             TextIndexTypeSpecifier::FullText,
         );
-        
+
         register_metadata(metadata.clone()).unwrap();
-        
+
         let retrieved = get_metadata("test_idx").unwrap();
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().name, "test_idx");
@@ -147,17 +155,17 @@ mod tests {
     #[test]
     fn test_update_metadata_stats() {
         let _ = clear_all_metadata();
-        
+
         let metadata = TextIndexMetadata::new(
             "test_idx".to_string(),
             "User".to_string(),
             "bio".to_string(),
             TextIndexTypeSpecifier::FullText,
         );
-        
+
         register_metadata(metadata).unwrap();
         update_metadata("test_idx", 100, 50000).unwrap();
-        
+
         let retrieved = get_metadata("test_idx").unwrap().unwrap();
         assert_eq!(retrieved.doc_count, 100);
         assert_eq!(retrieved.size_bytes, 50000);
@@ -166,7 +174,7 @@ mod tests {
     #[test]
     fn test_get_metadata_for_label() {
         let _ = clear_all_metadata();
-        
+
         let meta1 = TextIndexMetadata::new(
             "bio_idx".to_string(),
             "User".to_string(),
@@ -179,10 +187,10 @@ mod tests {
             "name".to_string(),
             TextIndexTypeSpecifier::Fuzzy,
         );
-        
+
         register_metadata(meta1).unwrap();
         register_metadata(meta2).unwrap();
-        
+
         let user_indexes = get_metadata_for_label("User").unwrap();
         assert_eq!(user_indexes.len(), 2);
     }
