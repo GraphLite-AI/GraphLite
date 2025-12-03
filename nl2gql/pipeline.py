@@ -34,6 +34,7 @@ Usage (CLI):
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import os
 import random
@@ -211,6 +212,12 @@ def _shuffle_schema_context(schema_context: str) -> str:
 
 def _canonical(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+def _ratio(a: str, b: str) -> float:
+    """Cheap similarity helper for plural/synonym nudging."""
+
+    return difflib.SequenceMatcher(None, a, b).ratio()
 
 
 @dataclass
@@ -417,7 +424,9 @@ Emit JSON:
 
 SYSTEM_LINK = """You are a schema linker like RAT-SQL/ResdSQL.
 - Map natural-language mentions to concrete schema nodes/properties/relationships.
-- Prefer shortest valid paths; avoid inventing schema elements.
+- Use only labels/properties/relationships that exist in the schema_graph (verbatim).
+- Map plurals/synonyms to the closest schema label instead of repeating the NL wording (e.g., employees → Person if Person is the schema label).
+- Prefer shortest valid paths; avoid inventing schema elements and avoid properties not present in the schema_graph.
 - Output JSON with node_links, property_links, rel_links, and canonical aliases."""
 
 USER_LINK_TEMPLATE = """schema_graph:
@@ -439,6 +448,7 @@ Emit JSON:
 
 SYSTEM_AST = """You are a constrained ISO GQL AST builder.
 - Use only schema labels/properties/relationships provided.
+- Treat the provided links as authoritative: reuse their aliases/labels/relationships instead of inventing new ones.
 - Build a single MATCH with all paths separated by commas.
 - Push property predicates into WHERE (no aggregates in WHERE).
 - Support alias-to-alias comparisons using filter values like {"ref_alias": "a2", "ref_property": "id"} for expressions such as a1.id <> a2.id.
@@ -524,6 +534,130 @@ def link_schema(
     text, usage = chat_complete(model, SYSTEM_LINK, user, temperature=0.2, top_p=0.9)
     links = _safe_json_loads(text) or {}
     return links, usage
+
+
+def _closest_schema_label(
+    raw_label: str, alias: str, property_links: List[Dict[str, Any]], graph: SchemaGraph
+) -> Optional[str]:
+    """Pick the best schema label for an alias using name similarity + property overlap."""
+
+    canonical_label = _canonical(raw_label)
+    props_for_alias = {
+        _canonical(pl["property"])
+        for pl in property_links
+        if pl.get("alias") == alias and pl.get("property")
+    }
+
+    best_label: Optional[str] = None
+    best_score = 0.0
+    for schema_label, node in graph.nodes.items():
+        score = _ratio(canonical_label, _canonical(schema_label))
+        if props_for_alias:
+            overlap = props_for_alias & {_canonical(p) for p in node.properties}
+            if overlap:
+                score += 0.8 + 0.3 * len(overlap)
+        if score > best_score:
+            best_score = score
+            best_label = schema_label
+
+    # Require a modest confidence to avoid random remapping.
+    return best_label if best_score >= 0.55 else None
+
+
+def _closest_property(label: str, prop: str, graph: SchemaGraph) -> Optional[str]:
+    """Map a non-existent property to the nearest valid one on the label."""
+
+    if not graph.has_node(label):
+        return None
+
+    canonical_prop = _canonical(prop)
+    best_prop: Optional[str] = None
+    best_score = 0.0
+    for candidate in graph.nodes[label].properties:
+        score = _ratio(canonical_prop, _canonical(candidate))
+        if score > best_score:
+            best_score = score
+            best_prop = candidate
+    return best_prop if best_score >= 0.75 else None
+
+
+def _closest_relationship(left_label: str, raw_rel: str, right_label: str, graph: SchemaGraph) -> Optional[str]:
+    """Choose the best relationship that actually exists between two labels."""
+
+    candidates = [e for e in graph.edges if e.src == left_label and e.dst == right_label]
+    if not candidates:
+        return None
+
+    canonical_rel = _canonical(raw_rel)
+    best: Optional[str] = None
+    best_score = 0.0
+    for edge in candidates:
+        score = _ratio(canonical_rel, _canonical(edge.rel))
+        if score > best_score:
+            best_score = score
+            best = edge.rel
+    return best if best_score >= 0.6 else None
+
+
+def ground_links_to_schema(links: Dict[str, Any], graph: SchemaGraph) -> Dict[str, Any]:
+    """Normalize linker output to the actual schema to avoid hallucinated labels/edges."""
+
+    node_links = links.get("node_links") or []
+    property_links = links.get("property_links") or []
+    rel_links = links.get("rel_links") or []
+
+    alias_to_label: Dict[str, str] = {}
+    grounded_nodes: List[Dict[str, Any]] = []
+    for nl in node_links:
+        alias, label = nl.get("alias"), nl.get("label")
+        if not alias or not label:
+            continue
+        if graph.has_node(label):
+            alias_to_label[alias] = label
+            grounded_nodes.append({"alias": alias, "label": label, "reason": nl.get("reason")})
+            continue
+        mapped = _closest_schema_label(label, alias, property_links, graph)
+        if mapped:
+            alias_to_label[alias] = mapped
+            grounded_nodes.append({"alias": alias, "label": mapped, "reason": f"normalized from {label}"})
+
+    grounded_props: List[Dict[str, Any]] = []
+    for pl in property_links:
+        alias, prop = pl.get("alias"), pl.get("property")
+        if not alias or not prop or alias not in alias_to_label:
+            continue
+        label = alias_to_label[alias]
+        if graph.has_property(label, prop):
+            grounded_props.append(pl)
+            continue
+        alt = _closest_property(label, prop, graph)
+        if alt:
+            new_pl = dict(pl)
+            new_pl["property"] = alt
+            grounded_props.append(new_pl)
+
+    grounded_rels: List[Dict[str, Any]] = []
+    for rl in rel_links:
+        left, rel_name, right = rl.get("left_alias"), rl.get("rel"), rl.get("right_alias")
+        if not left or not right or left not in alias_to_label or right not in alias_to_label:
+            continue
+        left_label, right_label = alias_to_label[left], alias_to_label[right]
+        if graph.edge_exists(left_label, rel_name, right_label):
+            grounded_rels.append(rl)
+            continue
+        alt = _closest_relationship(left_label, rel_name or "", right_label, graph)
+        if alt:
+            new_rl = dict(rl)
+            new_rl["rel"] = alt
+            grounded_rels.append(new_rl)
+
+    grounded = {
+        "node_links": grounded_nodes,
+        "property_links": grounded_props,
+        "rel_links": grounded_rels,
+        "canonical_aliases": links.get("canonical_aliases", {}),
+    }
+    return grounded
 
 
 # -----------------------------------------------------------------------------
@@ -637,6 +771,39 @@ def _rewrite_filter_relationship_props(ast: Dict[str, Any]) -> bool:
         if targets and tail:
             flt["alias"] = targets[0]
             flt["property"] = tail
+            changed = True
+
+    return changed
+
+
+def _apply_links_to_ast(ast: Dict[str, Any], links: Dict[str, Any]) -> bool:
+    """
+    Force AST labels/relationships to match grounded linker output when aliases overlap.
+    This reduces hallucinations when the planner drifts away from the linker.
+    """
+
+    changed = False
+    alias_to_label = {
+        n.get("alias"): n.get("label")
+        for n in links.get("node_links") or []
+        if n.get("alias") and n.get("label")
+    }
+    rel_map = {
+        (r.get("left_alias"), r.get("right_alias")): r.get("rel")
+        for r in links.get("rel_links") or []
+        if r.get("left_alias") and r.get("right_alias") and r.get("rel")
+    }
+
+    for node in ast.get("nodes") or []:
+        alias = node.get("alias")
+        if alias and alias in alias_to_label and node.get("label") != alias_to_label[alias]:
+            node["label"] = alias_to_label[alias]
+            changed = True
+
+    for rel in ast.get("relationships") or []:
+        key = (rel.get("left_alias"), rel.get("right_alias"))
+        if key in rel_map and rel.get("rel") != rel_map[key]:
+            rel["rel"] = rel_map[key]
             changed = True
 
     return changed
@@ -829,6 +996,8 @@ def generate_isogql_with_progress(
     fix = fix_model or DEFAULT_OPENAI_MODEL_FIX
 
     graph = SchemaGraph.from_text(schema_context)
+    if not graph.nodes:
+        raise RuntimeError("Schema parsing produced no nodes. Ensure the schema text is correct or pass a valid --schema-file.")
     feedback: List[str] = []
     usage_data: List[Dict[str, Any]] = []
     timeline: List[Dict[str, Any]] = []
@@ -847,11 +1016,14 @@ def generate_isogql_with_progress(
             timeline.append({"attempt": attempt, "action": "intent_frame", "data": frame, "feedback": feedback.copy()})
 
             notify(f"[attempt {attempt}] linking schema...")
-            links, usage = link_schema(frame, nl, graph, gen, feedback)
+            raw_links, usage = link_schema(frame, nl, graph, gen, feedback)
+            links = ground_links_to_schema(raw_links, graph)
             if usage:
                 usage.update({"attempt": attempt, "call_type": "schema_link", "model": gen})
                 usage_data.append(usage)
-            timeline.append({"attempt": attempt, "action": "schema_link", "data": links})
+            timeline.append({"attempt": attempt, "action": "schema_link", "data": raw_links})
+            if raw_links != links:
+                timeline.append({"attempt": attempt, "action": "schema_link_grounded", "data": links})
 
             notify(f"[attempt {attempt}] planning AST...")
             ast, usage = plan_ast(frame, links, graph, gen, feedback)
@@ -862,11 +1034,20 @@ def generate_isogql_with_progress(
 
             # Normalize filters that incorrectly encode relationships in the property slot.
             _rewrite_filter_relationship_props(ast)
+            # Enforce schema-grounded labels/relations from the linker to reduce hallucinations.
+            if _apply_links_to_ast(ast, links):
+                timeline.append({"attempt": attempt, "action": "ast_grounded", "data": ast})
 
             ast_errors = validate_ast(ast, graph)
             if ast_errors:
                 notify(f"[attempt {attempt}] AST invalid: {'; '.join(ast_errors)}")
-                feedback.append("AST invalid: " + "; ".join(ast_errors))
+                label_list = ", ".join(sorted(graph.nodes.keys()))
+                rel_list = ", ".join(sorted({f"{e.src}-[:{e.rel}]->{e.dst}" for e in graph.edges}))
+                feedback.append(
+                    "AST invalid: "
+                    + "; ".join(ast_errors)
+                    + f" | allowed labels: {label_list} | allowed relationships: {rel_list}"
+                )
                 timeline.append({"attempt": attempt, "action": "ast_invalid", "errors": ast_errors})
                 continue
 
@@ -962,6 +1143,9 @@ def print_verbose_info(
             elif action == "schema_link":
                 print("  • Schema linking")
                 print(_fmt_block(json.dumps(entry.get("data"), indent=2) or "<empty>"))
+            elif action == "schema_link_grounded":
+                print("  • Schema linking (grounded to schema)")
+                print(_fmt_block(json.dumps(entry.get("data"), indent=2) or "<empty>"))
             elif action == "ast_plan":
                 print("  • AST plan")
                 print(_fmt_block(json.dumps(entry.get("data"), indent=2) or "<empty>"))
@@ -969,6 +1153,9 @@ def print_verbose_info(
                 print("  • AST invalid")
                 for err in entry.get("errors", []):
                     print(f"      - {err}")
+            elif action == "ast_grounded":
+                print("  • AST aligned to linker output")
+                print(_fmt_block(json.dumps(entry.get("data"), indent=2) or "<empty>"))
             elif action == "rendered_query":
                 print("  • Rendered query:")
                 block = "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"])
@@ -1047,11 +1234,18 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     args = parser.parse_args(argv)
 
+    schema_context: Optional[str] = None
     if args.schema is not None:
-        schema_context = args.schema
+        # If the user passed a path to --schema, read the file instead of treating it as inline text.
+        potential_path = Path(args.schema)
+        if potential_path.exists():
+            schema_context = read_text(str(potential_path))
+        else:
+            schema_context = args.schema
     elif args.schema_file:
         schema_context = read_text(args.schema_file)
-    else:
+
+    if not schema_context:
         print("error: schema context is required via --schema or --schema-file", file=sys.stderr)
         return 1
 
