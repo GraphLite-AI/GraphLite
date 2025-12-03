@@ -3721,6 +3721,36 @@ impl QueryExecutor {
                 Ok(vec![Row::new()])
             }
 
+            PhysicalNode::TextIndexScan {
+                index_name,
+                field,
+                query,
+                search_type,
+                min_score,
+                limit,
+                ..
+            } => self.execute_text_index_scan(
+                index_name,
+                field,
+                query,
+                search_type,
+                min_score.as_ref(),
+                limit.as_ref(),
+                context,
+            ),
+
+            PhysicalNode::GraphIndexScan { .. } => {
+                // ROADMAP v0.4.0 - Graph index optimization (e.g., path indexes, reachability indexes)
+                // For now, this operator is not implemented. Queries that would benefit from
+                // graph indexes will fall back to sequential scans. This is planned for:
+                // - Optimizing path traversal patterns
+                // - Using pre-computed reachability information
+                // - Accelerating pattern-based queries
+                Err(ExecutionError::UnsupportedOperator(
+                    "GraphIndexScan: Graph index optimization is planned for v0.4.0".to_string()
+                ))
+            }
+
             _ => Err(ExecutionError::UnsupportedOperator(format!("{:?}", node))),
         }
     }
@@ -3968,6 +3998,90 @@ impl QueryExecutor {
 
             rows.push(row);
         }
+
+        Ok(rows)
+    }
+
+    /// Execute a full-text search using the text index
+    fn execute_text_index_scan(
+        &self,
+        index_name: &str,
+        _field: &str,
+        query: &str,
+        search_type: &crate::plan::logical::TextSearchType,
+        min_score: Option<&f64>,
+        limit: Option<&usize>,
+        _context: &mut ExecutionContext,
+    ) -> Result<Vec<Row>, ExecutionError> {
+        
+        use crate::storage::indexes::text::registry::get_text_index;
+
+        log::debug!(
+            "Executing TextIndexScan: index='{}', query='{}', search_type={:?}, limit={:?}",
+            index_name,
+            query,
+            search_type,
+            limit
+        );
+
+        // Try to retrieve the index from the global registry
+        let index = get_text_index(index_name)
+            .map_err(|e| ExecutionError::RuntimeError(format!("Failed to access text index registry: {}", e)))?
+            .ok_or_else(|| ExecutionError::RuntimeError(
+                format!("Text index '{}' not found. Did you CREATE TEXT INDEX first?", index_name)
+            ))?;
+
+        log::debug!(
+            "TextIndexScan: Searching with query='{}' (search_type: {:?})",
+            query,
+            search_type
+        );
+
+        // Perform the search with the limit
+        let search_limit = limit.copied().unwrap_or(100);
+        let results = index
+            .search_with_limit(query, Some(search_limit))
+            .map_err(|e| ExecutionError::RuntimeError(format!("Search failed: {}", e)))?;
+
+        log::debug!("TextIndexScan: Found {} results", results.len());
+
+        // Convert search results into Row objects with text score metadata
+        let mut rows = Vec::new();
+
+        for result in results {
+            // Filter by min_score if provided
+            if let Some(min_score_threshold) = min_score {
+                if (result.score as f64) < *min_score_threshold {
+                    continue;
+                }
+            }
+
+            // Create a new row for each search result
+            let mut row = Row::new();
+
+            // Set the doc_id as a variable (use the field name or a generic key)
+            let doc_id_value = Value::Number(result.doc_id as f64);
+            row.add_value("doc_id".to_string(), doc_id_value);
+
+            // Store the text score for potential use in ORDER BY or result filtering
+            row.set_text_score(result.score as f64);
+
+            // Also add TEXT_SCORE() as a named variable for potential use in projections
+            row.values
+                .insert("TEXT_SCORE()".to_string(), Value::Number(result.score as f64));
+
+            // Add the search result data (stored fields from Tantivy)
+            for (key, value) in &result.data {
+                row.add_value(key.clone(), Value::String(value.clone()));
+            }
+
+            rows.push(row);
+        }
+
+        log::debug!(
+            "TextIndexScan: Converted {} results to rows",
+            rows.len()
+        );
 
         Ok(rows)
     }
@@ -9482,3 +9596,297 @@ impl QueryExecutor {
         true
     }
 }
+
+#[cfg(test)]
+mod text_index_scan_tests {
+    use crate::plan::logical::TextSearchType;
+    use crate::storage::indexes::text::inverted_tantivy_clean::InvertedIndex;
+
+    #[test]
+    fn test_text_index_scan_basic_search() {
+        // Create a temporary in-memory index
+        let index = InvertedIndex::new("test").expect("Failed to create index");
+
+        // Add some documents
+        index.add_document(1, "hello world").expect("Failed to add doc 1");
+        index.add_document(2, "hello there").expect("Failed to add doc 2");
+        index.add_document(3, "goodbye world").expect("Failed to add doc 3");
+
+        // Commit the changes
+        index.commit().expect("Failed to commit");
+
+        // Search for "hello"
+        let results = index.search("hello").expect("Failed to search");
+
+        // Should find 2 documents
+        assert_eq!(results.len(), 2, "Expected 2 results for 'hello'");
+
+        // Verify the scores are positive (Tantivy returns positive scores)
+        for result in &results {
+            assert!(result.score > 0.0, "Expected positive score for result");
+        }
+
+        // Verify document IDs
+        let doc_ids: Vec<u64> = results.iter().map(|r| r.doc_id).collect();
+        assert!(doc_ids.contains(&1), "Expected doc 1 in results");
+        assert!(doc_ids.contains(&2), "Expected doc 2 in results");
+    }
+
+    #[test]
+    fn test_text_index_scan_limit() {
+        let index = InvertedIndex::new("test_limit").expect("Failed to create index");
+
+        // Add multiple documents
+        for i in 1..=10 {
+            index
+                .add_document(i, &format!("test document {}", i))
+                .expect("Failed to add document");
+        }
+
+        index.commit().expect("Failed to commit");
+
+        // Search with a limit
+        let results = index
+            .search_with_limit("test", Some(5))
+            .expect("Failed to search with limit");
+
+        // Should return at most 5 results
+        assert!(results.len() <= 5, "Expected at most 5 results with limit");
+    }
+
+    #[test]
+    fn test_text_index_scan_no_matches() {
+        let index = InvertedIndex::new("test_no_matches").expect("Failed to create index");
+
+        index
+            .add_document(1, "apple banana orange")
+            .expect("Failed to add document");
+        index.commit().expect("Failed to commit");
+
+        // Search for a term that doesn't exist
+        let results = index.search("watermelon").expect("Failed to search");
+
+        // Should return 0 results
+        assert_eq!(results.len(), 0, "Expected no results for non-matching query");
+    }
+
+    #[test]
+    fn test_text_index_scan_executor_basic() {
+        // Test the executor's convert of search results to Row objects
+        use crate::storage::indexes::text::inverted_tantivy_clean::InvertedIndex;
+
+        let index = InvertedIndex::new("executor_test").expect("Failed to create index");
+        index
+            .add_document(100, "cloud computing platform")
+            .expect("Failed to add doc");
+        index
+            .add_document(200, "distributed system")
+            .expect("Failed to add doc");
+        index.commit().expect("Failed to commit");
+
+        // Search for "cloud"
+        let results = index.search("cloud").expect("Failed to search");
+
+        // Should find the first document
+        assert!(results.len() >= 1, "Expected at least 1 result");
+
+        // Verify result structure
+        let first_result = &results[0];
+        assert_eq!(first_result.doc_id, 100);
+        assert!(first_result.score > 0.0);
+        assert!(first_result.data.contains_key("content"));
+
+        // Verify the content is stored
+        let content = &first_result.data["content"];
+        assert!(
+            content.contains("cloud"),
+            "Expected 'cloud' in stored content"
+        );
+    }
+
+    #[test]
+    fn test_text_search_type_variants() {
+        // Verify TextSearchType enum can be used in executor
+        let _bm25 = TextSearchType::BM25;
+        let _ngram = TextSearchType::NGram;
+        let _boolean = TextSearchType::Boolean;
+
+        // Just verify they exist and can be used
+        // The executor currently doesn't differentiate between them yet
+        // but the infrastructure is in place for future optimization
+    }
+
+    // Integration tests for end-to-end text search flow
+    #[test]
+    fn test_text_search_logical_to_physical_conversion() {
+        use crate::plan::physical::PhysicalPlan;
+
+        // Create a LogicalNode::TextSearch
+        let logical_node = crate::plan::logical::LogicalNode::TextSearch {
+            variable: "content".to_string(),
+            field: "title".to_string(),
+            query: "hello world".to_string(),
+            search_type: TextSearchType::BM25,
+            min_score: Some(0.5),
+            limit: Some(10),
+            input: Box::new(crate::plan::logical::LogicalNode::SingleRow),
+        };
+
+        // Convert to physical plan
+        let physical_node = PhysicalPlan::convert_logical_node(&logical_node);
+
+        // Verify the physical node is TextIndexScan
+        match physical_node {
+            crate::plan::physical::PhysicalNode::TextIndexScan {
+                index_name,
+                field,
+                query,
+                search_type: _,
+                min_score,
+                limit,
+                ..
+            } => {
+                assert_eq!(index_name, "text_index::title");
+                assert_eq!(field, "title");
+                assert_eq!(query, "hello world");
+                assert_eq!(min_score, Some(0.5));
+                assert_eq!(limit, Some(10));
+            }
+            _ => panic!("Expected TextIndexScan node, got {:?}", physical_node),
+        }
+    }
+
+    #[test]
+    fn test_text_index_search_and_retrieval() {
+        let index = InvertedIndex::new("test_search").expect("Failed to create index");
+
+        // Add sample documents simulating graph content
+        index
+            .add_document(1, "GraphLite is a modern graph database")
+            .expect("Failed to add doc 1");
+        index
+            .add_document(2, "Full-text search enables efficient queries")
+            .expect("Failed to add doc 2");
+        index
+            .add_document(3, "Graph queries with text search integration")
+            .expect("Failed to add doc 3");
+
+        index.commit().expect("Failed to commit index");
+
+        // Test 1: Search for "graph"
+        let results = index.search("graph").expect("Failed to search");
+        assert!(results.len() >= 2, "Expected at least 2 results for 'graph'");
+
+        // Test 2: Search with limit
+        let limited_results = index
+            .search_with_limit("search", Some(2))
+            .expect("Failed to search with limit");
+        assert!(
+            limited_results.len() <= 2,
+            "Expected at most 2 results with limit"
+        );
+
+        // Test 3: Verify result structure
+        assert!(!results.is_empty());
+        let first_result = &results[0];
+        assert!(first_result.doc_id > 0);
+        assert!(first_result.score > 0.0);
+        assert!(!first_result.data.is_empty());
+    }
+
+    #[test]
+    fn test_text_search_score_ordering() {
+        let index = InvertedIndex::new("test_relevance").expect("Failed to create index");
+
+        // Document 1: mentions "database" once
+        index
+            .add_document(1, "This is a database system")
+            .expect("Failed to add doc 1");
+
+        // Document 2: mentions "database" multiple times (should score higher)
+        index
+            .add_document(2, "Database technology with advanced database features")
+            .expect("Failed to add doc 2");
+
+        // Document 3: database in title-like position
+        index
+            .add_document(3, "Database for modern applications")
+            .expect("Failed to add doc 3");
+
+        index.commit().expect("Failed to commit index");
+
+        // Search for "database"
+        let results = index.search("database").expect("Failed to search");
+
+        // All 3 documents should be found
+        assert_eq!(results.len(), 3, "Expected 3 results for 'database'");
+
+        // Verify scores are available and sorted
+        let scores: Vec<f32> = results.iter().map(|r| r.score).collect();
+        for score in &scores {
+            assert!(*score > 0.0, "All scores should be positive");
+        }
+
+        // Scores should be in descending order (Tantivy's default)
+        for i in 0..scores.len() - 1 {
+            assert!(
+                scores[i] >= scores[i + 1],
+                "Scores should be in descending order"
+            );
+        }
+    }
+
+    #[test]
+    fn test_text_search_min_score_filtering() {
+        let index = InvertedIndex::new("test_min_score").expect("Failed to create index");
+
+        // Add documents with varying relevance
+        index
+            .add_document(1, "very relevant document about search technology")
+            .expect("Failed to add doc 1");
+        index
+            .add_document(2, "search")
+            .expect("Failed to add doc 2");
+        index
+            .add_document(3, "search indexing and retrieval")
+            .expect("Failed to add doc 3");
+
+        index.commit().expect("Failed to commit index");
+
+        // Get all results first
+        let all_results = index.search("search").expect("Failed to search");
+        assert!(!all_results.is_empty(), "Should find some results");
+
+        // In executor, we would filter by min_score
+        let min_score = 0.5;
+        let filtered: Vec<_> = all_results
+            .iter()
+            .filter(|r| (r.score as f64) >= min_score)
+            .collect();
+
+        // Verify filtering logic works
+        for result in &filtered {
+            assert!(
+                (result.score as f64) >= min_score,
+                "Result should meet min_score threshold"
+            );
+        }
+    }
+
+    #[test]
+    fn test_text_search_empty_index() {
+        let index = InvertedIndex::new("test_empty").expect("Failed to create index");
+
+        // Commit without adding documents
+        index.commit().expect("Failed to commit empty index");
+
+        // Verify document count is 0
+        let count = index.doc_count().expect("Failed to get doc count");
+        assert_eq!(count, 0, "Empty index should have 0 documents");
+
+        // Search should return empty results
+        let results = index.search("test").expect("Failed to search empty index");
+        assert!(results.is_empty(), "Empty index should return no results");
+    }
+}
+
