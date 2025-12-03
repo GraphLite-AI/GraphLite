@@ -43,7 +43,7 @@ import tempfile
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from tenacity import retry, stop_after_attempt, wait_fixed
 
@@ -801,6 +801,31 @@ def generate_isogql(
     fix_model: Optional[str] = None,
     validator: Optional[GraphLiteValidator] = None,
 ) -> Tuple[Optional[str], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    return generate_isogql_with_progress(
+        nl,
+        schema_context,
+        max_attempts=max_attempts,
+        gen_model=gen_model,
+        fix_model=fix_model,
+        validator=validator,
+        progress=None,
+    )
+
+
+def generate_isogql_with_progress(
+    nl: str,
+    schema_context: str,
+    *,
+    max_attempts: int = 3,
+    gen_model: Optional[str] = None,
+    fix_model: Optional[str] = None,
+    validator: Optional[GraphLiteValidator] = None,
+    progress: Optional[Callable[[str], None]] = None,
+) -> Tuple[Optional[str], List[Dict[str, Any]], List[Dict[str, Any]]]:
+    def notify(message: str) -> None:
+        if progress:
+            progress(message)
+
     gen = gen_model or DEFAULT_OPENAI_MODEL_GEN
     fix = fix_model or DEFAULT_OPENAI_MODEL_FIX
 
@@ -815,18 +840,21 @@ def generate_isogql(
 
     try:
         for attempt in range(1, max_attempts + 1):
+            notify(f"[attempt {attempt}] drafting intent frame...")
             frame, usage = draft_intent_frame(nl, graph, gen, feedback)
             if usage:
                 usage.update({"attempt": attempt, "call_type": "intent_frame", "model": gen})
                 usage_data.append(usage)
             timeline.append({"attempt": attempt, "action": "intent_frame", "data": frame, "feedback": feedback.copy()})
 
+            notify(f"[attempt {attempt}] linking schema...")
             links, usage = link_schema(frame, nl, graph, gen, feedback)
             if usage:
                 usage.update({"attempt": attempt, "call_type": "schema_link", "model": gen})
                 usage_data.append(usage)
             timeline.append({"attempt": attempt, "action": "schema_link", "data": links})
 
+            notify(f"[attempt {attempt}] planning AST...")
             ast, usage = plan_ast(frame, links, graph, gen, feedback)
             if usage:
                 usage.update({"attempt": attempt, "call_type": "ast_plan", "model": gen})
@@ -838,12 +866,14 @@ def generate_isogql(
 
             ast_errors = validate_ast(ast, graph)
             if ast_errors:
+                notify(f"[attempt {attempt}] AST invalid: {'; '.join(ast_errors)}")
                 feedback.append("AST invalid: " + "; ".join(ast_errors))
                 timeline.append({"attempt": attempt, "action": "ast_invalid", "errors": ast_errors})
                 continue
 
             gql_query = render_ast_to_gql(ast, graph)
             timeline.append({"attempt": attempt, "action": "rendered_query", "query": gql_query})
+            notify(f"[attempt {attempt}] rendered query; validating syntax...")
 
             syntax_valid, syntax_error = validator.validate(gql_query)
             timeline.append(
@@ -857,6 +887,7 @@ def generate_isogql(
             )
 
             if not syntax_valid:
+                notify(f"[attempt {attempt}] syntax failed: {syntax_error}")
                 feedback.append(f"Syntax error: {syntax_error}")
                 continue
 
@@ -878,9 +909,11 @@ def generate_isogql(
             )
 
             if logic_valid:
+                notify(f"[attempt {attempt}] logic valid; query complete.")
                 return gql_query, usage_data, timeline
 
             if logic_error:
+                notify(f"[attempt {attempt}] logic gap: {logic_error}")
                 feedback.append(f"Logic gap: {logic_error}")
 
         return None, usage_data, timeline
@@ -978,14 +1011,17 @@ def run_pipeline(
     db_path: Optional[str] = DEFAULT_DB_PATH,
     verbose: bool = False,
 ) -> str:
+    progress_fn = print if verbose else None
+
     with GraphLiteValidator(db_path=db_path) as validator:
-        result, usage_data, validation_log = generate_isogql(
+        result, usage_data, validation_log = generate_isogql_with_progress(
             nl,
             schema_context,
             max_attempts=max_attempts,
             gen_model=gen_model,
             fix_model=fix_model,
             validator=validator,
+            progress=progress_fn,
         )
 
     if verbose:
