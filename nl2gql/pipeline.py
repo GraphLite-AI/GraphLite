@@ -1,4 +1,17 @@
-"""Natural-language to ISO GQL inference pipeline for GraphLite.
+"""Schema-grounded NL → ISO GQL pipeline with RAT-SQL style structure.
+
+We replace single-shot prompting with a multi-stage, graph-aware pipeline:
+1) Parse schema into a graph (nodes, properties, relationships).
+2) Draft an intent frame (targets, filters, metrics, ordering).
+3) Link intent elements to concrete schema nodes/props/edges.
+4) Plan a constrained AST over the schema graph.
+5) Render to ISO GQL, then validate syntax (GraphLite) + logic (LLM jury).
+
+The flow mirrors techniques used in RAT-SQL / ResdSQL / PICARD:
+- Schema is encoded as an explicit graph.
+- Intent and schema are encoded jointly for planning.
+- Constrained decoding via an intermediate AST with schema checks.
+- Multi-pass validation with self-repair.
 
 Requirements (install into your venv):
     pip install openai tenacity python-dotenv
@@ -6,10 +19,10 @@ Requirements (install into your venv):
 
 Environment (config.env in this folder is read automatically if present):
     OPENAI_API_KEY=sk-...
-    OPENAI_MODEL_GEN=gpt-4o-mini     # optional override
-    OPENAI_MODEL_FIX=gpt-4o-mini     # optional override
-    NL2GQL_DB_PATH=./.nl2gql_cache   # optional scratch DB for validation
-    NL2GQL_USER=admin                # session user for validation
+    OPENAI_MODEL_GEN=gpt-4o-mini     # constrained by request
+    OPENAI_MODEL_FIX=gpt-4o-mini
+    NL2GQL_DB_PATH=./.nl2gql_cache
+    NL2GQL_USER=admin
     NL2GQL_SCHEMA=nl2gql
     NL2GQL_GRAPH=scratch
 
@@ -21,11 +34,14 @@ Usage (CLI):
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import random
+import re
 import sys
 import tempfile
 from collections import Counter
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -37,18 +53,17 @@ except ImportError:  # pragma: no cover - optional helper
     load_dotenv = None  # type: ignore
 
 
-def _load_graphlite_sdk():
-    """Import GraphLite bindings, preferring the bindings/python package.
+# -----------------------------------------------------------------------------
+# GraphLite SDK loader
+# -----------------------------------------------------------------------------
 
-    The repo root contains a Rust crate folder named `graphlite/` that can
-    shadow the Python package when running scripts from the repo root. To avoid
-    that, we temporarily prepend bindings/python to sys.path before import.
-    """
+
+def _load_graphlite_sdk():
+    """Import GraphLite bindings, preferring the bindings/python package."""
 
     try:
         from graphlite import GraphLite, GraphLiteError  # type: ignore
 
-        # If the module is a namespace (no attributes), fallback below.
         if getattr(GraphLite, "__name__", None):
             return GraphLite, GraphLiteError
     except Exception:
@@ -57,7 +72,6 @@ def _load_graphlite_sdk():
     bindings_path = Path(__file__).resolve().parents[1] / "bindings" / "python"
     if bindings_path.exists():
         sys.path.insert(0, str(bindings_path))
-        # Drop any namespace that was cached from the repo root
         sys.modules.pop("graphlite", None)
         from graphlite import GraphLite, GraphLiteError  # type: ignore
 
@@ -72,17 +86,16 @@ def _load_graphlite_sdk():
 GraphLite, GraphLiteError = _load_graphlite_sdk()
 
 
-try:  # OpenAI
+try:
     from openai import OpenAI
 except Exception as exc:  # pragma: no cover
-    raise SystemExit(
-        "OpenAI client missing. Install with: pip install openai"
-    ) from exc
+    raise SystemExit("OpenAI client missing. Install with: pip install openai") from exc
 
 
-# ---------------------------------------------------------------------------
-# Environment helpers
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Environment + OpenAI helpers
+# -----------------------------------------------------------------------------
+
 
 _ENV_PATH = Path(__file__).with_name("config.env")
 if load_dotenv:
@@ -98,11 +111,6 @@ DEFAULT_DB_PATH = os.getenv("NL2GQL_DB_PATH")
 DEFAULT_DB_USER = os.getenv("NL2GQL_USER", "admin")
 DEFAULT_DB_SCHEMA = os.getenv("NL2GQL_SCHEMA", "nl2gql")
 DEFAULT_DB_GRAPH = os.getenv("NL2GQL_GRAPH", "scratch")
-
-
-# ---------------------------------------------------------------------------
-# OpenAI helpers
-# ---------------------------------------------------------------------------
 
 _client_singleton: Optional[OpenAI] = None
 
@@ -120,11 +128,11 @@ def chat_complete(
     system: str,
     user: str,
     *,
-    temperature: float = 0.3,
+    temperature: float = 0.2,
     top_p: float = 0.9,
-    max_tokens: int = 400,
+    max_tokens: int = 600,
 ) -> Tuple[str, Optional[Dict[str, Any]]]:
-    """Simple chat completion with retries and usage extraction."""
+    """Chat completion with retry + usage extraction."""
 
     resp = _client().chat.completions.create(
         model=model,
@@ -146,16 +154,42 @@ def chat_complete(
     return text, None
 
 
-def _clean_query_text(text: str) -> str:
-    """Normalize model output to a plain query (strip fences, keep full body)."""
+def _clean_block(text: str) -> str:
+    """Strip fences and surrounding whitespace."""
 
     stripped = text.strip()
     if stripped.startswith("```"):
-        # Drop leading fence
         stripped = stripped[stripped.find("\n") + 1 :] if "\n" in stripped else stripped.lstrip("`")
     if stripped.endswith("```"):
         stripped = stripped[: stripped.rfind("```")]
     return stripped.strip()
+
+
+def _safe_json_loads(text: str) -> Optional[Any]:
+    try:
+        return json.loads(_clean_block(text))
+    except Exception:
+        return None
+
+
+def _format_literal(value: Any) -> str:
+    """Render Python values into ISO GQL literal syntax."""
+
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return "null"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, list):
+        return "[" + ", ".join(_format_literal(v) for v in value) + "]"
+
+    # Default: treat as string
+    text = str(value)
+    if not (text.startswith("'") and text.endswith("'")):
+        text = text.replace("\\", "\\\\").replace("'", "\\'")
+        return f"'{text}'"
+    return text
 
 
 def _shuffle_schema_context(schema_context: str) -> str:
@@ -170,9 +204,106 @@ def _shuffle_schema_context(schema_context: str) -> str:
     return "\n".join(shuffled)
 
 
-# ---------------------------------------------------------------------------
-# GraphLite syntax validation
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Schema graph parsing + helpers
+# -----------------------------------------------------------------------------
+
+
+def _canonical(name: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+@dataclass
+class SchemaNode:
+    name: str
+    properties: List[str] = field(default_factory=list)
+
+    def prompt_line(self) -> str:
+        props = ", ".join(self.properties) if self.properties else "no properties listed"
+        return f"{self.name}: {props}"
+
+
+@dataclass
+class SchemaEdge:
+    src: str
+    rel: str
+    dst: str
+
+    def prompt_line(self) -> str:
+        return f"({self.src})-[:{self.rel}]->({self.dst})"
+
+
+@dataclass
+class SchemaGraph:
+    nodes: Dict[str, SchemaNode]
+    edges: List[SchemaEdge]
+
+    @classmethod
+    def from_text(cls, schema_context: str) -> "SchemaGraph":
+        nodes: Dict[str, SchemaNode] = {}
+        edges: List[SchemaEdge] = []
+
+        for raw in schema_context.splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+
+            # Normalize bullet prefixes so patterns match.
+            if line.startswith("- "):
+                line = line[2:].strip()
+            if line.startswith("* "):
+                line = line[2:].strip()
+
+            rel_match = re.match(r"^\(?([A-Za-z0-9_]+)\)?-?\s*\[:([A-Za-z0-9_]+)\]\s*->\s*\(?([A-Za-z0-9_]+)\)?", line)
+            if rel_match:
+                edges.append(SchemaEdge(rel_match.group(1), rel_match.group(2), rel_match.group(3)))
+                continue
+
+            # Entity with properties: "- Label: id, name, attr"
+            ent_match = re.match(r"^-?\s*([A-Za-z0-9_]+)\s*:\s*(.+)$", line)
+            if ent_match:
+                name = ent_match.group(1).strip()
+                props_text = ent_match.group(2)
+                props = [p.strip() for p in re.split(r"[;,]", props_text) if p.strip()]
+                node = nodes.get(name) or SchemaNode(name=name)
+                node.properties = sorted(set(node.properties + props))
+                nodes[name] = node
+                continue
+
+        return cls(nodes=nodes, edges=edges)
+
+    def has_node(self, name: str) -> bool:
+        return name in self.nodes
+
+    def has_property(self, node: str, prop: str) -> bool:
+        return node in self.nodes and prop in self.nodes[node].properties
+
+    def edge_exists(self, left: str, rel: str, right: str) -> bool:
+        return any(e.src == left and e.rel == rel and e.dst == right for e in self.edges)
+
+    def describe(self) -> str:
+        node_lines = [f"- {n.prompt_line()}" for n in self.nodes.values()]
+        edge_lines = [f"- {e.prompt_line()}" for e in self.edges]
+        return "ENTITIES:\n" + "\n".join(node_lines) + "\nRELATIONSHIPS:\n" + "\n".join(edge_lines)
+
+    def heuristic_candidates(self, nl: str) -> List[str]:
+        """Crude lexical hints for schema linking."""
+
+        tokens = set(re.findall(r"[a-zA-Z][a-zA-Z0-9_]*", nl.lower()))
+        hints: List[str] = []
+        for node in self.nodes.values():
+            hit_props = [p for p in node.properties if _canonical(p) in tokens or p.lower() in tokens]
+            if hit_props:
+                hints.append(f"{node.name}: {', '.join(hit_props)}")
+        for edge in self.edges:
+            if _canonical(edge.rel) in tokens:
+                hints.append(f"edge {edge.prompt_line()}")
+        return hints
+
+
+# -----------------------------------------------------------------------------
+# GraphLite syntax validator
+# -----------------------------------------------------------------------------
 
 
 class GraphLiteValidator:
@@ -207,8 +338,6 @@ class GraphLiteValidator:
 
         self._db = GraphLite(str(self._db_path))
         self._session = self._db.create_session(self._user)
-
-        # Minimal schema + graph so user queries can run even if they only read.
         bootstrap = [
             f"CREATE SCHEMA IF NOT EXISTS {self._schema}",
             f"SESSION SET SCHEMA {self._schema}",
@@ -217,7 +346,6 @@ class GraphLiteValidator:
         ]
         for stmt in bootstrap:
             self._db.execute(self._session, stmt)
-
         self._ready = True
 
     def close(self) -> None:
@@ -235,7 +363,6 @@ class GraphLiteValidator:
 
         if self._owns_db and self._db_path.exists():
             try:
-                # Remove scratch directory quietly
                 for path in sorted(self._db_path.rglob("*"), reverse=True):
                     if path.is_file():
                         path.unlink(missing_ok=True)
@@ -254,145 +381,391 @@ class GraphLiteValidator:
             assert self._db is not None and self._session is not None
             self._db.query(self._session, query.strip())
             return True, None
-        except GraphLiteError as exc:  # surfaced syntax/runtime issues
+        except GraphLiteError as exc:
             return False, exc.message
-        except Exception as exc:  # pragma: no cover - unexpected
+        except Exception as exc:  # pragma: no cover
             return False, str(exc)
 
 
-# ---------------------------------------------------------------------------
-# Prompt templates
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Prompt templates (multi-stage)
+# -----------------------------------------------------------------------------
 
-SYSTEM_GENERATE = (
-    "You write ISO GQL (GraphLite dialect) queries from natural language. "
-    "Use only MATCH, WHERE, RETURN, WITH, ORDER BY, LIMIT, DISTINCT, and aggregates (COUNT, SUM, AVG, MIN, MAX). "
-    "Use exactly one MATCH clause that lists all path patterns separated by commas; bind every variable inside that single MATCH. "
-    "Place a single WHERE after the MATCH and before RETURN, combining all predicates with AND. "
-    "Do NOT use subqueries, list comprehensions, inline MATCH/EXISTS in WHERE, or CALL. "
-    "Use single quotes for strings. IN clauses use square brackets. Do not invent labels or properties outside schema_context. "
-    "Return the query only with no commentary. Always include a RETURN clause (and LIMIT if applicable); do not stop early. "
-    "Pattern example:\\nMATCH (a:Label)-[:REL]->(b:Label), (b)-[:OTHER]->(c:Label)\\nWHERE c.prop = 'x' AND b.flag = true\\nRETURN b.name, COUNT(a)\\nORDER BY COUNT(a) DESC"
-)
 
-USER_GENERATE_TEMPLATE = (
-    "SCHEMA:\n{schema_context}\n\n"
-    "REQUEST: {nl}\n\n"
-    "QUERY:"
-)
+SYSTEM_INTENT = """You are a careful GraphQL/ISO GQL planner.
+- Think in stages: understand intent, align to schema, plan graph traversal.
+- Output only JSON with fields: targets, filters, metrics, order_by, limit, reasoning, path_hints.
+- Use only labels/properties/relationships that exist in the schema_graph text.
+- Preserve aggregates and grouping needs explicitly."""
 
-SYSTEM_FIX = (
-    "Fix the ISO GQL query so it parses and keeps the same intent. "
-    "Use only elements from schema_context. Output the corrected query only."
-)
+USER_INTENT_TEMPLATE = """schema_graph:
+{graph}
 
-USER_FIX_TEMPLATE = (
-    "SCHEMA:\n{schema_context}\n\n"
-    "REQUEST: {nl}\n\n"
-    "BROKEN QUERY: {query}\n\n"
-    "ERROR: {error}\n\n"
-    "FIXED QUERY:"
-)
+request: {nl}
+
+Emit JSON:
+{{
+  "targets": ["entity or attribute names to return"],
+  "filters": ["plain language constraints to enforce"],
+  "metrics": ["aggregates or counts needed"],
+  "order_by": ["sort instructions with directions"],
+  "limit": "<integer or null>",
+  "reasoning": "1-2 sentences of how to satisfy the request",
+  "path_hints": ["likely traversals e.g., LabelA -REL_TYPE-> LabelB"]
+}}"""
+
+
+SYSTEM_LINK = """You are a schema linker like RAT-SQL/ResdSQL.
+- Map natural-language mentions to concrete schema nodes/properties/relationships.
+- Prefer shortest valid paths; avoid inventing schema elements.
+- Use distinct aliases when the same label appears in multiple roles (e.g., home_city vs work_city); when both residence and workplace/location cities are mentioned, allocate separate city aliases.
+- Output JSON with node_links, property_links, rel_links, and canonical aliases."""
+
+USER_LINK_TEMPLATE = """schema_graph:
+{graph}
+
+intent_frame:
+{frame}
+
+heuristic_hits:
+{hits}
+
+Emit JSON:
+{{
+  "node_links": [{{"alias": "n1", "label": "<SchemaLabel>", "reason": "maps to an NL mention"}}],
+  "property_links": [{{"alias": "n1", "property": "<property>", "reason": "attribute explicitly referenced"}}],
+  "rel_links": [{{"left_alias": "n1", "rel": "<REL_TYPE>", "right_alias": "n2", "reason": "connects the mentioned entities"}}]
+}}"""
+
+
+SYSTEM_AST = """You are a constrained ISO GQL AST builder.
+- Use only schema labels/properties/relationships provided.
+- Build a single MATCH with all paths separated by commas.
+- Push property predicates into WHERE (no aggregates in WHERE).
+- Support alias-to-alias comparisons using filter values like {"ref_alias": "a2", "ref_property": "id"} for expressions such as a1.id <> a2.id.
+- Filters must use plain properties (no dotted paths). If a filter references a related node’s property, place the filter on that node’s alias rather than encoding the relationship in the property name.
+- Use COUNT/AVG/MIN/MAX/SUM in RETURN with aliases when aggregating.
+- Output JSON AST with fields: nodes, relationships, filters, returns, order_by, limit, notes.
+- Avoid subqueries and CALL; no inline MATCH/EXISTS; one MATCH only."""
+
+USER_AST_TEMPLATE = """schema_graph:
+{graph}
+
+intent_frame:
+{frame}
+
+links:
+{links}
+
+Emit JSON:
+{{
+  "nodes": [{{"alias": "n1", "label": "<SchemaLabel>"}}],
+  "relationships": [{{"left_alias": "n1", "rel": "<REL_TYPE>", "right_alias": "n2"}}],
+  "filters": [{{"alias": "n1", "property": "<property>", "op": ">=", "value": 30}}, {{"alias": "n1", "property": "id", "op": "<>", "value": {{"ref_alias": "n2", "ref_property": "id"}}}}],
+  "returns": [{{"expr": "n2.some_field", "alias": "result"}}, {{"expr": "COUNT(n1)", "alias": "total"}}],
+  "order_by": [{{"expr": "total", "direction": "DESC"}}],
+  "limit": 10,
+  "notes": "concise explanation of grouping/aggregation choices"
+}}"""
+
 
 SYSTEM_VALIDATE_LOGIC = (
     "You judge if an ISO GQL query logically satisfies the natural language request using the provided schema. "
-    "Be conservative: reply INVALID only if you can point to a concrete missing/extra condition that conflicts with the request or schema; otherwise reply VALID. "
-    "Do NOT invent requirements that are not stated. "
-    "Respond only with 'VALID' or 'INVALID: <reason>'."
+    "Be conservative: reply VALID only when all requested conditions, joins, and groupings are present. "
+    "Reply INVALID with a short reason otherwise. Respond only with 'VALID' or 'INVALID: <reason>'."
 )
 
 USER_VALIDATE_LOGIC_TEMPLATE = (
     "SCHEMA:\n{schema_context}\n\n"
+    "INTENT FRAME:\n{frame}\n\n"
     "REQUEST: {nl}\n\n"
-    "GENERATED QUERY: {query}\n\n"
+    "GENERATED QUERY:\n{query}\n\n"
     "Does this query logically satisfy the request?"
 )
 
 
-# ---------------------------------------------------------------------------
-# Generation + validation pipeline
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Stage 1: Intent framing
+# -----------------------------------------------------------------------------
 
 
-def generate_isogql_initial(nl: str, schema_context: str) -> Tuple[str, Optional[Dict[str, Any]]]:
-    return generate_isogql_initial_with_model(nl, schema_context, DEFAULT_OPENAI_MODEL_GEN)
+def draft_intent_frame(
+    nl: str, graph: SchemaGraph, model: str, feedback: List[str]
+) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+    user = USER_INTENT_TEMPLATE.format(graph=graph.describe(), nl=nl)
+    if feedback:
+        user += "\n\nprevious_failures:\n- " + "\n- ".join(feedback[-5:])
+
+    text, usage = chat_complete(model, SYSTEM_INTENT, user, temperature=0.2, top_p=0.9)
+    frame = _safe_json_loads(text) or {}
+    return frame, usage
 
 
-def generate_isogql_initial_with_model(
-    nl: str, schema_context: str, model: str
-) -> Tuple[str, Optional[Dict[str, Any]]]:
-    user = USER_GENERATE_TEMPLATE.format(schema_context=schema_context, nl=nl)
-    text, usage = chat_complete(model, SYSTEM_GENERATE, user, temperature=0.3, top_p=0.9)
-    return text.strip(), usage
+# -----------------------------------------------------------------------------
+# Stage 2: Schema linking
+# -----------------------------------------------------------------------------
 
 
-def generate_isogql_with_feedback(
-    nl: str, schema_context: str, feedback: List[str], model: str
-) -> Tuple[str, Optional[Dict[str, Any]]]:
-    if not feedback:
-        return generate_isogql_initial_with_model(nl, schema_context, model)
-
-    feedback_text = "\n".join(f"- {item}" for item in feedback[-4:])
-    enhanced_system = (
-        SYSTEM_GENERATE
-        + "\n\nCRITICAL FEEDBACK FROM PREVIOUS FAILED ATTEMPTS:\n"
-        + feedback_text
-        + "\n\nAddress all feedback above and avoid repeating the listed mistakes."
+def link_schema(
+    frame: Dict[str, Any],
+    nl: str,
+    graph: SchemaGraph,
+    model: str,
+    feedback: List[str],
+) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+    hits = graph.heuristic_candidates(nl)
+    user = USER_LINK_TEMPLATE.format(
+        graph=graph.describe(),
+        frame=json.dumps(frame, indent=2),
+        hits="\n".join(hits) if hits else "none",
     )
+    if feedback:
+        user += "\n\navoid_errors:\n- " + "\n- ".join(feedback[-3:])
 
-    enhanced_user = (
-        f"SCHEMA:\n{schema_context}\n\n"
-        f"REQUEST: {nl}\n\n"
-        "QUERY:"
+    text, usage = chat_complete(model, SYSTEM_LINK, user, temperature=0.2, top_p=0.9)
+    links = _safe_json_loads(text) or {}
+    return links, usage
+
+
+# -----------------------------------------------------------------------------
+# Stage 3: AST planning
+# -----------------------------------------------------------------------------
+
+
+def plan_ast(
+    frame: Dict[str, Any],
+    links: Dict[str, Any],
+    graph: SchemaGraph,
+    model: str,
+    feedback: List[str],
+) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+    user = USER_AST_TEMPLATE.format(
+        graph=graph.describe(),
+        frame=json.dumps(frame, indent=2),
+        links=json.dumps(links, indent=2),
     )
+    if feedback:
+        user += "\n\nfix_these:\n- " + "\n- ".join(feedback[-4:])
 
-    text, usage = chat_complete(model, enhanced_system, enhanced_user, temperature=0.3, top_p=0.9)
-    return text.strip(), usage
+    text, usage = chat_complete(model, SYSTEM_AST, user, temperature=0.25, top_p=0.9, max_tokens=700)
+    ast = _safe_json_loads(text) or {}
+    return ast, usage
 
 
-def fix_isogql_syntax_with_model(
-    nl: str, schema_context: str, query: str, error: str, model: str
-) -> Tuple[str, Optional[Dict[str, Any]]]:
-    user = USER_FIX_TEMPLATE.format(schema_context=schema_context, nl=nl, query=query, error=error)
-    fixed, usage = chat_complete(model, SYSTEM_FIX, user, temperature=0.2, top_p=0.9)
-    fixed = _clean_query_text(fixed)
-    return fixed, usage
+# -----------------------------------------------------------------------------
+# AST validation + rendering
+# -----------------------------------------------------------------------------
+
+
+def validate_ast(ast: Dict[str, Any], graph: SchemaGraph) -> List[str]:
+    errors: List[str] = []
+    nodes = ast.get("nodes") or []
+    relationships = ast.get("relationships") or []
+    filters = ast.get("filters") or []
+    returns = ast.get("returns") or []
+
+    node_labels = {n.get("alias"): n.get("label") for n in nodes if n.get("alias") and n.get("label")}
+
+    for alias, label in node_labels.items():
+        if not graph.has_node(label):
+            errors.append(f"Unknown label for alias {alias}: {label}")
+
+    for rel in relationships:
+        left, rel_name, right = rel.get("left_alias"), rel.get("rel"), rel.get("right_alias")
+        if left not in node_labels or right not in node_labels:
+            errors.append(f"Relationship references unknown alias: {rel}")
+            continue
+        if not graph.edge_exists(node_labels[left], rel_name, node_labels[right]):
+            errors.append(f"Edge not in schema: {node_labels[left]}-[:{rel_name}]->{node_labels[right]}")
+
+    for flt in filters:
+        alias, prop = flt.get("alias"), flt.get("property")
+        if alias not in node_labels or not prop:
+            errors.append(f"Filter references unknown alias/property: {flt}")
+            continue
+        if not graph.has_property(node_labels[alias], prop):
+            errors.append(f"Unknown property {prop} on {node_labels[alias]}")
+        value = flt.get("value")
+        if isinstance(value, dict) and "ref_alias" in value and "ref_property" in value:
+            ref_alias, ref_prop = value.get("ref_alias"), value.get("ref_property")
+            if ref_alias not in node_labels:
+                errors.append(f"Filter reference alias not defined: {ref_alias}")
+            elif not graph.has_property(node_labels[ref_alias], ref_prop):
+                errors.append(f"Filter references unknown property {ref_prop} on {node_labels[ref_alias]}")
+
+    # Returns sanity: ensure expressions reference known aliases/props
+    for ret in returns:
+        expr = ret.get("expr", "")
+        for match in re.findall(r"([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)", expr):
+            alias, prop = match
+            if alias not in node_labels:
+                errors.append(f"Return references unknown alias {alias} in {expr}")
+            elif not graph.has_property(node_labels[alias], prop):
+                errors.append(f"Return references unknown property {prop} on {node_labels[alias]}")
+
+    return errors
+
+
+def _pattern_for_relationship(left_alias: str, left_label: str, rel: str, right_alias: str, right_label: str) -> str:
+    return f"({left_alias}:{left_label})-[:{rel}]->({right_alias}:{right_label})"
+
+
+def _rewrite_filter_relationship_props(ast: Dict[str, Any]) -> bool:
+    """
+    Normalize filters where the property erroneously encodes a relationship (e.g., \"LIVES_IN.name\").
+    If a filter references alias A with property \"REL.prop\" and there is a relationship
+    A-[:REL]->B, rewrite the filter to alias=B, property=prop.
+    """
+
+    filters = ast.get("filters") or []
+    relationships = ast.get("relationships") or []
+
+    rel_map: Dict[str, Dict[str, List[str]]] = {}
+    for rel in relationships:
+        left, rel_name, right = rel.get("left_alias"), rel.get("rel"), rel.get("right_alias")
+        if left and rel_name and right:
+            rel_map.setdefault(left, {}).setdefault(rel_name, []).append(right)
+
+    changed = False
+    for flt in filters:
+        alias = flt.get("alias")
+        prop = flt.get("property")
+        if not alias or not isinstance(prop, str) or "." not in prop:
+            continue
+
+        prefix, _, tail = prop.partition(".")
+        targets = rel_map.get(alias, {}).get(prefix)
+        if targets and tail:
+            flt["alias"] = targets[0]
+            flt["property"] = tail
+            changed = True
+
+    return changed
+
+
+def render_ast_to_gql(ast: Dict[str, Any], graph: SchemaGraph) -> str:
+    nodes = ast.get("nodes") or []
+    relationships = ast.get("relationships") or []
+    filters = ast.get("filters") or []
+    returns = ast.get("returns") or []
+    order_by = ast.get("order_by") or []
+    limit = ast.get("limit")
+
+    node_labels = {n["alias"]: n["label"] for n in nodes if "alias" in n and "label" in n}
+
+    patterns: List[str] = []
+    for rel in relationships:
+        left_alias, rel_name, right_alias = rel.get("left_alias"), rel.get("rel"), rel.get("right_alias")
+        if left_alias in node_labels and right_alias in node_labels and rel_name:
+            patterns.append(
+                _pattern_for_relationship(left_alias, node_labels[left_alias], rel_name, right_alias, node_labels[right_alias])
+            )
+
+    # Include isolated nodes that were not part of relationships
+    connected_aliases = {alias for rel in relationships for alias in (rel.get("left_alias"), rel.get("right_alias"))}
+    for alias, label in node_labels.items():
+        if alias not in connected_aliases:
+            patterns.append(f"({alias}:{label})")
+
+    match_clause = "MATCH " + ", ".join(patterns)
+
+    def _render_operand(value: Any) -> str:
+        if isinstance(value, dict) and "ref_alias" in value and "ref_property" in value:
+            return f"{value['ref_alias']}.{value['ref_property']}"
+        return _format_literal(value)
+
+    where_parts: List[str] = []
+    for flt in filters:
+        alias, prop, op, value = flt.get("alias"), flt.get("property"), flt.get("op"), flt.get("value")
+        if alias and prop and op:
+            where_parts.append(f"{alias}.{prop} {op} {_render_operand(value)}")
+    where_clause = ""
+    if where_parts:
+        where_clause = "WHERE " + " AND ".join(where_parts)
+
+    return_parts: List[str] = []
+    for ret in returns:
+        expr = ret.get("expr")
+        alias = ret.get("alias")
+        if expr:
+            if alias:
+                return_parts.append(f"{expr} AS {alias}")
+            else:
+                return_parts.append(expr)
+    return_clause = "RETURN " + ", ".join(return_parts)
+
+    order_clause = ""
+    if order_by:
+        items = []
+        for ob in order_by:
+            expr = ob.get("expr")
+            direction = ob.get("direction", "ASC").upper()
+            if expr:
+                items.append(f"{expr} {direction}")
+        if items:
+            order_clause = "ORDER BY " + ", ".join(items)
+
+    limit_clause = f"LIMIT {int(limit)}" if isinstance(limit, int) and limit > 0 else ""
+
+    parts = [match_clause]
+    if where_clause:
+        parts.append(where_clause)
+    parts.append(return_clause)
+    if order_clause:
+        parts.append(order_clause)
+    if limit_clause:
+        parts.append(limit_clause)
+
+    return "\n".join(parts)
+
+
+# -----------------------------------------------------------------------------
+# Stage 4: Logic validation (LLM committee)
+# -----------------------------------------------------------------------------
 
 
 def validate_logical_correctness(
-    nl: str, schema_context: str, query: str, model: str = DEFAULT_OPENAI_MODEL_FIX
+    nl: str,
+    schema_context: str,
+    query: str,
+    frame: Dict[str, Any],
+    model: str = DEFAULT_OPENAI_MODEL_FIX,
 ) -> Tuple[bool, Optional[str], Optional[Dict[str, Any]]]:
-    temperatures = [0.0, 0.2, 0.4, 0.2, 0.0]
-    sample_results: List[Dict[str, Any]] = []
+    temperatures = [0.0, 0.2, 0.4, 0.0, 0.2]
+    votes = 0
+    total = len(temperatures)
+    reasons: List[str] = []
+    samples: List[Dict[str, Any]] = []
     usage_totals = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-    valid_votes = 0
-    invalid_reasons: List[str] = []
     any_usage = False
 
     for temp in temperatures:
-        shuffled_schema = _shuffle_schema_context(schema_context)
-        user = USER_VALIDATE_LOGIC_TEMPLATE.format(schema_context=shuffled_schema, nl=nl, query=query)
-        result, usage = chat_complete(model, SYSTEM_VALIDATE_LOGIC, user, temperature=temp, top_p=0.9)
-
+        user = USER_VALIDATE_LOGIC_TEMPLATE.format(
+            schema_context=_shuffle_schema_context(schema_context),
+            frame=json.dumps(frame, indent=2),
+            nl=nl,
+            query=query,
+        )
+        result, usage = chat_complete(model, SYSTEM_VALIDATE_LOGIC, user, temperature=temp, top_p=0.9, max_tokens=150)
         verdict_raw = result.strip()
         verdict_upper = verdict_raw.upper()
+
         is_valid = False
         reason: Optional[str] = None
-
         if verdict_upper.startswith("VALID"):
             is_valid = True
-            valid_votes += 1
+            votes += 1
         elif verdict_upper.startswith("INVALID:"):
-            reason = verdict_raw[len("INVALID:") :].strip()
-            invalid_reasons.append(reason or "unspecified reason")
+            reason = verdict_raw[len("INVALID:") :].strip() or "unspecified reason"
+            reasons.append(reason)
         else:
             reason = f"Unexpected validation response: {verdict_raw}"
-            invalid_reasons.append(reason)
+            reasons.append(reason)
 
         sample_entry: Dict[str, Any] = {"temperature": temp, "verdict": "VALID" if is_valid else "INVALID"}
         if reason:
             sample_entry["reason"] = reason
-        sample_results.append(sample_entry)
+        samples.append(sample_entry)
 
         if usage:
             any_usage = True
@@ -400,30 +773,23 @@ def validate_logical_correctness(
             usage_totals["completion_tokens"] += usage.get("completion_tokens", 0)
             usage_totals["total_tokens"] += usage.get("total_tokens", 0)
 
-    total_votes = len(temperatures)
-    majority_valid = valid_votes > total_votes // 2
     usage_summary: Optional[Dict[str, Any]] = None
-    if any_usage or sample_results:
-        usage_summary = {
-            **usage_totals,
-            "samples": sample_results,
-            "valid_votes": valid_votes,
-            "total_votes": total_votes,
-        }
+    if any_usage:
+        usage_summary = {**usage_totals, "samples": samples, "valid_votes": votes, "total_votes": total}
 
-    if majority_valid:
+    if votes > total // 2:
         return True, None, usage_summary
 
-    reason_summary = (
-        f"Validator majority INVALID ({valid_votes}/{len(temperatures)} VALID)."
-        if invalid_reasons
-        else f"Validator consensus missing ({valid_votes}/{total_votes} VALID)."
-    )
-    if invalid_reasons:
-        top_reason, _ = Counter(invalid_reasons).most_common(1)[0]
-        reason_summary += f" Top reason: {top_reason}"
-
+    reason_summary = reasons[0] if reasons else "no consensus"
+    if len(reasons) > 1:
+        most_common = Counter(reasons).most_common(1)[0][0]
+        reason_summary = most_common
     return False, reason_summary, usage_summary
+
+
+# -----------------------------------------------------------------------------
+# Generation pipeline orchestrator
+# -----------------------------------------------------------------------------
 
 
 def generate_isogql(
@@ -438,165 +804,99 @@ def generate_isogql(
     gen = gen_model or DEFAULT_OPENAI_MODEL_GEN
     fix = fix_model or DEFAULT_OPENAI_MODEL_FIX
 
-    owns_validator = False
+    graph = SchemaGraph.from_text(schema_context)
+    feedback: List[str] = []
+    usage_data: List[Dict[str, Any]] = []
+    timeline: List[Dict[str, Any]] = []
+
+    owns_validator = validator is None
     if validator is None:
         validator = GraphLiteValidator(db_path=DEFAULT_DB_PATH)
-        owns_validator = True
 
     try:
-        return generate_isogql_with_models(nl, schema_context, max_attempts, gen, fix, validator)
+        for attempt in range(1, max_attempts + 1):
+            frame, usage = draft_intent_frame(nl, graph, gen, feedback)
+            if usage:
+                usage.update({"attempt": attempt, "call_type": "intent_frame", "model": gen})
+                usage_data.append(usage)
+            timeline.append({"attempt": attempt, "action": "intent_frame", "data": frame, "feedback": feedback.copy()})
+
+            links, usage = link_schema(frame, nl, graph, gen, feedback)
+            if usage:
+                usage.update({"attempt": attempt, "call_type": "schema_link", "model": gen})
+                usage_data.append(usage)
+            timeline.append({"attempt": attempt, "action": "schema_link", "data": links})
+
+            ast, usage = plan_ast(frame, links, graph, gen, feedback)
+            if usage:
+                usage.update({"attempt": attempt, "call_type": "ast_plan", "model": gen})
+                usage_data.append(usage)
+            timeline.append({"attempt": attempt, "action": "ast_plan", "data": ast})
+
+            # Normalize filters that incorrectly encode relationships in the property slot.
+            _rewrite_filter_relationship_props(ast)
+
+            ast_errors = validate_ast(ast, graph)
+            if ast_errors:
+                feedback.append("AST invalid: " + "; ".join(ast_errors))
+                timeline.append({"attempt": attempt, "action": "ast_invalid", "errors": ast_errors})
+                continue
+
+            gql_query = render_ast_to_gql(ast, graph)
+            timeline.append({"attempt": attempt, "action": "rendered_query", "query": gql_query})
+
+            syntax_valid, syntax_error = validator.validate(gql_query)
+            timeline.append(
+                {
+                    "attempt": attempt,
+                    "action": "syntax_check",
+                    "valid": syntax_valid,
+                    "error": syntax_error,
+                    "query": gql_query,
+                }
+            )
+
+            if not syntax_valid:
+                feedback.append(f"Syntax error: {syntax_error}")
+                continue
+
+            logic_valid, logic_error, logic_usage = validate_logical_correctness(
+                nl, schema_context, gql_query, frame, model=fix
+            )
+            if logic_usage:
+                logic_usage.update({"attempt": attempt, "call_type": "logic_validate", "model": fix})
+                usage_data.append(logic_usage)
+            timeline.append(
+                {
+                    "attempt": attempt,
+                    "action": "logic_check",
+                    "valid": logic_valid,
+                    "error": logic_error,
+                    "query": gql_query,
+                    "frame": frame,
+                }
+            )
+
+            if logic_valid:
+                return gql_query, usage_data, timeline
+
+            if logic_error:
+                feedback.append(f"Logic gap: {logic_error}")
+
+        return None, usage_data, timeline
     finally:
         if owns_validator and validator:
             validator.close()
 
 
-def generate_isogql_with_models(
-    nl: str,
-    schema_context: str,
-    max_attempts: int,
-    gen_model: str,
-    fix_model: str,
-    validator: GraphLiteValidator,
-) -> Tuple[Optional[str], List[Dict[str, Any]], List[Dict[str, Any]]]:
-    if not nl.strip():
-        return None, [], []
-
-    usage_data: List[Dict[str, Any]] = []
-    validation_log: List[Dict[str, Any]] = []
-    feedback: List[str] = []
-
-    for attempt in range(max_attempts):
-        attempt_num = attempt + 1
-
-        query, usage = generate_isogql_with_feedback(nl, schema_context, feedback, gen_model)
-        if usage:
-            usage.update({"attempt": attempt_num, "call_type": "generation", "model": gen_model})
-            usage_data.append(usage)
-
-        validation_log.append(
-            {
-                "attempt": attempt_num,
-                "action": "generated",
-                "query": query,
-                "feedback": feedback.copy(),
-            }
-        )
-
-        # Short-circuit obvious early stops so we don't waste validation on partial outputs.
-        if len(query) < 32 or "RETURN" not in query.upper():
-            feedback.append(
-                "Incomplete query: generation stopped early (missing RETURN or too short). Emit a full query with RETURN (and LIMIT if applicable)."
-            )
-            validation_log.append(
-                {
-                    "attempt": attempt_num,
-                    "action": "incomplete_generation",
-                    "query": query,
-                    "error": "missing RETURN / too short",
-                }
-            )
-            continue
-
-        syntax_valid, syntax_error = validator.validate(query)
-        validation_log.append(
-            {
-                "attempt": attempt_num,
-                "action": "validated_syntax",
-                "query": query,
-                "valid": syntax_valid,
-                "error": syntax_error,
-            }
-        )
-
-        logic_valid, logic_error, logic_usage = validate_logical_correctness(nl, schema_context, query, fix_model)
-        if logic_usage:
-            logic_usage.update({"attempt": attempt_num, "call_type": "validate_logic", "model": fix_model})
-            usage_data.append(logic_usage)
-
-        validation_log.append(
-            {
-                "attempt": attempt_num,
-                "action": "validated_logic",
-                "query": query,
-                "valid": logic_valid,
-                "error": logic_error,
-                "valid_votes": (logic_usage or {}).get("valid_votes"),
-                "total_votes": (logic_usage or {}).get("total_votes"),
-            }
-        )
-
-        if syntax_valid and logic_valid:
-            return query, usage_data, validation_log
-
-        if not syntax_valid:
-            fixed_query, fix_usage = fix_isogql_syntax_with_model(
-                nl, schema_context, query, syntax_error or "", fix_model
-            )
-            if fix_usage:
-                fix_usage.update({"attempt": attempt_num, "call_type": "fix_syntax", "model": fix_model})
-                usage_data.append(fix_usage)
-
-            validation_log.append(
-                {
-                    "attempt": attempt_num,
-                    "action": "fixed_syntax",
-                    "query": fixed_query,
-                }
-            )
-
-            syntax_valid, syntax_error = validator.validate(fixed_query)
-            validation_log.append(
-                {
-                    "attempt": attempt_num,
-                    "action": "validated_syntax",
-                    "query": fixed_query,
-                    "valid": syntax_valid,
-                    "error": syntax_error,
-                }
-            )
-
-            if syntax_valid:
-                logic_valid, logic_error, logic_usage = validate_logical_correctness(
-                    nl, schema_context, fixed_query, fix_model
-                )
-                if logic_usage:
-                    logic_usage.update(
-                        {"attempt": attempt_num, "call_type": "validate_logic_after_fix", "model": fix_model}
-                    )
-                    usage_data.append(logic_usage)
-
-                validation_log.append(
-                    {
-                        "attempt": attempt_num,
-                        "action": "validated_logic",
-                        "query": fixed_query,
-                        "valid": logic_valid,
-                        "error": logic_error,
-                        "valid_votes": (logic_usage or {}).get("valid_votes"),
-                        "total_votes": (logic_usage or {}).get("total_votes"),
-                    }
-                )
-
-                if logic_valid:
-                    return fixed_query, usage_data, validation_log
-
-                query = fixed_query
-
-        if not syntax_valid and syntax_error:
-            feedback.append(f"Syntax error: {syntax_error}")
-        if not logic_valid and logic_error:
-            if "sum" in logic_error.lower() and "where" in logic_error.lower():
-                feedback.append("CRITICAL: Aggregates in WHERE require a WITH clause and alias before filtering.")
-            else:
-                feedback.append(f"Logic issue: {logic_error}")
-            feedback.append(f"AVOID this pattern: {query}")
-
-    return None, usage_data, validation_log
-
-
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Reporting + CLI
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+
+
+def _fmt_block(text: str, indent: int = 6) -> str:
+    pad = " " * indent
+    return "\n".join(pad + line for line in text.splitlines())
 
 
 def print_verbose_info(
@@ -607,20 +907,6 @@ def print_verbose_info(
     gen_model: str,
     fix_model: str,
 ) -> None:
-    def _fmt_feedback(fb: Optional[List[Dict[str, str]]]) -> List[str]:
-        if not fb:
-            return []
-        formatted: List[str] = []
-        for item in fb:
-            if isinstance(item, dict):
-                line = f"{item.get('type', 'note')}: {item.get('reason', '')}".strip()
-                if item.get("query"):
-                    line += f" | query: {item['query']}"
-                formatted.append(line)
-            else:
-                formatted.append(str(item))
-        return formatted
-
     print("\n" + "=" * 80)
     print("PIPELINE EXECUTION SUMMARY")
     print("=" * 80)
@@ -628,75 +914,47 @@ def print_verbose_info(
     print(f"Models: {gen_model} (gen) | {fix_model} (fix)")
     print(f"Max Attempts: {max_attempts}")
 
-    # Group timeline entries by attempt for cleaner display.
     grouped: Dict[int, List[Dict[str, Any]]] = {}
     for entry in validation_log:
         grouped.setdefault(entry["attempt"], []).append(entry)
 
     print("\nTimeline (per attempt):")
-    for attempt in sorted(grouped.keys()):
+    for attempt in sorted(grouped):
         print("-" * 80)
         print(f"Attempt {attempt}")
-        # Track whether syntax already failed to annotate later logic checks.
-        syntax_status: Optional[bool] = None
         for entry in grouped[attempt]:
-            action = entry["action"]
-            valid = entry.get("valid")
-
-            if action == "generated":
-                fb_list = _fmt_feedback(entry.get("feedback"))
-                if fb_list:
-                    print("  • Generated (feedback used):")
-                    for fb_item in fb_list:
-                        for line in fb_item.splitlines():
-                            print(f"      - {line}")
-                else:
-                    print("  • Generated (no feedback used)")
-                print("    Query:")
+            action = entry.get("action")
+            if action == "intent_frame":
+                print("  • Intent frame")
+                print(_fmt_block(json.dumps(entry.get("data"), indent=2) or "<empty>"))
+            elif action == "schema_link":
+                print("  • Schema linking")
+                print(_fmt_block(json.dumps(entry.get("data"), indent=2) or "<empty>"))
+            elif action == "ast_plan":
+                print("  • AST plan")
+                print(_fmt_block(json.dumps(entry.get("data"), indent=2) or "<empty>"))
+            elif action == "ast_invalid":
+                print("  • AST invalid")
+                for err in entry.get("errors", []):
+                    print(f"      - {err}")
+            elif action == "rendered_query":
+                print("  • Rendered query:")
                 block = "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"])
                 print(f"      ```gql\n      {block}\n      ```")
-            elif action == "incomplete_generation":
-                print("  • Incomplete generation (missing RETURN or too short)")
-                print("    Query:")
-                block = "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"])
-                print(f"      ```gql\n      {block}\n      ```")
-            elif action == "validated_syntax":
-                status = "✓ SYNTAX VALID" if valid else "✗ SYNTAX INVALID"
-                syntax_status = bool(valid)
+            elif action == "syntax_check":
+                status = "✓ SYNTAX VALID" if entry.get("valid") else "✗ SYNTAX INVALID"
                 print(f"  • {status}")
                 if entry.get("error"):
-                    print("    Error:")
                     err_block = "\n      ".join(str(entry["error"]).splitlines())
                     print(f"      ```\n      {err_block}\n      ```")
-            elif action == "fixed_syntax":
-                print("  • Applied syntax fix")
-                print("    Query:")
-                block = "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"])
-                print(f"      ```gql\n      {block}\n      ```")
-            elif action == "validated_logic":
-                vote_prefix = ""
-                if entry.get("valid_votes") is not None and entry.get("total_votes"):
-                    vote_prefix = f" ({entry['valid_votes']}/{entry['total_votes']} VALID)"
-
-                prefix = f"{'✓ LOGIC VALID' if valid else '✗ LOGIC INVALID'}{vote_prefix}"
-                note = ""
-                if syntax_status is False:
-                    note = " (evaluated despite syntax failure)"
-                print(f"  • {prefix}{note}")
+            elif action == "logic_check":
+                status = "✓ LOGIC VALID" if entry.get("valid") else "✗ LOGIC INVALID"
+                print(f"  • {status}")
                 if entry.get("error"):
-                    print("    Error:")
                     err_block = "\n      ".join(str(entry["error"]).splitlines())
                     print(f"      ```\n      {err_block}\n      ```")
-            elif action == "fixed_logic":
-                print("  • Applied logic fix")
-                print("    Query:")
-                block = "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"])
-                print(f"      ```gql\n      {block}\n      ```")
-            elif action == "auto_fixed_syntax_hint":
-                print("  • Auto-applied property correction")
-                print("    Query:")
-                block = "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"])
-                print(f"      ```gql\n      {block}\n      ```")
+            else:
+                print(f"  • {action}: {entry}")
 
     total_tokens = sum(item.get("total_tokens", 0) for item in usage_data)
     print("\nAPI Usage:")
@@ -731,7 +989,9 @@ def run_pipeline(
         )
 
     if verbose:
-        print_verbose_info(nl, usage_data, validation_log, max_attempts, gen_model or DEFAULT_OPENAI_MODEL_GEN, fix_model or DEFAULT_OPENAI_MODEL_FIX)
+        print_verbose_info(
+            nl, usage_data, validation_log, max_attempts, gen_model or DEFAULT_OPENAI_MODEL_GEN, fix_model or DEFAULT_OPENAI_MODEL_FIX
+        )
 
     if result is None:
         raise RuntimeError("Failed to generate a valid ISO GQL query")
@@ -740,13 +1000,13 @@ def run_pipeline(
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Generate ISO GQL queries from natural language")
+    parser = argparse.ArgumentParser(description="Generate ISO GQL queries from natural language (schema-grounded)")
     parser.add_argument("--nl", required=True, help="Natural language request")
     parser.add_argument("--schema-file", help="Path to schema context text")
     parser.add_argument("--schema", help="Schema context as a string (overrides --schema-file)")
     parser.add_argument("--max-attempts", type=int, default=3, help="Max generation/fix attempts")
-    parser.add_argument("--gen-model", help="OpenAI model for generation")
-    parser.add_argument("--fix-model", help="OpenAI model for fixes/logic validation")
+    parser.add_argument("--gen-model", help="OpenAI model for generation (default: gpt-4o-mini)")
+    parser.add_argument("--fix-model", help="OpenAI model for fixes/logic validation (default: gpt-4o-mini)")
     parser.add_argument("--db-path", help="GraphLite DB path for syntax validation (defaults to temp or NL2GQL_DB_PATH)")
     parser.add_argument("--verbose", action="store_true", help="Print attempt timeline and token usage")
 

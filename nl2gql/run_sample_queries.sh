@@ -35,9 +35,11 @@ running_idx=()
 launch_job() {
   local cmd="$1" log="$2" idx="$3"
   if $SCRIPT_VERBOSE; then
-    bash -lc "$cmd" &
+    # Stream output to the console while still capturing it for parsing.
+    # Use process substitution so the job exit status reflects the command, not tee.
+    bash -lc "set -o pipefail; $cmd" > >(tee "$log") 2> >(tee -a "$log" >&2) &
   else
-    bash -lc "$cmd" >"$log" 2>&1 &
+    bash -lc "set -o pipefail; $cmd" >"$log" 2>&1 &
   fi
   running_pids+=("$!")
   running_idx+=("$idx")
@@ -47,7 +49,9 @@ wait_oldest() {
   local pid="${running_pids[0]}"
   local idx="${running_idx[0]}"
   local status=0
-  if ! wait "$pid"; then
+  if wait "$pid"; then
+    status=0
+  else
     status=$?
   fi
   all_status[$idx]=$status
