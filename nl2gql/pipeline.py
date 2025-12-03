@@ -418,7 +418,6 @@ Emit JSON:
 SYSTEM_LINK = """You are a schema linker like RAT-SQL/ResdSQL.
 - Map natural-language mentions to concrete schema nodes/properties/relationships.
 - Prefer shortest valid paths; avoid inventing schema elements.
-- Use distinct aliases when the same label appears in multiple roles (e.g., home_city vs work_city); when both residence and workplace/location cities are mentioned, allocate separate city aliases.
 - Output JSON with node_links, property_links, rel_links, and canonical aliases."""
 
 USER_LINK_TEMPLATE = """schema_graph:
