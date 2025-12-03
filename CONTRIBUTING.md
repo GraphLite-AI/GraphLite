@@ -551,6 +551,9 @@ cargo fmt --all -- --check
 # Run linter
 cargo clippy --all -- -D warnings
 
+# Run code pattern checks (REQUIRED)
+./scripts/check_code_patterns.sh
+
 # Test examples still work
 cd examples-core/fraud_detection
 cargo run
@@ -590,14 +593,27 @@ How was this tested?
 - [ ] Manual testing performed
 - [ ] Examples verified
 
+**Testing Steps for Reviewers:**
+
+Provide clear, step-by-step instructions for reviewers to test your changes:
+
+1. Step-by-step instructions on how to build/run
+2. Expected behavior at each step
+3. How to verify the fix/feature works
+4. Any specific test commands to run
+
 ## Checklist
 
 - [ ] Code follows project style guidelines
 - [ ] Tests pass locally (`cargo test --all`)
+- [ ] Code pattern checks pass (`./scripts/check_code_patterns.sh`)
 - [ ] Documentation updated (if applicable)
+- [ ] Documentation is concise and curated (no AI-generated fluff)
 - [ ] CHANGELOG.md updated (for notable changes)
 - [ ] No CLAUDE.md rules violated
 - [ ] Commit messages follow guidelines
+- [ ] PR description is professional (no emojis, no copy-paste from AI tools)
+- [ ] Clear testing steps provided for reviewers to verify the changes
 
 ## Related Issues
 
