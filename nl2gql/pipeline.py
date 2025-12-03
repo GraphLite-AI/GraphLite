@@ -41,6 +41,8 @@ import random
 import re
 import sys
 import tempfile
+import threading
+import time
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -92,6 +94,48 @@ try:
 except Exception as exc:  # pragma: no cover
     raise SystemExit("OpenAI client missing. Install with: pip install openai") from exc
 
+
+class Spinner:
+    """Lightweight terminal spinner for live status updates."""
+
+    def __init__(self, enabled: bool = True) -> None:
+        self.enabled = enabled and sys.stdout.isatty()
+        self._text = ""
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self._last_len = 0
+
+    def start(self, initial: str = "") -> None:
+        self._text = initial
+        if not self.enabled:
+            return
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def update(self, text: str) -> None:
+        self._text = text
+
+    def stop(self, final: Optional[str] = None) -> None:
+        if self.enabled:
+            self._stop.set()
+            if self._thread:
+                self._thread.join(timeout=0.5)
+            sys.stdout.write("\r" + " " * self._last_len + "\r")
+            sys.stdout.flush()
+        if final:
+            print(final)
+
+    def _run(self) -> None:
+        frames = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"]  # braille spinner
+        idx = 0
+        while not self._stop.is_set():
+            frame = frames[idx % len(frames)]
+            line = f"\r{frame} {self._text}"
+            self._last_len = max(self._last_len, len(line))
+            sys.stdout.write(line + " " * max(0, self._last_len - len(line)))
+            sys.stdout.flush()
+            idx += 1
+            time.sleep(0.08)
 
 # -----------------------------------------------------------------------------
 # Environment + OpenAI helpers
@@ -1196,19 +1240,34 @@ def run_pipeline(
     fix_model: Optional[str] = None,
     db_path: Optional[str] = DEFAULT_DB_PATH,
     verbose: bool = False,
+    spinner: Optional[bool] = None,
 ) -> str:
-    progress_fn = print if verbose else None
+    use_spinner = spinner if spinner is not None else sys.stdout.isatty()
+    spinner_ui = Spinner(enabled=use_spinner)
+    spinner_ui.start("Starting pipeline...")
+
+    def progress_fn(message: str) -> None:
+        if spinner_ui.enabled:
+            spinner_ui.update(message)
+        elif verbose:
+            print(message)
 
     with GraphLiteValidator(db_path=db_path) as validator:
-        result, usage_data, validation_log = generate_isogql_with_progress(
-            nl,
-            schema_context,
-            max_attempts=max_attempts,
-            gen_model=gen_model,
-            fix_model=fix_model,
-            validator=validator,
-            progress=progress_fn,
-        )
+        try:
+            result, usage_data, validation_log = generate_isogql_with_progress(
+                nl,
+                schema_context,
+                max_attempts=max_attempts,
+                gen_model=gen_model,
+                fix_model=fix_model,
+                validator=validator,
+                progress=progress_fn if (verbose or spinner_ui.enabled) else None,
+            )
+        except Exception:
+            spinner_ui.stop("✗ Pipeline failed.")
+            raise
+
+    spinner_ui.stop("✓ Query generated." if result else "✗ Failed to generate query.")
 
     if verbose:
         print_verbose_info(
@@ -1231,6 +1290,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--fix-model", help="OpenAI model for fixes/logic validation (default: gpt-4o-mini)")
     parser.add_argument("--db-path", help="GraphLite DB path for syntax validation (defaults to temp or NL2GQL_DB_PATH)")
     parser.add_argument("--verbose", action="store_true", help="Print attempt timeline and token usage")
+    parser.add_argument("--spinner", dest="spinner", action="store_true", help="Show live spinner updates while running (default when TTY)")
+    parser.add_argument("--no-spinner", dest="spinner", action="store_false", help="Disable live spinner updates")
+    parser.set_defaults(spinner=None)
 
     args = parser.parse_args(argv)
 
@@ -1258,6 +1320,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             fix_model=args.fix_model,
             db_path=args.db_path or DEFAULT_DB_PATH,
             verbose=args.verbose,
+            spinner=args.spinner,
         )
     except Exception as exc:
         print(f"Failed to generate query: {exc}", file=sys.stderr)
