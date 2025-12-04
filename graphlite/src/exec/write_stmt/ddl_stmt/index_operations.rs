@@ -26,9 +26,11 @@ use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
 use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
 use crate::exec::{ExecutionError, QueryResult};
 use crate::schema::integration::index_validator::IndexSchemaValidator;
-use crate::storage::indexes::{GraphIndexType, IndexConfig, IndexError, IndexManager, IndexType};
+use crate::storage::indexes::text::metadata::{
+    register_metadata, unregister_metadata, TextIndexMetadata,
+};
 use crate::storage::indexes::text::registry::{register_text_index, unregister_text_index};
-use crate::storage::indexes::text::metadata::{register_metadata, unregister_metadata, TextIndexMetadata};
+use crate::storage::indexes::{GraphIndexType, IndexConfig, IndexError, IndexManager, IndexType};
 use crate::storage::StorageManager;
 
 /// Coordinator for index DDL statement execution
@@ -411,12 +413,15 @@ impl DDLStatementExecutor for CreateIndexExecutor {
         // Check if index already exists in IndexManager OR in the global text index registry
         // (we check both because text indexes are registered in a global registry)
         let index_exists_in_manager = index_manager.index_exists(&self.statement.name);
-        let index_exists_in_registry = crate::storage::indexes::text::registry::get_text_index(&self.statement.name).is_ok();
+        let index_exists_in_registry =
+            crate::storage::indexes::text::registry::get_text_index(&self.statement.name).is_ok();
         let index_exists = index_exists_in_manager || index_exists_in_registry;
 
         log::debug!(
             "DEBUG CreateIndexExecutor: Checking if index exists (manager: {}, registry: {}): {}",
-            index_exists_in_manager, index_exists_in_registry, index_exists
+            index_exists_in_manager,
+            index_exists_in_registry,
+            index_exists
         );
 
         if index_exists {
@@ -478,19 +483,21 @@ impl DDLStatementExecutor for CreateIndexExecutor {
         if let IndexTypeSpecifier::Text(_text_type) = &self.statement.index_type {
             use crate::storage::indexes::text::inverted_tantivy_clean::InvertedIndex;
             use std::sync::Arc;
-            
+
             // Create the Tantivy-backed InvertedIndex instance
-            let inverted_index = InvertedIndex::new(&self.statement.name)
-                .map_err(|e| ExecutionError::RuntimeError(format!("Failed to create text index: {}", e)))?;
-            
+            let inverted_index = InvertedIndex::new(&self.statement.name).map_err(|e| {
+                ExecutionError::RuntimeError(format!("Failed to create text index: {}", e))
+            })?;
+
             let inverted_index = Arc::new(inverted_index);
-            
+
             // Register in global registry
-            register_text_index(self.statement.name.clone(), inverted_index)
-                .map_err(|e| ExecutionError::RuntimeError(format!("Failed to register text index: {}", e)))?;
-            
+            register_text_index(self.statement.name.clone(), inverted_index).map_err(|e| {
+                ExecutionError::RuntimeError(format!("Failed to register text index: {}", e))
+            })?;
+
             log::debug!("DEBUG CreateIndexExecutor: Text index registered in global registry");
-            
+
             // Register metadata for this text index (Phase 3: for auto-indexing and reindexing)
             let text_index_type = match &self.statement.index_type {
                 crate::ast::IndexTypeSpecifier::Text(t) => t.clone(),
@@ -499,7 +506,7 @@ impl DDLStatementExecutor for CreateIndexExecutor {
                     TextIndexTypeSpecifier::FullText
                 }
             };
-            
+
             let metadata = TextIndexMetadata {
                 name: self.statement.name.clone(),
                 label: self.statement.table.clone(),
@@ -512,9 +519,10 @@ impl DDLStatementExecutor for CreateIndexExecutor {
                 doc_count: 0,
                 size_bytes: 0,
             };
-            register_metadata(metadata)
-                .map_err(|e| ExecutionError::RuntimeError(format!("Failed to register index metadata: {:?}", e)))?;
-            
+            register_metadata(metadata).map_err(|e| {
+                ExecutionError::RuntimeError(format!("Failed to register index metadata: {:?}", e))
+            })?;
+
             log::debug!("DEBUG CreateIndexExecutor: Text index metadata registered");
         }
 
@@ -628,7 +636,8 @@ impl DDLStatementExecutor for DropIndexExecutor {
         // Check if index exists in IndexManager OR in the global text index registry
         // (we check both because text indexes are registered in a global registry)
         let index_exists_in_manager = index_manager.index_exists(&self.statement.name);
-        let index_exists_in_registry = crate::storage::indexes::text::registry::get_text_index(&self.statement.name).is_ok();
+        let index_exists_in_registry =
+            crate::storage::indexes::text::registry::get_text_index(&self.statement.name).is_ok();
         let index_exists = index_exists_in_manager || index_exists_in_registry;
 
         if !index_exists {
@@ -681,8 +690,11 @@ impl DDLStatementExecutor for DropIndexExecutor {
 
         // If this is a text index, also unregister from the global text index registry
         if let Ok(_) = unregister_text_index(&self.statement.name) {
-            log::debug!("Text index '{}' unregistered from global registry", self.statement.name);
-            
+            log::debug!(
+                "Text index '{}' unregistered from global registry",
+                self.statement.name
+            );
+
             // Also unregister the metadata
             if let Ok(_) = unregister_metadata(&self.statement.name) {
                 log::debug!("Text index '{}' metadata unregistered", self.statement.name);
@@ -1376,10 +1388,9 @@ mod text_index_ddl_tests {
     #[test]
     fn test_index_options_parsing() {
         let mut options = IndexOptions::default();
-        options.parameters.insert(
-            "analyzer".to_string(),
-            Value::String("english".to_string()),
-        );
+        options
+            .parameters
+            .insert("analyzer".to_string(), Value::String("english".to_string()));
 
         let create_stmt = CreateIndexStatement {
             name: "idx_options".to_string(),
@@ -1392,7 +1403,11 @@ mod text_index_ddl_tests {
         };
 
         let executor = CreateIndexExecutor::new(create_stmt);
-        assert!(executor.statement.options.parameters.contains_key("analyzer"));
+        assert!(executor
+            .statement
+            .options
+            .parameters
+            .contains_key("analyzer"));
         let analyzer = &executor.statement.options.parameters["analyzer"];
         assert!(matches!(analyzer, Value::String(s) if s == "english"));
     }
@@ -1448,4 +1463,3 @@ mod text_index_ddl_tests {
         // The actual description format is tested in integration tests
     }
 }
-

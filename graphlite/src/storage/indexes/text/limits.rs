@@ -31,10 +31,10 @@ pub struct ResourceLimits {
 impl Default for ResourceLimits {
     fn default() -> Self {
         Self {
-            query_timeout: Duration::from_secs(30),           // 30 second timeout
-            max_memory_bytes: 1_000_000_000,                  // 1 GB
-            max_result_size: 100_000,                         // 100K results
-            max_index_size_bytes: 10_000_000_000,             // 10 GB
+            query_timeout: Duration::from_secs(30), // 30 second timeout
+            max_memory_bytes: 1_000_000_000,        // 1 GB
+            max_result_size: 100_000,               // 100K results
+            max_index_size_bytes: 10_000_000_000,   // 10 GB
             enforce_limits: true,
         }
     }

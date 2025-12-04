@@ -52,7 +52,7 @@ impl BM25Scorer {
     pub fn add_document(&mut self, doc_id: u64, doc_length: usize, terms: Vec<&str>) {
         self.doc_lengths.insert(doc_id, doc_length);
         self.total_docs += 1;
-        
+
         // Update document frequencies and per-document term frequencies
         let mut per_doc: HashMap<String, usize> = HashMap::new();
         for term in terms {
@@ -61,7 +61,7 @@ impl BM25Scorer {
             *per_doc.entry(term_key).or_insert(0) += 1;
         }
         self.doc_term_freqs.insert(doc_id, per_doc);
-        
+
         // Update average document length
         self.recalculate_avg_length();
     }
@@ -73,7 +73,7 @@ impl BM25Scorer {
         }
 
         let term_key = term.to_lowercase();
-        
+
         // Get document frequency for the term
         let doc_freq = *self.doc_frequencies.get(&term_key).unwrap_or(&1) as f64;
         let doc_length = *self.doc_lengths.get(&doc_id).unwrap_or(&0) as f64;
@@ -87,7 +87,7 @@ impl BM25Scorer {
 
         // BM25 formula
         let score = idf * ((tf * (self.k1 + 1.0)) / (tf + self.k1 * norm_factor));
-        
+
         score.max(0.0)
     }
 
@@ -184,7 +184,7 @@ mod tests {
         scorer.add_document(1, 100, vec!["machine", "learning"]);
         scorer.add_document(2, 150, vec!["deep", "learning"]);
         scorer.add_document(3, 200, vec!["machine", "vision"]);
-        
+
         assert_eq!(scorer.doc_count(), 3);
         assert_eq!(scorer.avg_length(), 150.0);
     }
@@ -194,7 +194,7 @@ mod tests {
         let mut scorer = BM25Scorer::new();
         scorer.add_document(1, 100, vec!["machine", "learning"]);
         scorer.add_document(2, 100, vec!["deep", "learning"]);
-        
+
         let score = scorer.score("machine", 1, 1);
         assert!(score > 0.0);
     }
@@ -204,10 +204,10 @@ mod tests {
         let mut scorer = BM25Scorer::new();
         scorer.add_document(1, 100, vec!["machine"]);
         scorer.add_document(2, 100, vec!["machine"]);
-        
+
         let score1 = scorer.score("machine", 1, 1);
         let score2 = scorer.score("machine", 2, 2);
-        
+
         // Higher term frequency should give higher score
         assert!(score2 > score1);
     }
@@ -217,10 +217,10 @@ mod tests {
         let mut scorer = BM25Scorer::new();
         scorer.add_document(1, 50, vec!["machine"]);
         scorer.add_document(2, 200, vec!["machine"]);
-        
+
         let score1 = scorer.score("machine", 1, 1);
         let score2 = scorer.score("machine", 2, 1);
-        
+
         // Shorter documents should score higher (length normalization)
         assert!(score1 > score2);
     }
@@ -231,10 +231,10 @@ mod tests {
         scorer.add_document(1, 100, vec!["common"]);
         scorer.add_document(2, 100, vec!["common"]);
         scorer.add_document(3, 100, vec!["rare"]);
-        
+
         let common_score = scorer.score("common", 1, 1);
         let rare_score = scorer.score("rare", 3, 1);
-        
+
         // Rare terms should have higher IDF and better scores
         assert!(rare_score > common_score);
     }
@@ -244,14 +244,14 @@ mod tests {
         let mut scorer = BM25Scorer::new();
         scorer.add_document(1, 100, vec!["machine", "learning", "algorithm"]);
         scorer.add_document(2, 100, vec!["deep", "learning"]);
-        
+
         let mut query_terms = HashMap::new();
         query_terms.insert("machine".to_string(), 1);
         query_terms.insert("learning".to_string(), 1);
-        
+
         let score1 = scorer.score_query(1, &query_terms);
         let score2 = scorer.score_query(2, &query_terms);
-        
+
         // Doc 1 should score higher (contains both terms)
         assert!(score1 > score2);
     }
@@ -260,7 +260,7 @@ mod tests {
     fn test_zero_score_nonexistent_term() {
         let mut scorer = BM25Scorer::new();
         scorer.add_document(1, 100, vec!["hello"]);
-        
+
         let score = scorer.score("nonexistent", 1, 0);
         assert_eq!(score, 0.0);
     }
@@ -271,7 +271,7 @@ mod tests {
         scorer.add_document(1, 100, vec!["a"]);
         scorer.add_document(2, 200, vec!["b"]);
         scorer.add_document(3, 300, vec!["c"]);
-        
+
         assert_eq!(scorer.avg_length(), 200.0);
     }
 
@@ -280,7 +280,7 @@ mod tests {
         let mut scorer = BM25Scorer::new();
         scorer.add_document(1, 100, vec!["machine", "learning"]);
         scorer.add_document(2, 100, vec!["machine"]);
-        
+
         // "machine" appears in 2 docs
         assert_eq!(scorer.doc_freq("machine"), 2);
         // "learning" appears in 1 doc
@@ -291,10 +291,10 @@ mod tests {
     fn test_case_insensitive() {
         let mut scorer = BM25Scorer::new();
         scorer.add_document(1, 100, vec!["Machine", "LEARNING"]);
-        
+
         let score1 = scorer.score("machine", 1, 1);
         let score2 = scorer.score("MACHINE", 1, 1);
-        
+
         // Should be the same regardless of case
         assert_eq!(score1, score2);
     }
@@ -302,12 +302,12 @@ mod tests {
     #[test]
     fn test_large_corpus() {
         let mut scorer = BM25Scorer::new();
-        
+
         // Add many documents
         for i in 1..=10000 {
             scorer.add_document(i, 100, vec!["common", "term"]);
         }
-        
+
         assert_eq!(scorer.doc_count(), 10000);
         assert_eq!(scorer.avg_length(), 100.0);
     }
@@ -316,7 +316,7 @@ mod tests {
     fn test_empty_terms() {
         let mut scorer = BM25Scorer::new();
         scorer.add_document(1, 100, vec![]);
-        
+
         assert_eq!(scorer.doc_count(), 1);
         assert_eq!(scorer.doc_length(1), 100);
     }
@@ -325,13 +325,13 @@ mod tests {
     fn test_k1_parameter_effect() {
         let mut scorer1 = BM25Scorer::with_params(1.2, 0.75);
         let mut scorer2 = BM25Scorer::with_params(2.0, 0.75);
-        
+
         scorer1.add_document(1, 100, vec!["test"]);
         scorer2.add_document(1, 100, vec!["test"]);
-        
+
         let score1 = scorer1.score("test", 1, 5);
         let score2 = scorer2.score("test", 1, 5);
-        
+
         // Higher k1 should be more sensitive to term frequency
         assert_ne!(score1, score2);
     }
@@ -340,17 +340,17 @@ mod tests {
     fn test_b_parameter_effect() {
         let mut scorer1 = BM25Scorer::with_params(1.2, 0.25);
         let mut scorer2 = BM25Scorer::with_params(1.2, 0.75);
-        
+
         scorer1.add_document(1, 50, vec!["test"]);
         scorer1.add_document(2, 200, vec!["test"]);
         scorer2.add_document(1, 50, vec!["test"]);
         scorer2.add_document(2, 200, vec!["test"]);
-        
+
         let score1_short = scorer1.score("test", 1, 1);
         let score1_long = scorer1.score("test", 2, 1);
         let score2_short = scorer2.score("test", 1, 1);
         let score2_long = scorer2.score("test", 2, 1);
-        
+
         // Higher b = more length normalization effect
         let diff1 = score1_short - score1_long;
         let diff2 = score2_short - score2_long;
@@ -361,7 +361,7 @@ mod tests {
     fn test_repeated_terms() {
         let mut scorer = BM25Scorer::new();
         scorer.add_document(1, 100, vec!["test", "test", "test"]);
-        
+
         // All occurrences of the same term should update doc_freq
         assert_eq!(scorer.doc_freq("test"), 3);
     }
@@ -370,10 +370,10 @@ mod tests {
     fn test_score_consistency() {
         let mut scorer = BM25Scorer::new();
         scorer.add_document(1, 100, vec!["machine", "learning"]);
-        
+
         let score1 = scorer.score("machine", 1, 1);
         let score2 = scorer.score("machine", 1, 1);
-        
+
         // Same input should give same output
         assert_eq!(score1, score2);
     }
@@ -382,13 +382,13 @@ mod tests {
     fn test_multiple_query_terms() {
         let mut scorer = BM25Scorer::new();
         scorer.add_document(1, 100, vec!["a", "b", "c"]);
-        
+
         let mut query_terms = HashMap::new();
         query_terms.insert("a".to_string(), 1);
         query_terms.insert("b".to_string(), 1);
         query_terms.insert("c".to_string(), 1);
         query_terms.insert("d".to_string(), 0);
-        
+
         let score = scorer.score_query(1, &query_terms);
         assert!(score > 0.0);
     }
