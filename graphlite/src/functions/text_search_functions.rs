@@ -254,9 +254,7 @@ impl HybridSearchFunction {
             return 0.0;
         }
 
-        (exact_score * exact_weight
-            + fuzzy_score * fuzzy_weight
-            + similarity * similarity_weight)
+        (exact_score * exact_weight + fuzzy_score * fuzzy_weight + similarity * similarity_weight)
             / total_weight
     }
 }
@@ -296,24 +294,21 @@ impl Function for HybridSearchFunction {
 
         // Default weights: equal distribution
         let (exact_weight, fuzzy_weight, similarity_weight) = if context.argument_count() >= 5 {
-            let exact_w = context
-                .get_argument(2)?
-                .as_number()
-                .ok_or_else(|| FunctionError::InvalidArgumentType {
+            let exact_w = context.get_argument(2)?.as_number().ok_or_else(|| {
+                FunctionError::InvalidArgumentType {
                     message: "Exact weight must be a number".to_string(),
-                })?;
-            let fuzzy_w = context
-                .get_argument(3)?
-                .as_number()
-                .ok_or_else(|| FunctionError::InvalidArgumentType {
+                }
+            })?;
+            let fuzzy_w = context.get_argument(3)?.as_number().ok_or_else(|| {
+                FunctionError::InvalidArgumentType {
                     message: "Fuzzy weight must be a number".to_string(),
-                })?;
-            let similarity_w = context
-                .get_argument(4)?
-                .as_number()
-                .ok_or_else(|| FunctionError::InvalidArgumentType {
+                }
+            })?;
+            let similarity_w = context.get_argument(4)?.as_number().ok_or_else(|| {
+                FunctionError::InvalidArgumentType {
                     message: "Similarity weight must be a number".to_string(),
-                })?;
+                }
+            })?;
             (exact_w, fuzzy_w, similarity_w)
         } else {
             // Default: 0.4 exact, 0.4 fuzzy, 0.2 similarity
@@ -409,11 +404,12 @@ impl Function for KeywordMatchFunction {
         for i in 1..context.argument_count() {
             let keyword_val = context.get_argument(i)?;
             if !keyword_val.is_null() {
-                let keyword_str = keyword_val
-                    .as_string()
-                    .ok_or_else(|| FunctionError::InvalidArgumentType {
-                        message: format!("Keyword {} must be a string", i),
-                    })?;
+                let keyword_str =
+                    keyword_val
+                        .as_string()
+                        .ok_or_else(|| FunctionError::InvalidArgumentType {
+                            message: format!("Keyword {} must be a string", i),
+                        })?;
                 keywords.push(keyword_str);
             }
         }
@@ -483,11 +479,12 @@ impl Function for KeywordMatchAllFunction {
         for i in 1..context.argument_count() {
             let keyword_val = context.get_argument(i)?;
             if !keyword_val.is_null() {
-                let keyword_str = keyword_val
-                    .as_string()
-                    .ok_or_else(|| FunctionError::InvalidArgumentType {
-                        message: format!("Keyword {} must be a string", i),
-                    })?;
+                let keyword_str =
+                    keyword_val
+                        .as_string()
+                        .ok_or_else(|| FunctionError::InvalidArgumentType {
+                            message: format!("Keyword {} must be a string", i),
+                        })?;
                 keywords.push(keyword_str);
             }
         }
@@ -563,25 +560,34 @@ impl Function for WeightedSearchFunction {
                 message: "Query must be a string".to_string(),
             })?;
 
-        let exact_w = exact_weight
-            .as_number()
-            .ok_or_else(|| FunctionError::InvalidArgumentType {
-                message: "Exact weight must be a number".to_string(),
-            })?;
+        let exact_w =
+            exact_weight
+                .as_number()
+                .ok_or_else(|| FunctionError::InvalidArgumentType {
+                    message: "Exact weight must be a number".to_string(),
+                })?;
 
-        let fuzzy_w = fuzzy_weight
-            .as_number()
-            .ok_or_else(|| FunctionError::InvalidArgumentType {
-                message: "Fuzzy weight must be a number".to_string(),
-            })?;
+        let fuzzy_w =
+            fuzzy_weight
+                .as_number()
+                .ok_or_else(|| FunctionError::InvalidArgumentType {
+                    message: "Fuzzy weight must be a number".to_string(),
+                })?;
 
-        let similarity_w = similarity_weight
-            .as_number()
-            .ok_or_else(|| FunctionError::InvalidArgumentType {
-                message: "Similarity weight must be a number".to_string(),
-            })?;
+        let similarity_w =
+            similarity_weight
+                .as_number()
+                .ok_or_else(|| FunctionError::InvalidArgumentType {
+                    message: "Similarity weight must be a number".to_string(),
+                })?;
 
-        let score = HybridSearchFunction::calculate_hybrid_score(&text_str, &query_str, exact_w, fuzzy_w, similarity_w);
+        let score = HybridSearchFunction::calculate_hybrid_score(
+            &text_str,
+            &query_str,
+            exact_w,
+            fuzzy_w,
+            similarity_w,
+        );
         Ok(Value::Number(score))
     }
 
