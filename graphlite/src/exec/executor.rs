@@ -3747,7 +3747,7 @@ impl QueryExecutor {
                 // - Using pre-computed reachability information
                 // - Accelerating pattern-based queries
                 Err(ExecutionError::UnsupportedOperator(
-                    "GraphIndexScan: Graph index optimization is planned for v0.4.0".to_string()
+                    "GraphIndexScan: Graph index optimization is planned for v0.4.0".to_string(),
                 ))
             }
 
@@ -4013,7 +4013,6 @@ impl QueryExecutor {
         limit: Option<&usize>,
         _context: &mut ExecutionContext,
     ) -> Result<Vec<Row>, ExecutionError> {
-        
         use crate::storage::indexes::text::registry::get_text_index;
 
         log::debug!(
@@ -4026,10 +4025,15 @@ impl QueryExecutor {
 
         // Try to retrieve the index from the global registry
         let index = get_text_index(index_name)
-            .map_err(|e| ExecutionError::RuntimeError(format!("Failed to access text index registry: {}", e)))?
-            .ok_or_else(|| ExecutionError::RuntimeError(
-                format!("Text index '{}' not found. Did you CREATE TEXT INDEX first?", index_name)
-            ))?;
+            .map_err(|e| {
+                ExecutionError::RuntimeError(format!("Failed to access text index registry: {}", e))
+            })?
+            .ok_or_else(|| {
+                ExecutionError::RuntimeError(format!(
+                    "Text index '{}' not found. Did you CREATE TEXT INDEX first?",
+                    index_name
+                ))
+            })?;
 
         log::debug!(
             "TextIndexScan: Searching with query='{}' (search_type: {:?})",
@@ -4067,8 +4071,10 @@ impl QueryExecutor {
             row.set_text_score(result.score as f64);
 
             // Also add TEXT_SCORE() as a named variable for potential use in projections
-            row.values
-                .insert("TEXT_SCORE()".to_string(), Value::Number(result.score as f64));
+            row.values.insert(
+                "TEXT_SCORE()".to_string(),
+                Value::Number(result.score as f64),
+            );
 
             // Add the search result data (stored fields from Tantivy)
             for (key, value) in &result.data {
@@ -4078,10 +4084,7 @@ impl QueryExecutor {
             rows.push(row);
         }
 
-        log::debug!(
-            "TextIndexScan: Converted {} results to rows",
-            rows.len()
-        );
+        log::debug!("TextIndexScan: Converted {} results to rows", rows.len());
 
         Ok(rows)
     }
@@ -9608,9 +9611,15 @@ mod text_index_scan_tests {
         let index = InvertedIndex::new("test").expect("Failed to create index");
 
         // Add some documents
-        index.add_document(1, "hello world").expect("Failed to add doc 1");
-        index.add_document(2, "hello there").expect("Failed to add doc 2");
-        index.add_document(3, "goodbye world").expect("Failed to add doc 3");
+        index
+            .add_document(1, "hello world")
+            .expect("Failed to add doc 1");
+        index
+            .add_document(2, "hello there")
+            .expect("Failed to add doc 2");
+        index
+            .add_document(3, "goodbye world")
+            .expect("Failed to add doc 3");
 
         // Commit the changes
         index.commit().expect("Failed to commit");
@@ -9667,7 +9676,11 @@ mod text_index_scan_tests {
         let results = index.search("watermelon").expect("Failed to search");
 
         // Should return 0 results
-        assert_eq!(results.len(), 0, "Expected no results for non-matching query");
+        assert_eq!(
+            results.len(),
+            0,
+            "Expected no results for non-matching query"
+        );
     }
 
     #[test]
@@ -9775,7 +9788,10 @@ mod text_index_scan_tests {
 
         // Test 1: Search for "graph"
         let results = index.search("graph").expect("Failed to search");
-        assert!(results.len() >= 2, "Expected at least 2 results for 'graph'");
+        assert!(
+            results.len() >= 2,
+            "Expected at least 2 results for 'graph'"
+        );
 
         // Test 2: Search with limit
         let limited_results = index
@@ -9889,4 +9905,3 @@ mod text_index_scan_tests {
         assert!(results.is_empty(), "Empty index should return no results");
     }
 }
-

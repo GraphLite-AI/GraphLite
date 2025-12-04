@@ -1,10 +1,12 @@
 // Text analyzer for tokenization, lowercasing, stop word removal, and stemming
 
-use crate::storage::indexes::text::types::{AnalyzerConfig, AnalysisResult, Token, english_stopwords};
 use crate::storage::indexes::text::errors::TextSearchError;
+use crate::storage::indexes::text::types::{
+    english_stopwords, AnalysisResult, AnalyzerConfig, Token,
+};
 use rust_stemmers::Algorithm;
-use unicode_segmentation::UnicodeSegmentation;
 use std::collections::HashSet;
+use unicode_segmentation::UnicodeSegmentation;
 
 /// Text analyzer for processing raw text
 #[derive(Clone)]
@@ -47,7 +49,11 @@ impl TextAnalyzer {
                 "russian" => Algorithm::Russian,
                 "swedish" => Algorithm::Swedish,
                 "norwegian" => Algorithm::Norwegian,
-                _ => return Err(TextSearchError::UnsupportedLanguage(config.language.clone())),
+                _ => {
+                    return Err(TextSearchError::UnsupportedLanguage(
+                        config.language.clone(),
+                    ))
+                }
             };
             Some(algorithm)
         } else {
@@ -56,7 +62,10 @@ impl TextAnalyzer {
 
         // Load stopwords based on language
         let stopwords = match config.language.as_str() {
-            "english" => english_stopwords().into_iter().map(|s| s.to_string()).collect(),
+            "english" => english_stopwords()
+                .into_iter()
+                .map(|s| s.to_string())
+                .collect(),
             _ => HashSet::new(), // Other languages don't have stopwords yet
         };
 
@@ -263,7 +272,7 @@ mod tests {
         let analyzer = TextAnalyzer::new().unwrap();
         let text = "machine learning algorithms";
         let result = analyzer.analyze(text).unwrap();
-        
+
         // Verify positions are tracked (they should be > 0 for non-first words)
         assert!(result.tokens.len() > 0);
         assert_eq!(result.tokens[0].position, 0); // "machine" starts at 0
@@ -275,7 +284,7 @@ mod tests {
         let text = "Machine Learning is a subset of Artificial Intelligence. \
                    It focuses on algorithms and statistical models.";
         let result = analyzer.analyze(text).unwrap();
-        
+
         assert!(result.tokens.len() > 0);
         assert!(result.unique_count > 0);
         assert!(result.unique_count <= result.tokens.len());
@@ -292,7 +301,9 @@ mod tests {
     #[test]
     fn test_special_characters() {
         let analyzer = TextAnalyzer::new().unwrap();
-        let result = analyzer.analyze("email@example.com test-case under_score").unwrap();
+        let result = analyzer
+            .analyze("email@example.com test-case under_score")
+            .unwrap();
         // Should handle special characters in various ways
         assert!(result.tokens.len() > 0);
     }
@@ -342,8 +353,10 @@ mod tests {
     #[test]
     fn test_combined_transformations() {
         let analyzer = TextAnalyzer::new().unwrap();
-        let result = analyzer.analyze("RUNNING QUICKLY THROUGH THE FOREST").unwrap();
-        
+        let result = analyzer
+            .analyze("RUNNING QUICKLY THROUGH THE FOREST")
+            .unwrap();
+
         // Should be lowercased, stopped ("the" removed), and stemmed
         assert!(result.tokens.iter().any(|t| t.text == "run"));
         assert!(result.tokens.iter().any(|t| t.text == "quick"));
@@ -354,7 +367,7 @@ mod tests {
     fn test_repeated_tokens() {
         let analyzer = TextAnalyzer::new().unwrap();
         let result = analyzer.analyze("test test test running running").unwrap();
-        
+
         assert_eq!(result.tokens.len(), 5);
         assert_eq!(result.unique_count, 2); // "test" and "run"
     }
@@ -379,7 +392,7 @@ mod tests {
             ..Default::default()
         };
         analyzer.set_config(new_config).unwrap();
-        
+
         let result = analyzer.analyze("running").unwrap();
         assert_eq!(result.tokens[0].text, "running");
     }
@@ -402,7 +415,9 @@ mod tests {
     fn test_all_stopwords() {
         let analyzer = TextAnalyzer::new().unwrap();
         // Use only common English stop words
-        let result = analyzer.analyze("the a an and or but in on at to for of is are").unwrap();
+        let result = analyzer
+            .analyze("the a an and or but in on at to for of is are")
+            .unwrap();
         // Most or all should be filtered out
         assert!(result.tokens.len() < 13); // Less than input word count
     }
@@ -411,9 +426,9 @@ mod tests {
     fn test_mixed_case_stemming() {
         let analyzer = TextAnalyzer::new().unwrap();
         let result = analyzer.analyze("Running RUNS").unwrap();
-        
+
         // Both should stem to "run" (lowercase first, then stem)
-        let unique_texts: std::collections::HashSet<_> = 
+        let unique_texts: std::collections::HashSet<_> =
             result.tokens.iter().map(|t| t.text.as_str()).collect();
         assert_eq!(unique_texts.len(), 1);
         assert!(unique_texts.contains("run"));
@@ -424,16 +439,16 @@ mod tests {
         let analyzer = TextAnalyzer::new().unwrap();
         let text = "hello world";
         let result = analyzer.analyze(text).unwrap();
-        
+
         assert_eq!(result.tokens[0].position, 0); // "hello" at start
-        assert!(result.tokens[1].position > 0);   // "world" after space
+        assert!(result.tokens[1].position > 0); // "world" after space
     }
 
     #[test]
     fn test_token_position_length() {
         let analyzer = TextAnalyzer::new().unwrap();
         let result = analyzer.analyze("hello").unwrap();
-        
+
         assert_eq!(result.tokens[0].position_length, 5); // "hello" is 5 chars
     }
 

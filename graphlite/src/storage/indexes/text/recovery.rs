@@ -149,16 +149,22 @@ impl IndexRecoveryManager {
 
         // Check if error is recoverable
         if !context.error_code.is_recoverable() {
-            return Ok((IndexHealth::Failed, format!("Error {} is not recoverable", context.error_message)));
+            return Ok((
+                IndexHealth::Failed,
+                format!("Error {} is not recoverable", context.error_message),
+            ));
         }
 
         // Attempt recovery based on strategy
         match self.recovery_strategy {
             RecoveryStrategy::Automatic => self.attempt_automatic_recovery(index, &context),
-            RecoveryStrategy::FallbackToScan => {
-                Ok((IndexHealth::Degraded, "Falling back to table scan".to_string()))
+            RecoveryStrategy::FallbackToScan => Ok((
+                IndexHealth::Degraded,
+                "Falling back to table scan".to_string(),
+            )),
+            RecoveryStrategy::NoRecovery => {
+                Ok((IndexHealth::Failed, "Recovery disabled".to_string()))
             }
-            RecoveryStrategy::NoRecovery => Ok((IndexHealth::Failed, "Recovery disabled".to_string())),
         }
     }
 
@@ -174,14 +180,20 @@ impl IndexRecoveryManager {
         if let Some(count) = doc_count {
             // Index appears valid
             if context.error_code == ErrorCode::LockTimeout {
-                return Ok((IndexHealth::Degraded, format!("Recovered from lock timeout, {} documents indexed", count)));
+                return Ok((
+                    IndexHealth::Degraded,
+                    format!("Recovered from lock timeout, {} documents indexed", count),
+                ));
             } else {
                 return Ok((IndexHealth::Healthy, "Index health verified".to_string()));
             }
         }
 
         // Index appears corrupted
-        Ok((IndexHealth::Corrupted, "Index corruption detected, manual rebuild recommended".to_string()))
+        Ok((
+            IndexHealth::Corrupted,
+            "Index corruption detected, manual rebuild recommended".to_string(),
+        ))
     }
 
     /// Create error context from error
@@ -275,7 +287,8 @@ mod tests {
 
     #[test]
     fn test_recovery_manager_creation() {
-        let manager = IndexRecoveryManager::new("test_index".to_string(), RecoveryStrategy::Automatic);
+        let manager =
+            IndexRecoveryManager::new("test_index".to_string(), RecoveryStrategy::Automatic);
         assert_eq!(manager.index_name, "test_index");
         assert_eq!(*manager.strategy(), RecoveryStrategy::Automatic);
     }

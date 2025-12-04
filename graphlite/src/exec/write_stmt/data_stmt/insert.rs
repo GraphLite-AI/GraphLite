@@ -230,11 +230,7 @@ impl StatementExecutor for InsertExecutor {
 impl InsertExecutor {
     /// Phase 3: Auto-index inserted nodes on text indexes
     /// For each label on the inserted node, find matching text indexes and add the node
-    fn auto_index_node_insert(
-        node: &Node,
-        context: &ExecutionContext,
-        labels: &[String],
-    ) {
+    fn auto_index_node_insert(node: &Node, context: &ExecutionContext, labels: &[String]) {
         use crate::storage::indexes::text::metadata::get_metadata_for_label;
         use crate::storage::indexes::text::registry::get_text_index;
         use std::collections::hash_map::DefaultHasher;
@@ -323,7 +319,7 @@ impl InsertExecutor {
                         metadata.name,
                         field_name
                     );
-                    
+
                     // Commit after each document (Phase 3.3 will optimize this)
                     if let Err(e) = index.commit() {
                         log::warn!(
@@ -466,11 +462,7 @@ impl DataStatementExecutor for InsertExecutor {
 
                             // Phase 3: Auto-indexing on INSERT
                             // Add inserted node to any text indexes defined on its labels
-                            Self::auto_index_node_insert(
-                                &node,
-                                context,
-                                &node_pattern.labels,
-                            );
+                            Self::auto_index_node_insert(&node, context, &node_pattern.labels);
 
                             // Add undo operation only for newly inserted nodes
                             let undo_op = UndoOperation::InsertNode {
@@ -721,10 +713,10 @@ impl DataStatementExecutor for InsertExecutor {
 #[cfg(test)]
 mod auto_index_insert_tests {
     use super::*;
+    use crate::ast::TextIndexTypeSpecifier;
     use crate::storage::indexes::text::inverted_tantivy_clean::InvertedIndex;
     use crate::storage::indexes::text::metadata::{register_metadata, TextIndexMetadata};
-    use crate::storage::indexes::text::registry::{register_text_index, get_text_index};
-    use crate::ast::TextIndexTypeSpecifier;
+    use crate::storage::indexes::text::registry::{get_text_index, register_text_index};
     use crate::storage::StorageManager;
     use tempfile::tempdir;
 
@@ -737,7 +729,7 @@ mod auto_index_insert_tests {
             StorageMethod::DiskOnly,
             StorageType::Sled,
         )
-            .expect("Failed to create storage manager");
+        .expect("Failed to create storage manager");
         ExecutionContext::new("test_session".to_string(), Arc::new(storage))
     }
 
@@ -745,7 +737,8 @@ mod auto_index_insert_tests {
     fn test_auto_index_node_insert_basic() {
         // Setup: Create and register an inverted index
         let index = InvertedIndex::new("test_idx_basic").expect("Failed to create index");
-        register_text_index("test_idx_basic".to_string(), Arc::new(index)).expect("Failed to register index");
+        register_text_index("test_idx_basic".to_string(), Arc::new(index))
+            .expect("Failed to register index");
 
         // Setup: Register metadata
         let metadata = TextIndexMetadata {
@@ -761,7 +754,10 @@ mod auto_index_insert_tests {
         // Create a test node
         let mut node = Node::new("person_1".to_string());
         node.add_label("Person".to_string());
-        node.set_property("bio".to_string(), Value::String("Software Engineer".to_string()));
+        node.set_property(
+            "bio".to_string(),
+            Value::String("Software Engineer".to_string()),
+        );
 
         // Call auto_index_node_insert
         let execution_context = create_test_context();
@@ -771,15 +767,21 @@ mod auto_index_insert_tests {
         let retrieved_index = get_text_index("test_idx_basic")
             .expect("Failed to get index")
             .expect("Index should exist");
-        let doc_count = retrieved_index.doc_count().expect("Failed to get doc count");
-        assert!(doc_count > 0, "Index should have at least 1 document after auto-index");
+        let doc_count = retrieved_index
+            .doc_count()
+            .expect("Failed to get doc count");
+        assert!(
+            doc_count > 0,
+            "Index should have at least 1 document after auto-index"
+        );
     }
 
     #[test]
     fn test_auto_index_multiple_labels() {
         // Setup: Create indexes for two labels
         let index1 = InvertedIndex::new("test_idx_person").expect("Failed to create index");
-        register_text_index("test_idx_person".to_string(), Arc::new(index1)).expect("Failed to register");
+        register_text_index("test_idx_person".to_string(), Arc::new(index1))
+            .expect("Failed to register");
 
         let metadata1 = TextIndexMetadata {
             name: "test_idx_person".to_string(),
@@ -811,7 +813,8 @@ mod auto_index_insert_tests {
     #[test]
     fn test_auto_index_string_value() {
         let index = InvertedIndex::new("test_idx_string").expect("Failed to create index");
-        register_text_index("test_idx_string".to_string(), Arc::new(index)).expect("Failed to register");
+        register_text_index("test_idx_string".to_string(), Arc::new(index))
+            .expect("Failed to register");
 
         let metadata = TextIndexMetadata {
             name: "test_idx_string".to_string(),
@@ -825,10 +828,17 @@ mod auto_index_insert_tests {
 
         let mut node = Node::new("doc_1".to_string());
         node.add_label("Document".to_string());
-        node.set_property("title".to_string(), Value::String("Introduction to GraphLite".to_string()));
+        node.set_property(
+            "title".to_string(),
+            Value::String("Introduction to GraphLite".to_string()),
+        );
 
         let execution_context = create_test_context();
-        InsertExecutor::auto_index_node_insert(&node, &execution_context, &["Document".to_string()]);
+        InsertExecutor::auto_index_node_insert(
+            &node,
+            &execution_context,
+            &["Document".to_string()],
+        );
 
         let index = get_text_index("test_idx_string")
             .expect("Failed to get index")
@@ -840,7 +850,8 @@ mod auto_index_insert_tests {
     #[test]
     fn test_auto_index_number_value_conversion() {
         let index = InvertedIndex::new("test_idx_number").expect("Failed to create index");
-        register_text_index("test_idx_number".to_string(), Arc::new(index)).expect("Failed to register");
+        register_text_index("test_idx_number".to_string(), Arc::new(index))
+            .expect("Failed to register");
 
         let metadata = TextIndexMetadata {
             name: "test_idx_number".to_string(),
@@ -869,7 +880,8 @@ mod auto_index_insert_tests {
     #[test]
     fn test_auto_index_boolean_value_conversion() {
         let index = InvertedIndex::new("test_idx_bool").expect("Failed to create index");
-        register_text_index("test_idx_bool".to_string(), Arc::new(index)).expect("Failed to register");
+        register_text_index("test_idx_bool".to_string(), Arc::new(index))
+            .expect("Failed to register");
 
         let metadata = TextIndexMetadata {
             name: "test_idx_bool".to_string(),
@@ -898,7 +910,8 @@ mod auto_index_insert_tests {
     #[test]
     fn test_auto_index_missing_field() {
         let index = InvertedIndex::new("test_idx_missing").expect("Failed to create index");
-        register_text_index("test_idx_missing".to_string(), Arc::new(index)).expect("Failed to register");
+        register_text_index("test_idx_missing".to_string(), Arc::new(index))
+            .expect("Failed to register");
 
         let metadata = TextIndexMetadata {
             name: "test_idx_missing".to_string(),
@@ -930,7 +943,8 @@ mod auto_index_insert_tests {
     #[test]
     fn test_auto_index_no_matching_metadata() {
         let index = InvertedIndex::new("test_idx_nomatch").expect("Failed to create index");
-        register_text_index("test_idx_nomatch".to_string(), Arc::new(index)).expect("Failed to register");
+        register_text_index("test_idx_nomatch".to_string(), Arc::new(index))
+            .expect("Failed to register");
 
         // Register metadata for different label
         let metadata = TextIndexMetadata {
@@ -950,7 +964,11 @@ mod auto_index_insert_tests {
 
         let execution_context = create_test_context();
         // Should not crash, just not index anything
-        InsertExecutor::auto_index_node_insert(&node, &execution_context, &["SomeLabel".to_string()]);
+        InsertExecutor::auto_index_node_insert(
+            &node,
+            &execution_context,
+            &["SomeLabel".to_string()],
+        );
 
         let index = get_text_index("test_idx_nomatch")
             .expect("Failed to get index")
@@ -962,7 +980,8 @@ mod auto_index_insert_tests {
     #[test]
     fn test_auto_index_empty_labels() {
         let index = InvertedIndex::new("test_idx_empty").expect("Failed to create index");
-        register_text_index("test_idx_empty".to_string(), Arc::new(index)).expect("Failed to register");
+        register_text_index("test_idx_empty".to_string(), Arc::new(index))
+            .expect("Failed to register");
 
         let mut node = Node::new("node_1".to_string());
         node.set_property("field".to_string(), Value::String("value".to_string()));
@@ -981,7 +1000,8 @@ mod auto_index_insert_tests {
     #[test]
     fn test_auto_index_multiple_values_different_nodes() {
         let index = InvertedIndex::new("test_idx_multi").expect("Failed to create index");
-        register_text_index("test_idx_multi".to_string(), Arc::new(index)).expect("Failed to register");
+        register_text_index("test_idx_multi".to_string(), Arc::new(index))
+            .expect("Failed to register");
 
         let metadata = TextIndexMetadata {
             name: "test_idx_multi".to_string(),
@@ -1014,4 +1034,3 @@ mod auto_index_insert_tests {
         assert_eq!(count, 2, "Both nodes should be indexed separately");
     }
 }
-
