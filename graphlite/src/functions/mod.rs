@@ -16,6 +16,7 @@ mod numeric_functions;
 mod special_functions;
 mod string_functions;
 mod temporal_functions;
+mod text_search_functions;
 mod timezone_functions;
 
 pub use function_trait::{Function, FunctionContext};
@@ -254,6 +255,42 @@ impl FunctionRegistry {
         registry.register(
             "INFERRED_LABELS",
             Box::new(graph_functions::InferredLabelsFunction::new()),
+        );
+
+        // Register text search and fuzzy matching functions
+        registry.register(
+            "FUZZY_MATCH",
+            Box::new(text_search_functions::FuzzyMatchFunction::new()),
+        );
+        registry.register(
+            "SIMILARITY_SCORE",
+            Box::new(text_search_functions::SimilarityScoreFunction::new()),
+        );
+        registry.register(
+            "CONTAINS_FUZZY",
+            Box::new(text_search_functions::ContainsFuzzyFunction::new()),
+        );
+        registry.register(
+            "FUZZY_SEARCH",
+            Box::new(text_search_functions::FuzzySearchFunction::new()),
+        );
+
+        // Register hybrid search functions
+        registry.register(
+            "HYBRID_SEARCH",
+            Box::new(text_search_functions::HybridSearchFunction::new()),
+        );
+        registry.register(
+            "KEYWORD_MATCH",
+            Box::new(text_search_functions::KeywordMatchFunction::new()),
+        );
+        registry.register(
+            "KEYWORD_MATCH_ALL",
+            Box::new(text_search_functions::KeywordMatchAllFunction::new()),
+        );
+        registry.register(
+            "WEIGHTED_SEARCH",
+            Box::new(text_search_functions::WeightedSearchFunction::new()),
         );
 
         registry

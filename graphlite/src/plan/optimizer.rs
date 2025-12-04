@@ -17,8 +17,8 @@ use crate::ast::{
 };
 use crate::plan::cost::{CostEstimate, CostModel, Statistics};
 use crate::plan::logical::{
-    EntityType, JoinType, LogicalNode, LogicalPlan, ProjectExpression, SortExpression, VariableInfo,
-    TextSearchType,
+    EntityType, JoinType, LogicalNode, LogicalPlan, ProjectExpression, SortExpression,
+    TextSearchType, VariableInfo,
 };
 use crate::plan::pattern_optimization::integration::PatternOptimizationPipeline;
 use crate::plan::physical::{PhysicalNode, PhysicalPlan};
@@ -2884,19 +2884,29 @@ impl<'a> IndexAwareOptimizer<'a> {
                 let transformed_input = Box::new(self.transform_text_search_node(*input)?);
 
                 // Check if this filter contains a text-search predicate we can push down
-                if let Some((variable, query, field, min_score)) = self.extract_text_search_predicate(&condition) {
+                if let Some((variable, query, field, min_score)) =
+                    self.extract_text_search_predicate(&condition)
+                {
                     // Infer search type from condition shape
                     let search_type = match &condition {
-                        Expression::FunctionCall(func) if func.name.eq_ignore_ascii_case("text_search") => {
+                        Expression::FunctionCall(func)
+                            if func.name.eq_ignore_ascii_case("text_search") =>
+                        {
                             TextSearchType::BM25
                         }
-                        Expression::FunctionCall(func) if func.name.eq_ignore_ascii_case("fuzzy_match") => {
+                        Expression::FunctionCall(func)
+                            if func.name.eq_ignore_ascii_case("fuzzy_match") =>
+                        {
                             TextSearchType::NGram
                         }
-                        Expression::Binary(binary) if matches!(binary.operator, Operator::Matches) => {
+                        Expression::Binary(binary)
+                            if matches!(binary.operator, Operator::Matches) =>
+                        {
                             TextSearchType::Boolean
                         }
-                        Expression::Binary(binary) if matches!(binary.operator, Operator::FuzzyEqual) => {
+                        Expression::Binary(binary)
+                            if matches!(binary.operator, Operator::FuzzyEqual) =>
+                        {
                             TextSearchType::NGram
                         }
                         _ => TextSearchType::BM25,
@@ -2907,7 +2917,11 @@ impl<'a> IndexAwareOptimizer<'a> {
                         field,
                         query,
                         search_type,
-                        min_score: if min_score > 0.0 { Some(min_score) } else { None },
+                        min_score: if min_score > 0.0 {
+                            Some(min_score)
+                        } else {
+                            None
+                        },
                         limit: None,
                         input: transformed_input,
                     });

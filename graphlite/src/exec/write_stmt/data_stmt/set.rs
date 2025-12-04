@@ -128,7 +128,7 @@ impl SetExecutor {
                         metadata.name,
                         metadata.field
                     );
-                    
+
                     // Commit after update (Phase 3.3 will optimize this)
                     if let Err(e) = index.commit() {
                         log::warn!(
@@ -278,10 +278,10 @@ impl DataStatementExecutor for SetExecutor {
 #[cfg(test)]
 mod auto_index_update_tests {
     use super::*;
+    use crate::ast::TextIndexTypeSpecifier;
     use crate::storage::indexes::text::inverted_tantivy_clean::InvertedIndex;
     use crate::storage::indexes::text::metadata::{register_metadata, TextIndexMetadata};
-    use crate::storage::indexes::text::registry::{register_text_index, get_text_index};
-    use crate::ast::TextIndexTypeSpecifier;
+    use crate::storage::indexes::text::registry::{get_text_index, register_text_index};
     use crate::storage::StorageManager;
     use tempfile::tempdir;
 
@@ -294,7 +294,7 @@ mod auto_index_update_tests {
             StorageMethod::DiskOnly,
             StorageType::Sled,
         )
-            .expect("Failed to create storage manager");
+        .expect("Failed to create storage manager");
         ExecutionContext::new("test_session".to_string(), Arc::new(storage))
     }
 
@@ -302,7 +302,8 @@ mod auto_index_update_tests {
     fn test_auto_index_update_string_field() {
         // Setup: Create and register an inverted index
         let index = InvertedIndex::new("test_idx_update_str").expect("Failed to create index");
-        register_text_index("test_idx_update_str".to_string(), Arc::new(index)).expect("Failed to register");
+        register_text_index("test_idx_update_str".to_string(), Arc::new(index))
+            .expect("Failed to register");
 
         let metadata = TextIndexMetadata {
             name: "test_idx_update_str".to_string(),
@@ -318,13 +319,19 @@ mod auto_index_update_tests {
         let mut graph = GraphCache::new();
         let mut node = Node::new("doc_1".to_string());
         node.add_label("Document".to_string());
-        node.set_property("content".to_string(), Value::String("initial content".to_string()));
+        node.set_property(
+            "content".to_string(),
+            Value::String("initial content".to_string()),
+        );
         graph.add_node(node).expect("Failed to add node");
 
         // Update the indexed field
         let execution_context = create_test_context();
         if let Some(node_mut) = graph.get_node_mut("doc_1") {
-            node_mut.set_property("content".to_string(), Value::String("updated content".to_string()));
+            node_mut.set_property(
+                "content".to_string(),
+                Value::String("updated content".to_string()),
+            );
             SetExecutor::auto_index_node_update("doc_1", "content", &execution_context, &graph);
         }
 
@@ -339,7 +346,8 @@ mod auto_index_update_tests {
     #[test]
     fn test_auto_index_update_different_label() {
         let index = InvertedIndex::new("test_idx_diff_label").expect("Failed to create index");
-        register_text_index("test_idx_diff_label".to_string(), Arc::new(index)).expect("Failed to register");
+        register_text_index("test_idx_diff_label".to_string(), Arc::new(index))
+            .expect("Failed to register");
 
         let metadata = TextIndexMetadata {
             name: "test_idx_diff_label".to_string(),
@@ -374,7 +382,8 @@ mod auto_index_update_tests {
     #[test]
     fn test_auto_index_update_non_indexed_property() {
         let index = InvertedIndex::new("test_idx_non_indexed").expect("Failed to create index");
-        register_text_index("test_idx_non_indexed".to_string(), Arc::new(index)).expect("Failed to register");
+        register_text_index("test_idx_non_indexed".to_string(), Arc::new(index))
+            .expect("Failed to register");
 
         let metadata = TextIndexMetadata {
             name: "test_idx_non_indexed".to_string(),
@@ -389,15 +398,29 @@ mod auto_index_update_tests {
         let mut graph = GraphCache::new();
         let mut node = Node::new("entity_1".to_string());
         node.add_label("Entity".to_string());
-        node.set_property("indexed_field".to_string(), Value::String("indexed".to_string()));
-        node.set_property("non_indexed_field".to_string(), Value::String("not indexed".to_string()));
+        node.set_property(
+            "indexed_field".to_string(),
+            Value::String("indexed".to_string()),
+        );
+        node.set_property(
+            "non_indexed_field".to_string(),
+            Value::String("not indexed".to_string()),
+        );
         graph.add_node(node).expect("Failed to add node");
 
         let execution_context = create_test_context();
         // Update non-indexed field
         if let Some(node_mut) = graph.get_node_mut("entity_1") {
-            node_mut.set_property("non_indexed_field".to_string(), Value::String("updated".to_string()));
-            SetExecutor::auto_index_node_update("entity_1", "non_indexed_field", &execution_context, &graph);
+            node_mut.set_property(
+                "non_indexed_field".to_string(),
+                Value::String("updated".to_string()),
+            );
+            SetExecutor::auto_index_node_update(
+                "entity_1",
+                "non_indexed_field",
+                &execution_context,
+                &graph,
+            );
         }
 
         // Should not trigger re-index (different field)
@@ -405,13 +428,17 @@ mod auto_index_update_tests {
             .expect("Failed to get index")
             .expect("Index should exist");
         let count = index.doc_count().expect("Failed to get doc count");
-        assert_eq!(count, 0, "Non-indexed field update should not trigger indexing");
+        assert_eq!(
+            count, 0,
+            "Non-indexed field update should not trigger indexing"
+        );
     }
 
     #[test]
     fn test_auto_index_update_number_to_string() {
         let index = InvertedIndex::new("test_idx_num_str").expect("Failed to create index");
-        register_text_index("test_idx_num_str".to_string(), Arc::new(index)).expect("Failed to register");
+        register_text_index("test_idx_num_str".to_string(), Arc::new(index))
+            .expect("Failed to register");
 
         let metadata = TextIndexMetadata {
             name: "test_idx_num_str".to_string(),
@@ -432,7 +459,10 @@ mod auto_index_update_tests {
         let execution_context = create_test_context();
         // Update to string
         if let Some(node_mut) = graph.get_node_mut("item_1") {
-            node_mut.set_property("value".to_string(), Value::String("new string value".to_string()));
+            node_mut.set_property(
+                "value".to_string(),
+                Value::String("new string value".to_string()),
+            );
             SetExecutor::auto_index_node_update("item_1", "value", &execution_context, &graph);
         }
 
@@ -446,7 +476,8 @@ mod auto_index_update_tests {
     #[test]
     fn test_auto_index_update_nonexistent_node() {
         let index = InvertedIndex::new("test_idx_no_node").expect("Failed to create index");
-        register_text_index("test_idx_no_node".to_string(), Arc::new(index)).expect("Failed to register");
+        register_text_index("test_idx_no_node".to_string(), Arc::new(index))
+            .expect("Failed to register");
 
         let metadata = TextIndexMetadata {
             name: "test_idx_no_node".to_string(),
@@ -474,7 +505,8 @@ mod auto_index_update_tests {
     #[test]
     fn test_auto_index_update_boolean_conversion() {
         let index = InvertedIndex::new("test_idx_bool_update").expect("Failed to create index");
-        register_text_index("test_idx_bool_update".to_string(), Arc::new(index)).expect("Failed to register");
+        register_text_index("test_idx_bool_update".to_string(), Arc::new(index))
+            .expect("Failed to register");
 
         let metadata = TextIndexMetadata {
             name: "test_idx_bool_update".to_string(),
@@ -508,7 +540,8 @@ mod auto_index_update_tests {
     #[test]
     fn test_auto_index_update_missing_field_after_update() {
         let index = InvertedIndex::new("test_idx_missing_after").expect("Failed to create index");
-        register_text_index("test_idx_missing_after".to_string(), Arc::new(index)).expect("Failed to register");
+        register_text_index("test_idx_missing_after".to_string(), Arc::new(index))
+            .expect("Failed to register");
 
         let metadata = TextIndexMetadata {
             name: "test_idx_missing_after".to_string(),
@@ -529,7 +562,10 @@ mod auto_index_update_tests {
         let execution_context = create_test_context();
         // Update different field (data field will be missing after)
         if let Some(node_mut) = graph.get_node_mut("record_1") {
-            node_mut.set_property("other".to_string(), Value::String("other value".to_string()));
+            node_mut.set_property(
+                "other".to_string(),
+                Value::String("other value".to_string()),
+            );
             SetExecutor::auto_index_node_update("record_1", "other", &execution_context, &graph);
         }
 
@@ -538,13 +574,17 @@ mod auto_index_update_tests {
             .expect("Failed to get index")
             .expect("Index should exist");
         let count = index.doc_count().expect("Failed to get doc count");
-        assert_eq!(count, 0, "Non-indexed field update should not trigger indexing");
+        assert_eq!(
+            count, 0,
+            "Non-indexed field update should not trigger indexing"
+        );
     }
 
     #[test]
     fn test_auto_index_update_multiple_sequential_updates() {
         let index = InvertedIndex::new("test_idx_sequential").expect("Failed to create index");
-        register_text_index("test_idx_sequential".to_string(), Arc::new(index)).expect("Failed to register");
+        register_text_index("test_idx_sequential".to_string(), Arc::new(index))
+            .expect("Failed to register");
 
         let metadata = TextIndexMetadata {
             name: "test_idx_sequential".to_string(),
@@ -566,13 +606,19 @@ mod auto_index_update_tests {
 
         // First update
         if let Some(node_mut) = graph.get_node_mut("doc_1") {
-            node_mut.set_property("text".to_string(), Value::String("first update".to_string()));
+            node_mut.set_property(
+                "text".to_string(),
+                Value::String("first update".to_string()),
+            );
             SetExecutor::auto_index_node_update("doc_1", "text", &execution_context, &graph);
         }
 
         // Second update
         if let Some(node_mut) = graph.get_node_mut("doc_1") {
-            node_mut.set_property("text".to_string(), Value::String("second update".to_string()));
+            node_mut.set_property(
+                "text".to_string(),
+                Value::String("second update".to_string()),
+            );
             SetExecutor::auto_index_node_update("doc_1", "text", &execution_context, &graph);
         }
 
@@ -580,6 +626,9 @@ mod auto_index_update_tests {
             .expect("Failed to get index")
             .expect("Index should exist");
         let count = index.doc_count().expect("Failed to get doc count");
-        assert!(count > 0, "Multiple updates should result in indexed document");
+        assert!(
+            count > 0,
+            "Multiple updates should result in indexed document"
+        );
     }
 }

@@ -11,9 +11,9 @@
 pub mod errors;
 pub mod manager;
 pub mod metrics;
+pub mod text;
 pub mod traits;
 pub mod types;
-pub mod text;
 
 // Re-export core types
 pub use errors::*;
