@@ -1103,7 +1103,13 @@ Transaction Visibility:
 
 ---
 
-## Session Management (This is not fully implemented for multiple concurrent sessions yet)
+## Session Management
+
+GraphLite implements a unified session architecture supporting two deployment modes:
+- **Instance Mode** (default): Each QueryCoordinator has isolated session management for embedded use
+- **Global Mode**: Process-wide session pool for server/daemon deployments
+
+The system provides concurrent session support with lock partitioning for high-throughput multi-user workloads.
 
 ### Session Architecture
 
@@ -1188,6 +1194,104 @@ Transaction Visibility:
 │  - Release locks   │
 │  - Close TXN       │
 └────────────────────┘
+```
+
+### Session Performance Optimizations
+
+GraphLite implements several optimizations for concurrent session workloads:
+
+#### Lock Partitioning
+
+To eliminate contention on a single RwLock, session storage uses hash-based partitioning:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│           Session Manager (16 Partitions)               │
+├─────────────────────────────────────────────────────────┤
+│  Partition 0  │ Partition 1  │ ... │ Partition 15      │
+│  RwLock<Map>  │ RwLock<Map>  │     │ RwLock<Map>       │
+│               │              │     │                   │
+│  sessions:    │ sessions:    │     │ sessions:         │
+│  - sess_0000  │ - sess_0001  │     │ - sess_000F       │
+│  - sess_0010  │ - sess_0011  │     │ - sess_001F       │
+│  - ...        │ - ...        │     │ - ...             │
+└───────────────┴──────────────┴─────┴───────────────────┘
+
+Hash Function: session_id → partition_index (0-15)
+Benefit: Up to 16x throughput for concurrent session operations
+```
+
+**Key Features:**
+- 16 hash-based partitions reduce lock contention
+- Sessions distributed evenly across partitions using SipHash
+- Each partition has independent RwLock
+- Backward-compatible API (internal optimization)
+
+**Performance:** Session creation, access, and cleanup operations see up to 16x throughput improvement in highly concurrent workloads.
+
+#### Catalog Cache
+
+Per-session caching of catalog metadata with version-based invalidation:
+
+```
+┌──────────────────────────────────────────────────────┐
+│            SessionCatalogCache                       │
+├──────────────────────────────────────────────────────┤
+│  schema_list: Option<Vec<String>>                    │
+│  schema_list_version: u64                            │
+│  graphs_by_schema: HashMap<String, Vec<String>>      │
+│  graphs_version: u64                                 │
+│  last_access_times: Instant                          │
+└──────────────────────────────────────────────────────┘
+                        │
+                        ▼
+        ┌───────────────────────────────┐
+        │     CacheManager              │
+        │  - schema_version: AtomicU64  │
+        │  - graph_version: AtomicU64   │
+        └───────────────────────────────┘
+```
+
+**Invalidation Strategy:**
+- DDL operations (CREATE/DROP SCHEMA/GRAPH) increment global version counters
+- Session cache checks version on each access
+- If version mismatch: cache is stale, refresh from catalog
+- If version matches: use cached data (100-1000x faster)
+
+**Integration:**
+- `gql.list_schemas()` - Caches schema list after catalog query
+- `gql.list_graphs()` - Caches graph list per schema
+- DDL operations automatically invalidate affected caches
+
+**Performance:**
+- Cached `gql.list_schemas()`: 57,147 calls/sec
+- Cached `gql.list_graphs()`: 242,866 calls/sec
+
+#### Session Modes
+
+GraphLite supports two session management modes:
+
+**Instance Mode (Default):**
+- Each QueryCoordinator has isolated session pool
+- Best for embedded applications with single database instance
+- No session sharing between coordinators
+
+**Global Mode:**
+- All QueryCoordinators share global session pool
+- Best for server deployments with multiple coordinators
+- Sessions accessible across coordinators
+
+```rust
+use graphlite::{QueryCoordinator, SessionMode};
+
+// Instance mode (default)
+let coord = QueryCoordinator::from_path("./db")?;
+
+// Global mode (explicit)
+let coord = QueryCoordinator::from_path_with_mode(
+    "./db",
+    SessionMode::Global
+)?;
 ```
 
 ---

@@ -508,6 +508,16 @@ impl CacheManager {
         }
     }
 
+    /// Get current graph version (for session catalog caching)
+    pub fn get_graph_version(&self) -> u64 {
+        *self.graph_version.read().unwrap()
+    }
+
+    /// Get current schema version (for session catalog caching)
+    pub fn get_schema_version(&self) -> u64 {
+        *self.schema_version.read().unwrap()
+    }
+
     /// Update cache configuration
     pub fn update_config(&self, new_config: CacheConfig) -> Result<(), String> {
         new_config.validate()?;

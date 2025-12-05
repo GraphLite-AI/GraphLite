@@ -78,7 +78,7 @@ fn test_call_with_where_clause() {
 
     // Expected: 0 rows (no match)
     // Actual (with bug): All schemas
-    if result.rows.len() != 0 {
+    if !result.rows.is_empty() {
         // Verify non_existent_schema is NOT in results
         let schema_names: Vec<String> = result
             .rows

@@ -187,7 +187,7 @@ fn test_list_graph_types_returns_actual_names_not_null() {
 
     // Should have at least 1 graph type
     assert!(
-        result.rows.len() >= 1,
+        !result.rows.is_empty(),
         "Should have at least 1 graph type, got {}",
         result.rows.len()
     );

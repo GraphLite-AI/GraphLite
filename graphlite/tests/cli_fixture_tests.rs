@@ -36,5 +36,5 @@ fn test_catalog_persistence() {
     let result2 =
         fixture.assert_query_succeeds(&format!("SESSION SET GRAPH /{}/test;", schema_name));
     // SESSION SET GRAPH returns empty result on success
-    assert!(result2.is_empty() || result2.len() == 0 || result2.rows.is_empty());
+    assert!(result2.is_empty() || result2.is_empty() || result2.rows.is_empty());
 }

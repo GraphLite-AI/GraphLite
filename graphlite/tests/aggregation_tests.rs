@@ -152,7 +152,7 @@ fn test_group_by_operations() {
             _ => panic!("Expected number for count"),
         };
         assert!(
-            count >= 12 && count <= 13,
+            (12..=13).contains(&count),
             "Each account type should have 12-13 accounts, got: {}",
             count
         );
@@ -770,7 +770,7 @@ fn test_labels_function_in_aggregation() {
     assert!(!result.rows.is_empty(), "Should have aggregation results");
 
     // Debug: Print all values in result rows
-    for (_i, _row) in result.rows.iter().enumerate() {}
+    for _row in result.rows.iter() {}
 
     // Check that LABELS function returns actual labels, not empty arrays
     let mut found_non_empty_labels = false;
@@ -859,7 +859,7 @@ fn test_labels_aggregation_with_multiple_labels_and_order_by() {
     );
 
     // Print all results to analyze the ordering
-    for (_i, row) in result.rows.iter().enumerate() {
+    for row in result.rows.iter() {
         if let Some(_node_labels_value) = row
             .get_value("node_labels")
             .or_else(|| row.get_value("LABELS(...)"))

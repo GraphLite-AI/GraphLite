@@ -646,7 +646,6 @@ Provide clear, step-by-step instructions for reviewers to test your changes:
 - [ ] Documentation updated (if applicable)
 - [ ] Documentation is concise and curated (no AI-generated fluff)
 - [ ] CHANGELOG.md updated (for notable changes)
-- [ ] No CLAUDE.md rules violated
 - [ ] Commit messages follow guidelines
 - [ ] PR description is professional (no emojis, no copy-paste from AI tools)
 - [ ] Clear testing steps provided for reviewers to verify the changes

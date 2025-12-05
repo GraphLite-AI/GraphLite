@@ -123,24 +123,23 @@ impl DDLStatementExecutor for DropGraphExecutor {
 
                         // CRITICAL FIX: Invalidate sessions using the dropped graph
                         // This prevents stale data from being returned after graph deletion
-                        if let Some(session_manager) = crate::session::get_session_manager() {
+                        if let Some(session_provider) = &context.session_provider {
                             let sessions_invalidated =
-                                session_manager.invalidate_sessions_for_graph(&full_path);
+                                session_provider.invalidate_sessions_for_graph(&full_path);
                             log::info!(
                                 "Invalidated {} sessions using dropped graph '{}'",
                                 sessions_invalidated,
                                 full_path
                             );
                         } else {
-                            log::warn!("No session manager available for session invalidation after dropping graph '{}'", full_path);
+                            log::warn!("No session provider available for session invalidation after dropping graph '{}'", full_path);
                         }
 
-                        // TODO: Cache invalidation for query results, plans, and subqueries
-                        // Currently there's no global CacheManager accessible here
-                        // This needs architectural changes to provide cache manager access
-                        // For now, the storage layer deletion and session invalidation
-                        // should prevent most stale data issues
-                        log::warn!("Cache invalidation for query/plan/subquery caches not yet implemented for DROP GRAPH");
+                        // Invalidate catalog cache - graph list has changed
+                        if let Some(cache_mgr) = &context.cache_manager {
+                            cache_mgr.invalidate_on_data_change(Some(full_path.clone()), 1);
+                            log::debug!("Invalidated catalog cache after DROP GRAPH '{}'", full_path);
+                        }
 
                         let message = if self.statement.cascade {
                             format!("Graph '{}' dropped (cascade)", full_path)

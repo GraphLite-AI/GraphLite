@@ -156,8 +156,8 @@ cargo audit
 # Run with analysis
 ./scripts/run_tests.sh --release --analyze
 
-# Run specific test
-cargo test --release --test aggregation_tests -- --test-threads=1
+# Run specific test (parallel execution enabled)
+cargo test --release --test aggregation_tests
 ```
 
 ### Test Documentation
