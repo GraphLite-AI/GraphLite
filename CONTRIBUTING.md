@@ -104,14 +104,19 @@ If you're new to open source, welcome! Here are some good first steps:
 
 ### 1. Fork and Clone
 
+**REQUIRED:** All contributors must fork the repository and work on their fork. Do not request direct write access to the main repository.
+
 ```bash
-# Fork the repository on GitHub, then clone your fork
+# 1. Fork the repository on GitHub (click "Fork" button)
+# 2. Clone YOUR fork (not the original repository)
 git clone https://github.com/YOUR_USERNAME/GraphLite.git
 cd GraphLite
 
-# Add upstream remote
+# 3. Add upstream remote to sync with the original repository
 git remote add upstream https://github.com/ORIGINAL_OWNER/GraphLite.git
 ```
+
+This fork-based workflow ensures you can test all changes independently before submitting a Pull Request.
 
 ### 2. Build the Project
 
@@ -561,25 +566,34 @@ Clarified Python version requirements and added troubleshooting section
 for common installation issues.
 ```
 
-### 3. Test Your Changes
+### 3. Test Your Changes on Your Fork
+
+**IMPORTANT:** All testing must be completed on your fork BEFORE submitting a Pull Request. Do not submit a PR with failing tests or untested code.
 
 ```bash
-# Run full test suite
+# Run full test suite (REQUIRED - must pass)
 cargo test --all
 
-# Check formatting
+# Check formatting (REQUIRED - must pass)
 cargo fmt --all -- --check
 
-# Run linter
+# Run linter (REQUIRED - must pass)
 cargo clippy --all -- -D warnings
 
-# Run code pattern checks (REQUIRED)
+# Run code pattern checks (REQUIRED - must pass)
 ./scripts/check_code_patterns.sh
 
+<<<<<<< Updated upstream
 # Test examples still work
 cd examples/rust/sdk/drug_discovery
+=======
+# Test examples still work (REQUIRED - verify manually)
+cd examples-core/fraud_detection
+>>>>>>> Stashed changes
 cargo run
 ```
+
+**All checks must pass on your fork before proceeding to create a PR.**
 
 ### 4. Push and Create Pull Request
 
@@ -587,7 +601,7 @@ cargo run
 # Push to your fork
 git push origin feature/your-feature-name
 
-# Go to GitHub and create Pull Request
+# Go to GitHub and create Pull Request from your fork
 ```
 
 ### Pull Request Template
