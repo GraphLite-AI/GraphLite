@@ -1200,7 +1200,7 @@ The system provides concurrent session support with lock partitioning for high-t
 
 GraphLite implements several optimizations for concurrent session workloads:
 
-#### Lock Partitioning (Phase 3.1)
+#### Lock Partitioning
 
 To eliminate contention on a single RwLock, session storage uses hash-based partitioning:
 
@@ -1229,7 +1229,7 @@ Benefit: Up to 16x throughput for concurrent session operations
 
 **Performance:** Session creation, access, and cleanup operations see up to 16x throughput improvement in highly concurrent workloads.
 
-#### Catalog Cache (Phase 3.2)
+#### Catalog Cache
 
 Per-session caching of catalog metadata with version-based invalidation:
 
