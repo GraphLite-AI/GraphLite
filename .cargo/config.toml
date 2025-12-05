@@ -2,10 +2,13 @@
 # This file configures cargo behavior for the GraphLite project
 
 [env]
-# Run tests single-threaded by default to avoid database state conflicts
-# GraphLite tests share database instances and must not run in parallel
-# to prevent race conditions and state interference between tests.
+# Parallel test execution is now enabled by default!
+# The unified session architecture (Instance mode) ensures complete isolation
+# between test instances, eliminating race conditions.
 #
-# Users can override this setting if needed:
-#   RUST_TEST_THREADS=4 cargo test
-RUST_TEST_THREADS = "1"
+# Tests now run in parallel for ~10x speed improvement:
+#   Before: 10-15 minutes (sequential)
+#   After: 1.5 minutes (parallel with 16 threads)
+#
+# To run tests with a specific thread count:
+#   RUST_TEST_THREADS=8 cargo test

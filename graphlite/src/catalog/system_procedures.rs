@@ -18,6 +18,7 @@ use super::manager::CatalogManager;
 use super::operations::{CatalogOperation, CatalogResponse, EntityType, QueryType};
 use crate::exec::error::ExecutionError;
 use crate::exec::result::{QueryResult, Row};
+use crate::session::SessionProvider;
 use crate::storage::Value;
 use serde_json::json;
 use std::collections::HashMap;
@@ -28,6 +29,7 @@ pub struct SystemProcedures {
     catalog_manager: Arc<std::sync::RwLock<CatalogManager>>,
     storage: Arc<crate::storage::StorageManager>,
     cache_manager: Option<Arc<crate::cache::CacheManager>>,
+    session_provider: Option<Arc<dyn SessionProvider>>,
 }
 
 impl SystemProcedures {
@@ -40,7 +42,14 @@ impl SystemProcedures {
             catalog_manager,
             storage,
             cache_manager,
+            session_provider: None,
         }
+    }
+
+    /// Set the session provider after construction
+    pub fn with_session_provider(mut self, session_provider: Arc<dyn SessionProvider>) -> Self {
+        self.session_provider = Some(session_provider);
+        self
     }
 
     /// Execute a system procedure by name
@@ -348,8 +357,6 @@ impl SystemProcedures {
         _args: Vec<Value>,
         session_id: &str,
     ) -> Result<QueryResult, ExecutionError> {
-        use crate::session::manager::get_session;
-
         let mut rows = Vec::new();
         let columns = vec![
             "property_name".to_string(),
@@ -357,7 +364,12 @@ impl SystemProcedures {
             "property_type".to_string(),
         ];
 
-        if let Some(session_arc) = get_session(session_id) {
+        let session_arc = self
+            .session_provider
+            .as_ref()
+            .and_then(|provider| provider.get_session(session_id));
+
+        if let Some(session_arc) = session_arc {
             let session_state = session_arc.read().map_err(|_| {
                 ExecutionError::RuntimeError("Failed to acquire session lock".to_string())
             })?;
