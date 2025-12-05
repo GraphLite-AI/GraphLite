@@ -7,7 +7,9 @@
 //! algorithms and data access methods chosen for optimal performance.
 
 use crate::ast::{EdgeDirection, Expression, PathType};
-use crate::plan::logical::{AggregateFunction, JoinType, LogicalNode, LogicalPlan, PathElement};
+use crate::plan::logical::{
+    AggregateFunction, JoinType, LogicalNode, LogicalPlan, PathElement, TextSearchType,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -349,6 +351,18 @@ pub enum PhysicalNode {
         estimated_cost: f64,
     },
 
+    /// Full-text search using inverted/text index
+    TextIndexScan {
+        index_name: String,
+        field: String,
+        query: String,
+        search_type: TextSearchType,
+        min_score: Option<f64>,
+        limit: Option<usize>,
+        estimated_rows: usize,
+        estimated_cost: f64,
+    },
+
     /// Join using index for lookup
     IndexJoin {
         left: Box<PhysicalNode>,
@@ -414,6 +428,7 @@ pub enum PhysicalOperator {
     WithQuery,
     Unwind,
     GraphIndexScan,
+    TextIndexScan,
     IndexJoin,
     Insert,
     Update,
@@ -478,7 +493,7 @@ impl PhysicalPlan {
     }
 
     /// Convert a logical node to physical node
-    fn convert_logical_node(logical: &LogicalNode) -> PhysicalNode {
+    pub fn convert_logical_node(logical: &LogicalNode) -> PhysicalNode {
         match logical {
             LogicalNode::NodeScan {
                 variable,
@@ -779,6 +794,33 @@ impl PhysicalPlan {
                     to_variable: to_variable.clone(),
                     path_elements: path_elements.clone(),
                     input: input_physical,
+                    estimated_rows,
+                    estimated_cost,
+                }
+            }
+
+            LogicalNode::TextSearch {
+                variable: _variable,
+                field,
+                query,
+                search_type,
+                min_score,
+                limit,
+                input,
+            } => {
+                // Convert TextSearch logical node into a dedicated TextIndexScan physical operator.
+                let input_physical = Box::new(Self::convert_logical_node(input));
+                let input_rows = input_physical.get_row_count();
+                let estimated_rows = (input_rows as f64 * 0.1) as usize; // assume 10% selectivity
+                let estimated_cost = input_physical.get_cost() + 20.0; // fixed cost for text search
+
+                PhysicalNode::TextIndexScan {
+                    index_name: format!("text_index::{}", field),
+                    field: field.clone(),
+                    query: query.clone(),
+                    search_type: search_type.clone(),
+                    min_score: *min_score,
+                    limit: *limit,
                     estimated_rows,
                     estimated_cost,
                 }
@@ -1190,6 +1232,7 @@ impl PhysicalNode {
             PhysicalNode::WithQuery { estimated_cost, .. } => *estimated_cost,
             PhysicalNode::Unwind { estimated_cost, .. } => *estimated_cost,
             PhysicalNode::GraphIndexScan { estimated_cost, .. } => *estimated_cost,
+            PhysicalNode::TextIndexScan { estimated_cost, .. } => *estimated_cost,
             PhysicalNode::IndexJoin { estimated_cost, .. } => *estimated_cost,
             PhysicalNode::Insert { estimated_cost, .. } => *estimated_cost,
             PhysicalNode::Update { estimated_cost, .. } => *estimated_cost,
@@ -1231,6 +1274,7 @@ impl PhysicalNode {
             PhysicalNode::Having { estimated_rows, .. } => *estimated_rows,
             PhysicalNode::Unwind { estimated_rows, .. } => *estimated_rows,
             PhysicalNode::GraphIndexScan { estimated_rows, .. } => *estimated_rows,
+            PhysicalNode::TextIndexScan { estimated_rows, .. } => *estimated_rows,
             PhysicalNode::IndexJoin { estimated_rows, .. } => *estimated_rows,
             PhysicalNode::Insert { estimated_ops, .. } => *estimated_ops,
             PhysicalNode::Update { estimated_ops, .. } => *estimated_ops,
@@ -1369,6 +1413,7 @@ impl PhysicalNode {
             PhysicalNode::WithQuery { .. } => PhysicalOperator::WithQuery,
             PhysicalNode::Unwind { .. } => PhysicalOperator::Unwind,
             PhysicalNode::GraphIndexScan { .. } => PhysicalOperator::GraphIndexScan,
+            PhysicalNode::TextIndexScan { .. } => PhysicalOperator::TextIndexScan,
             PhysicalNode::IndexJoin { .. } => PhysicalOperator::IndexJoin,
             PhysicalNode::Insert { .. } => PhysicalOperator::Insert,
             PhysicalNode::Update { .. } => PhysicalOperator::Update,

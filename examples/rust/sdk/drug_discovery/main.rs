@@ -288,7 +288,8 @@ fn main() -> Result<(), Error> {
 
     // Query 1: Find potent compounds for TP53
     println!("   Query 1: Compounds targeting TP53 with IC50 < 100 nM");
-    let result = session.query_builder()
+    let result = session
+        .query_builder()
         .match_pattern("(c:Compound)-[i:INHIBITS]->(p:Protein {id: 'TP53'})")
         .where_clause("i.IC50 < 100")
         .return_clause("c.name, c.id, i.IC50, i.IC50_unit, i.Ki")

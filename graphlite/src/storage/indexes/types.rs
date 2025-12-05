@@ -3,6 +3,7 @@
 //
 //! Type definitions for the indexing system
 
+use crate::ast::TextIndexTypeSpecifier;
 use crate::storage::Value;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -24,6 +25,7 @@ pub type NodeId = String;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum IndexType {
     Graph(GraphIndexType),
+    Text(TextIndexTypeSpecifier),
 }
 
 impl IndexType {
@@ -31,6 +33,7 @@ impl IndexType {
     pub fn prefix(&self) -> &'static str {
         match self {
             IndexType::Graph(_) => "graph",
+            IndexType::Text(_) => "text",
         }
     }
 }
