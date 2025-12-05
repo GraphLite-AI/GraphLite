@@ -64,9 +64,11 @@ run_test_suite() {
         cargo_flags="--release"
         echo "=== GraphLite ISO GQL INTEGRATION TEST RUNNER (RELEASE BUILD) ==="
         echo "Build: Optimized release (faster execution)"
+        echo "Threads: 16 (matches lock partition count)"
     else
         echo "=== GraphLite ISO GQL INTEGRATION TEST RUNNER (DEBUG BUILD) ==="
         echo "Build: Debug (with debug assertions)"
+        echo "Threads: 16 (matches lock partition count)"
     fi
 
     echo "Date: $(date)"
@@ -128,9 +130,9 @@ run_test_suite() {
     echo "Test File | Status | Details"
     echo "----------|--------|--------"
 
-    # Run each test (parallel execution enabled)
+    # Run each test (parallel execution enabled with 16 threads)
     for test in "${integration_tests[@]}"; do
-        output=$(cargo test $cargo_flags --test "$test" 2>&1)
+        output=$(cargo test $cargo_flags --test "$test" -- --test-threads=16 2>&1)
 
         if echo "$output" | grep -q "test result: ok"; then
             # Test passed
@@ -217,7 +219,7 @@ run_test_suite() {
                 echo "--- $failed_test ---"
 
                 # Get error output for analysis
-                error_output=$(cargo test $cargo_flags --test "$failed_test" 2>&1)
+                error_output=$(cargo test $cargo_flags --test "$failed_test" -- --test-threads=16 2>&1)
 
                 # Extract specific error patterns
                 if echo "$error_output" | grep -q "can call blocking only when running on the multi-threaded runtime"; then
