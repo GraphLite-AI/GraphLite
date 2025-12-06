@@ -29,6 +29,7 @@ import sys
 import tempfile
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -99,7 +100,7 @@ DEFAULT_DB_SCHEMA = os.getenv("NL2GQL_SCHEMA", "nl2gql")
 DEFAULT_DB_GRAPH = os.getenv("NL2GQL_GRAPH", "scratch")
 
 _client_singleton: Optional[OpenAI] = None
-_USAGE_LOG: List[Dict[str, int]] = []
+_USAGE_LOG = threading.local()
 
 
 def _client() -> OpenAI:
@@ -110,19 +111,28 @@ def _client() -> OpenAI:
 
 
 def _reset_usage_log() -> None:
-    _USAGE_LOG.clear()
+    log = getattr(_USAGE_LOG, "entries", None)
+    if log is None:
+        _USAGE_LOG.entries = []
+    else:
+        log.clear()
 
 
 def _record_usage(usage: Dict[str, Any]) -> None:
     prompt = int(usage.get("prompt_tokens", 0))
     completion = int(usage.get("completion_tokens", 0))
     total = int(usage.get("total_tokens", prompt + completion))
-    _USAGE_LOG.append({"prompt_tokens": prompt, "completion_tokens": completion, "total_tokens": total})
+    log: List[Dict[str, int]] = getattr(_USAGE_LOG, "entries", None)
+    if log is None:
+        log = []
+        _USAGE_LOG.entries = log
+    log.append({"prompt_tokens": prompt, "completion_tokens": completion, "total_tokens": total})
 
 
 def _usage_totals() -> Dict[str, int]:
+    log: List[Dict[str, int]] = getattr(_USAGE_LOG, "entries", []) or []
     totals = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-    for entry in _USAGE_LOG:
+    for entry in log:
         totals["prompt_tokens"] += int(entry.get("prompt_tokens", 0))
         totals["completion_tokens"] += int(entry.get("completion_tokens", 0))
         totals["total_tokens"] += int(entry.get("total_tokens", 0))
@@ -1733,48 +1743,126 @@ def _extract_queries_from_file(path: str) -> List[str]:
     return queries
 
 
+def _load_sample_suite(path: str) -> List[Dict[str, Any]]:
+    manifest_path = Path(path)
+    if not manifest_path.exists():
+        raise FileNotFoundError(f"sample suite file not found: {path}")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:  # pragma: no cover - surfaced in CLI
+        raise ValueError(f"sample suite file must be JSON: {exc}") from exc
+
+    if not isinstance(manifest, list):
+        raise ValueError("sample suite file must contain a list of suite definitions")
+
+    suites: List[Dict[str, Any]] = []
+    for idx, entry in enumerate(manifest):
+        if not isinstance(entry, dict):
+            raise ValueError(f"sample suite entry {idx + 1} is not an object")
+
+        name = str(entry.get("name") or f"suite_{idx + 1}")
+        raw_schema = entry.get("schema")
+        if isinstance(raw_schema, list):
+            schema_text = "\n".join(str(line).strip() for line in raw_schema if str(line).strip())
+        elif isinstance(raw_schema, str):
+            candidate_path = manifest_path.parent / raw_schema
+            if candidate_path.exists():
+                schema_text = candidate_path.read_text(encoding="utf-8").strip()
+            else:
+                schema_text = raw_schema.strip()
+        else:
+            raise ValueError(f"sample suite entry '{name}' is missing a schema block")
+
+        queries = [str(q).strip() for q in entry.get("queries", []) if str(q).strip()]
+        if not queries:
+            raise ValueError(f"sample suite entry '{name}' is missing queries")
+
+        suites.append({"name": name, "schema_text": schema_text, "queries": queries})
+
+    if not suites:
+        raise ValueError("sample suite file contained no usable entries")
+    return suites
+
+
 def run_sample_suite(
-    schema_path: str,
     suite_path: str,
     *,
     max_iterations: int = 3,
     verbose: bool = False,
     db_path: Optional[str] = None,
+    workers: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    if Path(schema_path).exists():
-        schema_text = Path(schema_path).read_text(encoding="utf-8")
-    else:
-        schema_text = schema_path
-    nls = _extract_queries_from_file(suite_path)
-    results: List[Dict[str, Any]] = []
-    for idx, nl in enumerate(nls, 1):
-        spinner = Spinner(enabled=verbose)
-        spinner.start(f"[suite {idx}] running")
-        _reset_usage_log()
-        pipeline = NL2GQLPipeline(schema_text, max_refinements=max_iterations, db_path=db_path)
-        try:
-            query, timeline = pipeline.run(nl, spinner=spinner)
-            spinner.stop(f"[suite {idx}] ok", color="green")
-            usage = _usage_totals()
-            results.append({"nl": nl, "query": query, "timeline": timeline, "usage": usage, "success": True})
-        except PipelineFailure as exc:
-            spinner.stop(f"[suite {idx}] failed", color="red")
-            usage = _usage_totals()
-            results.append(
+    suites = _load_sample_suite(suite_path)
+    tasks: List[Dict[str, Any]] = []
+    for suite_idx, suite in enumerate(suites, 1):
+        for query_idx, nl in enumerate(suite["queries"], 1):
+            tasks.append(
                 {
+                    "order": len(tasks),
+                    "suite": suite["name"],
+                    "suite_idx": suite_idx,
+                    "query_idx": query_idx,
+                    "schema_text": suite["schema_text"],
                     "nl": nl,
-                    "error": str(exc),
-                    "timeline": exc.timeline,
-                    "failures": exc.failures,
-                    "usage": usage,
-                    "success": False,
                 }
             )
-        except Exception as exc:
-            spinner.stop(f"[suite {idx}] failed", color="red")
+
+    if not tasks:
+        return []
+
+    max_workers = max(1, workers or min(4, len(tasks)))
+    results: List[Dict[str, Any]] = []
+
+    def _run_task(task: Dict[str, Any]) -> Dict[str, Any]:
+        _reset_usage_log()
+        pipeline = NL2GQLPipeline(task["schema_text"], max_refinements=max_iterations, db_path=db_path)
+        try:
+            query, timeline = pipeline.run(task["nl"], spinner=None)
             usage = _usage_totals()
-            results.append({"nl": nl, "error": str(exc), "usage": usage, "success": False})
-    return results
+            return {
+                "order": task["order"],
+                "suite": task["suite"],
+                "suite_idx": task["suite_idx"],
+                "query_idx": task["query_idx"],
+                "nl": task["nl"],
+                "query": query,
+                "timeline": timeline,
+                "usage": usage,
+                "success": True,
+            }
+        except PipelineFailure as exc:
+            usage = _usage_totals()
+            return {
+                "order": task["order"],
+                "suite": task["suite"],
+                "suite_idx": task["suite_idx"],
+                "query_idx": task["query_idx"],
+                "nl": task["nl"],
+                "error": str(exc),
+                "timeline": exc.timeline,
+                "failures": exc.failures,
+                "usage": usage,
+                "success": False,
+            }
+        except Exception as exc:
+            usage = _usage_totals()
+            return {
+                "order": task["order"],
+                "suite": task["suite"],
+                "suite_idx": task["suite_idx"],
+                "query_idx": task["query_idx"],
+                "nl": task["nl"],
+                "error": str(exc),
+                "usage": usage,
+                "success": False,
+            }
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(_run_task, task) for task in tasks]
+        for fut in as_completed(futures):
+            results.append(fut.result())
+
+    return sorted(results, key=lambda r: r["order"])
 
 
 # -----------------------------------------------------------------------------
@@ -1834,8 +1922,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--gen-model", help="OpenAI model for generation (default: gpt-4o-mini)")
     parser.add_argument("--fix-model", help="OpenAI model for fixes/logic validation (default: gpt-4o-mini)")
     parser.add_argument("--verbose", action="store_true", help="Print attempt timeline")
-    parser.add_argument("--sample-suite", action="store_true", help="Run all queries in sample_queries.txt")
-    parser.add_argument("--suite-file", default="nl2gql/sample_queries.txt", help="Path to sample queries list")
+    parser.add_argument("--sample-suite", action="store_true", help="Run all queries in the sample suite manifest")
+    parser.add_argument("--suite-file", default="nl2gql/sample_suites.json", help="Path to sample suite manifest (JSON)")
+    parser.add_argument("--suite-workers", type=int, help="Worker threads for sample suite (default: min(4, total queries))")
     parser.add_argument("--db-path", help="GraphLite DB path for syntax validation (defaults to temp or NL2GQL_DB_PATH)")
     parser.add_argument("--spinner", dest="spinner", action="store_true", help="Show live spinner updates when running single queries")
     parser.add_argument("--no-spinner", dest="spinner", action="store_false")
@@ -1854,29 +1943,51 @@ def main(argv: Optional[List[str]] = None) -> int:
         schema_context = read_text(args.schema_file)
 
     if args.sample_suite:
-        if not args.schema_file and not args.schema:
-            print("error: schema context required for sample suite", file=sys.stderr)
+        try:
+            results = run_sample_suite(
+                args.suite_file,
+                max_iterations=args.max_attempts,
+                verbose=args.verbose,
+                db_path=args.db_path or DEFAULT_DB_PATH,
+                workers=args.suite_workers,
+            )
+        except Exception as exc:
+            print(f"error: failed to run sample suite - {exc}", file=sys.stderr)
             return 1
-        schema_path = args.schema_file or args.schema
-        assert schema_path
-        results = run_sample_suite(
-            schema_path,
-            args.suite_file,
-            max_iterations=args.max_attempts,
-            verbose=args.verbose,
-            db_path=args.db_path or DEFAULT_DB_PATH,
-        )
-        success = all(r.get("success") for r in results)
+
+        total = len(results)
+        passes = sum(1 for r in results if r.get("success"))
+        color_enabled = sys.stdout.isatty()
+
+        print("\nSAMPLE SUITE SUMMARY")
+        print(f"Results: {passes}/{total} passed")
         for res in results:
+            label = f"{res['suite']} #{res['query_idx']}"
+            status = "[ok]" if res.get("success") else "[fail]"
+            color = "green" if res.get("success") else "red"
+            print(f"{_style(status, color, color_enabled)} {label}: {res['nl']}")
+
+        print("\nDETAILS")
+        for res in results:
+            print("-" * 80)
+            label = f"{res['suite']} [query {res['query_idx']}]"
+            outcome = "OK" if res.get("success") else "FAIL"
+            print(f"{label} → {outcome}")
+            print(f"NL : {res['nl']}")
             if res.get("success"):
-                print(f"[ok] {res['nl']}")
+                print("ISO GQL:")
                 print(_fmt_block(res["query"], indent=4))
                 if args.verbose:
                     usage = res.get("usage", {})
-                    print(_fmt_block(f"token usage → prompt: {usage.get('prompt_tokens', 0)}, completion: {usage.get('completion_tokens', 0)}, total: {usage.get('total_tokens', 0)}", indent=4))
+                    print(f"Usage → prompt: {usage.get('prompt_tokens', 0)}, completion: {usage.get('completion_tokens', 0)}, total: {usage.get('total_tokens', 0)}")
             else:
-                print(f"[fail] {res['nl']}: {res.get('error')}")
-        return 0 if success else 2
+                print(f"Error: {res.get('error', 'unspecified error')}")
+                failures = res.get("failures") or []
+                if failures:
+                    print("Failure reasons:")
+                    for fail in sorted(set(failures)):
+                        print(f"  - {fail}")
+        return 0 if passes == total else 2
 
     if not schema_context:
         print("error: schema context is required via --schema or --schema-file", file=sys.stderr)
