@@ -44,12 +44,12 @@ def main() -> int:
         # 1. Open a database
         print("1. Opening database...")
         db = GraphLite.open(db_path)
-        print(f"   ✓ Database opened at {db_path}\n")
+        print(f"   Database opened at {db_path}\n")
 
         # 2. Create a session
         print("2. Creating session...")
         session = db.session("admin")
-        print("   ✓ Session created for user 'admin'\n")
+        print("   Session created for user 'admin'\n")
 
         # 3. Execute DDL statements
         print("3. Creating schema and graph...")
@@ -57,7 +57,7 @@ def main() -> int:
         session.execute("SESSION SET SCHEMA /example")
         session.execute("CREATE GRAPH IF NOT EXISTS social")
         session.execute("SESSION SET GRAPH social")
-        print("   ✓ Schema and graph created\n")
+        print("   Schema and graph created\n")
 
         # 4. Insert data using transactions
         print("4. Inserting data with transaction...")
@@ -69,7 +69,7 @@ def main() -> int:
             tx.execute("INSERT (p:Person {name: 'Eve', age: 23})")
             tx.execute("INSERT (p:Person {name: 'Frank', age: 40})")
             tx.commit()
-        print("   ✓ Inserted 6 persons\n")
+        print("   Inserted 6 persons\n")
 
         # 5. Query data directly
         print("5. Querying data...")
@@ -129,11 +129,11 @@ def main() -> int:
         return 0
 
     except GraphLiteError as e:
-        print(f"\n❌ GraphLite Error: {e}")
+        print(f"\n[ERROR] GraphLite Error: {e}")
         return 1
 
     except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
+        print(f"\n[ERROR] Unexpected error: {e}")
         import traceback
         traceback.print_exc()
         return 1

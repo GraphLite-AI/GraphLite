@@ -99,17 +99,36 @@ cargo add graphlite
 
 **See:** **[Using GraphLite as a Crate](docs/Using%20GraphLite%20as%20a%20Crate.md)** for complete integration guide.
 
-#### Option B: Install CLI from crates.io (Easiest for CLI Usage)
+#### Option B: Use Docker (Easiest for Quick Start)
+
+Run GraphLite instantly with Docker - no installation required:
+
+```bash
+# Initialize database
+docker run -it -v $(pwd)/mydb:/data ghcr.io/graphlite-ai/graphlite:latest \
+  graphlite install --path /data/mydb --admin-user admin --admin-password secret
+
+# Start interactive GQL shell
+docker run -it -v $(pwd)/mydb:/data \
+  -e GRAPHLITE_DB_PATH=/data/mydb \
+  -e GRAPHLITE_USER=admin \
+  -e GRAPHLITE_PASSWORD=secret \
+  ghcr.io/graphlite-ai/graphlite:latest
+```
+
+**See:** **[Docker Guide](docs/Docker.md)** for complete Docker setup including multi-architecture builds and Docker Compose.
+
+#### Option C: Install CLI from crates.io
 
 Install the GraphLite CLI tool directly from crates.io:
 
 ```bash
-cargo install graphlite-cli
+cargo install gql-cli
 ```
 
 After installation, the `graphlite` binary will be available in your PATH.
 
-#### Option C: Clone and Build (For Development/Contributing)
+#### Option D: Clone and Build (For Development/Contributing)
 
 ```bash
 # Clone the repository
@@ -162,7 +181,7 @@ If you prefer to build manually without the script:
 **Note:** If you're using GraphLite as a crate in your application, skip to **[Using GraphLite as a Crate](docs/Using%20GraphLite%20as%20a%20Crate.md)** instead.
 
 ```bash
-# If you installed via 'cargo install graphlite-cli' (Option B)
+# If you installed via 'cargo install gql-cli' (Option B)
 graphlite install --path ./my_db --admin-user admin --admin-password secret
 
 # If you built from source (Option C)
@@ -178,7 +197,7 @@ This command:
 ### Step 3: Start Using GQL (CLI)
 
 ```bash
-# If you installed via 'cargo install graphlite-cli' (Option B)
+# If you installed via 'cargo install gql-cli' (Option B)
 graphlite gql --path ./my_db -u admin -p secret
 
 # If you built from source (Option C)
@@ -386,12 +405,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Examples and Documentation
 
 **For Rust Applications:**
-- **[SDK Examples](graphlite-sdk/examples/)** - Recommended high-level API (start here!)
-- **[Core Library Examples](examples-core/)** - Advanced low-level usage
+- **[SDK Examples](sdk-rust/examples/)** - Recommended high-level API (start here!)
+- **[Examples](examples/)** - SDK (high-level) and bindings (low-level) examples for Rust, Python, and Java
 
 **See also:**
 - [Getting Started With GQL.md](docs/Getting%20Started%20With%20GQL.md) - Complete query language reference
-- [graphlite-sdk/README.md](graphlite-sdk/README.md) - Full SDK documentation
+- [sdk-rust/README.md](sdk-rust/README.md) - Full SDK documentation
 
 <details>
 <summary><b>Uninstall options</b></summary>
@@ -443,8 +462,8 @@ GraphLite provides comprehensive documentation for all skill levels:
 - "Contribution Guide.md" - How to contribute
 
 **Code Examples:**
-- **[SDK Examples](graphlite-sdk/examples/)** - High-level API examples (recommended)
-- **[Core Library Examples](examples-core/)** - Advanced low-level usage
+- **[SDK Examples](sdk-rust/examples/)** - High-level API examples (recommended)
+- **[Examples](examples/)** - SDK (high-level) and bindings (low-level) examples for Rust, Python, and Java
 
 **Legal:**
 - **[LICENSE](LICENSE)** - Apache License 2.0 full text

@@ -104,14 +104,19 @@ If you're new to open source, welcome! Here are some good first steps:
 
 ### 1. Fork and Clone
 
+**REQUIRED:** All contributors must fork the repository and work on their fork. Do not request direct write access to the main repository.
+
 ```bash
-# Fork the repository on GitHub, then clone your fork
+# 1. Fork the repository on GitHub (click "Fork" button)
+# 2. Clone YOUR fork (not the original repository)
 git clone https://github.com/YOUR_USERNAME/GraphLite.git
 cd GraphLite
 
-# Add upstream remote
+# 3. Add upstream remote to sync with the original repository
 git remote add upstream https://github.com/ORIGINAL_OWNER/GraphLite.git
 ```
+
+This fork-based workflow ensures you can test all changes independently before submitting a Pull Request.
 
 ### 2. Build the Project
 
@@ -120,7 +125,7 @@ git remote add upstream https://github.com/ORIGINAL_OWNER/GraphLite.git
 cargo build --all
 
 # Run the CLI
-cargo run --bin graphlite-cli
+cargo run --bin gql-cli
 
 # Run tests to verify setup
 cargo test --all
@@ -129,8 +134,8 @@ cargo test --all
 ### 3. Install Development Tools
 
 ```bash
-# Install pre-commit hooks (if available)
-./scripts/install-hooks.sh
+# Install pre-commit hooks to enforce code quality rules
+bash scripts/install_hooks.sh
 
 # Install formatting tools
 rustup component add rustfmt clippy
@@ -138,6 +143,14 @@ rustup component add rustfmt clippy
 # Optional: Install cargo-watch for auto-recompilation
 cargo install cargo-watch
 ```
+
+**About Git Hooks:**
+
+The pre-commit hook automatically checks your code for rule violations before allowing commits. It validates:
+- Rust code patterns (Rules #1-10)
+- Documentation quality (Rule #11: No emojis in markdown)
+
+To bypass the hook (use sparingly): `git commit --no-verify`
 
 ### 4. Verify Your Setup
 
@@ -152,7 +165,7 @@ cargo fmt -- --check
 cargo clippy -- -D warnings
 
 # Run examples
-cd examples-core/fraud_detection
+cd examples/rust/sdk/drug_discovery
 cargo run
 ```
 
@@ -327,10 +340,23 @@ pub fn process_query(&self, query: &str) -> Result<String> {
 
 ### Critical Rules
 
-GraphLite has the following specific architectural patterns that are expressed as rules below.
-They can be enforced by using github hooks. Use [scripts/install_hooks.sh](../scripts/install_hooks.sh).
+GraphLite has specific architectural patterns enforced as rules to maintain code quality and consistency.
 
-Key rules:
+#### Rule Enforcement Tools
+
+**1. Manual Rule Check** - Run anytime to check entire codebase:
+```bash
+bash scripts/check_code_patterns.sh
+```
+This script scans all Rust files and markdown files for rule violations across the entire project.
+
+**2. Automatic Pre-commit Hook** - Install once to check on every commit:
+```bash
+bash scripts/install_hooks.sh
+```
+This installs a git pre-commit hook that validates **only staged files** before allowing commits. The hook will block commits that violate critical rules.
+
+#### Key rules:
 
 1. **ExecutionContext Management**: Never create new `ExecutionContext` instances
 2. **Storage Manager Singleton**: Never create new `StorageManager` instances during query execution
@@ -342,6 +368,7 @@ Key rules:
 8. **Test Integrity**: Fix bugs in code, not in tests (unless test is wrong)
 9. **Session Manager Isolation**: Use global SessionManager, don't create test-specific instances
 10. **API Boundary**: Use `QueryCoordinator` as the only public API
+11. **No Emojis in Documentation**: All markdown files must be emoji-free for professional consistency
 
 **Before submitting a PR, verify your changes don't violate these rules.**
 
@@ -539,22 +566,34 @@ Clarified Python version requirements and added troubleshooting section
 for common installation issues.
 ```
 
-### 3. Test Your Changes
+### 3. Test Your Changes on Your Fork
+
+**IMPORTANT:** All testing must be completed on your fork BEFORE submitting a Pull Request. Do not submit a PR with failing tests or untested code.
 
 ```bash
-# Run full test suite
+# Run full test suite (REQUIRED - must pass)
 cargo test --all
 
-# Check formatting
+# Check formatting (REQUIRED - must pass)
 cargo fmt --all -- --check
 
-# Run linter
+# Run linter (REQUIRED - must pass)
 cargo clippy --all -- -D warnings
 
+# Run code pattern checks (REQUIRED - must pass)
+./scripts/check_code_patterns.sh
+
+<<<<<<< Updated upstream
 # Test examples still work
+cd examples/rust/sdk/drug_discovery
+=======
+# Test examples still work (REQUIRED - verify manually)
 cd examples-core/fraud_detection
+>>>>>>> Stashed changes
 cargo run
 ```
+
+**All checks must pass on your fork before proceeding to create a PR.**
 
 ### 4. Push and Create Pull Request
 
@@ -562,7 +601,7 @@ cargo run
 # Push to your fork
 git push origin feature/your-feature-name
 
-# Go to GitHub and create Pull Request
+# Go to GitHub and create Pull Request from your fork
 ```
 
 ### Pull Request Template
@@ -590,14 +629,27 @@ How was this tested?
 - [ ] Manual testing performed
 - [ ] Examples verified
 
+**Testing Steps for Reviewers:**
+
+Provide clear, step-by-step instructions for reviewers to test your changes:
+
+1. Step-by-step instructions on how to build/run
+2. Expected behavior at each step
+3. How to verify the fix/feature works
+4. Any specific test commands to run
+
 ## Checklist
 
 - [ ] Code follows project style guidelines
 - [ ] Tests pass locally (`cargo test --all`)
+- [ ] Code pattern checks pass (`./scripts/check_code_patterns.sh`)
 - [ ] Documentation updated (if applicable)
+- [ ] Documentation is concise and curated (no AI-generated fluff)
 - [ ] CHANGELOG.md updated (for notable changes)
 - [ ] No CLAUDE.md rules violated
 - [ ] Commit messages follow guidelines
+- [ ] PR description is professional (no emojis, no copy-paste from AI tools)
+- [ ] Clear testing steps provided for reviewers to verify the changes
 
 ## Related Issues
 

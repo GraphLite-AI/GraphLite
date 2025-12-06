@@ -10,7 +10,7 @@ GraphLite provides three crates on crates.io:
 
 1. **[graphlite](https://crates.io/crates/graphlite)** - Core library for embedding in applications
 2. **[graphlite-rust-sdk](https://crates.io/crates/graphlite-rust-sdk)** - High-level ergonomic SDK (recommended)
-3. **[graphlite-cli](https://crates.io/crates/graphlite-cli)** - Command-line interface tool
+3. **[gql-cli](https://crates.io/crates/gql-cli)** - Command-line interface tool
 
 ## Table of Contents
 
@@ -139,7 +139,7 @@ graphlite = "0.0.1"
 Install the CLI globally:
 
 ```bash
-cargo install graphlite-cli
+cargo install gql-cli
 ```
 
 Then build your project:
@@ -186,7 +186,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 
-**See also:** [SDK Examples](../graphlite-sdk/examples/) and [SDK README](../graphlite-sdk/README.md)
+**See also:** [SDK Examples](../sdk-rust/examples/) and [SDK README](../sdk-rust/README.md)
 
 ### Option 2: Core Library (Advanced)
 
@@ -229,7 +229,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 
-**See also:** [Core Library Examples](../examples-core/)
+**See also:** [Examples](../examples/) - Includes SDK (high-level) and bindings (low-level) examples
 
 ---
 
@@ -330,7 +330,7 @@ You can install the GraphLite CLI tool directly from crates.io without cloning t
 
 ```bash
 # Install graphlite CLI globally
-cargo install graphlite-cli
+cargo install gql-cli
 ```
 
 This will install the `graphlite` binary to your Cargo bin directory (usually `~/.cargo/bin/`).
@@ -352,7 +352,7 @@ graphlite gql --path ./my_db -u admin -p secret
 **Benefits of cargo install:**
 - No need to clone the repository
 - Automatic PATH setup (if Cargo bin is in PATH)
-- Easy updates with `cargo install graphlite-cli --force`
+- Easy updates with `cargo install gql-cli --force`
 - Works on any system with Rust installed
 
 **See also:** [Quick Start.md](Quick%20Start.md) for detailed CLI usage guide.
@@ -373,12 +373,13 @@ graphlite gql --path ./my_db -u admin -p secret
 ### Explore Code Examples
 
 **SDK Examples (Recommended):**
-- [basic_usage.rs](../graphlite-sdk/examples/basic_usage.rs) - Complete SDK walkthrough
-- [query_builder.rs](../graphlite-sdk/examples/query_builder.rs) - Query builder patterns
+- [basic_usage.rs](../sdk-rust/examples/basic_usage.rs) - Complete SDK walkthrough
+- [query_builder.rs](../sdk-rust/examples/query_builder.rs) - Query builder patterns
 
-**Core Library Examples (Advanced):**
-- [simple_graph.rs](../examples-core/simple_graph.rs) - Basic graph operations
-- [complex_queries.rs](../examples-core/complex_queries.rs) - Advanced querying
+**More Examples:**
+- [Rust Examples](../examples/rust/) - SDK and bindings examples
+- [Python Examples](../examples/python/) - Python SDK and bindings
+- [Java Examples](../examples/java/) - Java bindings
 
 
 ## Getting Help

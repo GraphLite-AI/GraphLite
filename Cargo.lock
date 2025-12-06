@@ -453,6 +453,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "gql-cli"
+version = "0.0.1"
+dependencies = [
+ "clap",
+ "colored",
+ "comfy-table",
+ "env_logger",
+ "graphlite",
+ "log",
+ "rpassword",
+ "rustyline",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "graphlite"
 version = "0.0.1"
 dependencies = [
@@ -478,24 +496,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "uuid",
-]
-
-[[package]]
-name = "graphlite-cli"
-version = "0.0.1"
-dependencies = [
- "clap",
- "colored",
- "comfy-table",
- "env_logger",
- "graphlite",
- "log",
- "rpassword",
- "rustyline",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
 ]
 
 [[package]]

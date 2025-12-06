@@ -57,7 +57,11 @@ tempfile = { workspace = true }
 
 [[example]]
 name = "simple_usage"
-path = "../examples-core/simple_usage.rs"
+path = "../examples/rust/bindings/simple_usage.rs"
+
+[[example]]
+name = "drug_discovery"
+path = "../examples/rust/bindings/drug_discovery/main.rs"
 
 [package.metadata.docs.rs]
 all-features = true
