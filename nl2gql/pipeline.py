@@ -99,6 +99,7 @@ DEFAULT_DB_SCHEMA = os.getenv("NL2GQL_SCHEMA", "nl2gql")
 DEFAULT_DB_GRAPH = os.getenv("NL2GQL_GRAPH", "scratch")
 
 _client_singleton: Optional[OpenAI] = None
+_USAGE_LOG: List[Dict[str, int]] = []
 
 
 def _client() -> OpenAI:
@@ -106,6 +107,26 @@ def _client() -> OpenAI:
     if _client_singleton is None:
         _client_singleton = OpenAI()
     return _client_singleton
+
+
+def _reset_usage_log() -> None:
+    _USAGE_LOG.clear()
+
+
+def _record_usage(usage: Dict[str, Any]) -> None:
+    prompt = int(usage.get("prompt_tokens", 0))
+    completion = int(usage.get("completion_tokens", 0))
+    total = int(usage.get("total_tokens", prompt + completion))
+    _USAGE_LOG.append({"prompt_tokens": prompt, "completion_tokens": completion, "total_tokens": total})
+
+
+def _usage_totals() -> Dict[str, int]:
+    totals = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    for entry in _USAGE_LOG:
+        totals["prompt_tokens"] += int(entry.get("prompt_tokens", 0))
+        totals["completion_tokens"] += int(entry.get("completion_tokens", 0))
+        totals["total_tokens"] += int(entry.get("total_tokens", 0))
+    return totals
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(0.25))
@@ -136,6 +157,7 @@ def chat_complete(
             "completion_tokens": getattr(usage_data, "completion_tokens", 0),
             "total_tokens": getattr(usage_data, "total_tokens", 0),
         }
+        _record_usage(usage)
         return text, usage
     return text, None
 
@@ -1727,17 +1749,30 @@ def run_sample_suite(
     for idx, nl in enumerate(nls, 1):
         spinner = Spinner(enabled=verbose)
         spinner.start(f"[suite {idx}] running")
+        _reset_usage_log()
         pipeline = NL2GQLPipeline(schema_text, max_refinements=max_iterations, db_path=db_path)
         try:
             query, timeline = pipeline.run(nl, spinner=spinner)
             spinner.stop(f"[suite {idx}] ok", color="green")
-            results.append({"nl": nl, "query": query, "timeline": timeline, "success": True})
+            usage = _usage_totals()
+            results.append({"nl": nl, "query": query, "timeline": timeline, "usage": usage, "success": True})
         except PipelineFailure as exc:
             spinner.stop(f"[suite {idx}] failed", color="red")
-            results.append({"nl": nl, "error": str(exc), "timeline": exc.timeline, "failures": exc.failures, "success": False})
+            usage = _usage_totals()
+            results.append(
+                {
+                    "nl": nl,
+                    "error": str(exc),
+                    "timeline": exc.timeline,
+                    "failures": exc.failures,
+                    "usage": usage,
+                    "success": False,
+                }
+            )
         except Exception as exc:
             spinner.stop(f"[suite {idx}] failed", color="red")
-            results.append({"nl": nl, "error": str(exc), "success": False})
+            usage = _usage_totals()
+            results.append({"nl": nl, "error": str(exc), "usage": usage, "success": False})
     return results
 
 
@@ -1835,6 +1870,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             if res.get("success"):
                 print(f"[ok] {res['nl']}")
                 print(_fmt_block(res["query"], indent=4))
+                if args.verbose:
+                    usage = res.get("usage", {})
+                    print(_fmt_block(f"token usage → prompt: {usage.get('prompt_tokens', 0)}, completion: {usage.get('completion_tokens', 0)}, total: {usage.get('total_tokens', 0)}", indent=4))
             else:
                 print(f"[fail] {res['nl']}: {res.get('error')}")
         return 0 if success else 2
@@ -1847,6 +1885,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
     spinner = Spinner(enabled=args.spinner if args.spinner is not None else sys.stdout.isatty())
+    _reset_usage_log()
     spinner.start("Starting pipeline...")
     try:
         pipeline = NL2GQLPipeline(
@@ -1860,6 +1899,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         spinner.stop("✓ Query generated.", color="green")
         if args.verbose:
             print_timeline(args.nl, timeline, args.max_attempts)
+            usage = _usage_totals()
+            print(f"\nToken usage → prompt: {usage['prompt_tokens']}, completion: {usage['completion_tokens']}, total: {usage['total_tokens']}")
         print(query)
         return 0
     except PipelineFailure as exc:
@@ -1870,10 +1911,15 @@ def main(argv: Optional[List[str]] = None) -> int:
                 print("Failures:")
                 for f in exc.failures:
                     print(f"  - {f}")
+            usage = _usage_totals()
+            print(f"\nToken usage → prompt: {usage['prompt_tokens']}, completion: {usage['completion_tokens']}, total: {usage['total_tokens']}")
         print(f"Failed to generate query: {exc}", file=sys.stderr)
         return 1
     except Exception as exc:
         spinner.stop("✗ Pipeline failed.", color="red")
+        if args.verbose:
+            usage = _usage_totals()
+            print(f"\nToken usage → prompt: {usage['prompt_tokens']}, completion: {usage['completion_tokens']}, total: {usage['total_tokens']}")
         print(f"Failed to generate query: {exc}", file=sys.stderr)
         return 1
 
