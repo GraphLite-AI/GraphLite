@@ -486,6 +486,8 @@ class ISOQueryIR:
             tokens.append({"label": label, "start": m.start(), "end": m.end()})
         tokens.sort(key=lambda t: t["start"])
 
+        match_tokens = [t for t in tokens if t["label"] == "MATCH"]
+
         def _block(label: str, *, after: int = -1) -> Tuple[str, Optional[Dict[str, Any]]]:
             for tok in tokens:
                 if tok["label"] == label and tok["start"] > after:
@@ -494,8 +496,17 @@ class ISOQueryIR:
                     return text[tok["end"] : end_idx].strip(), tok
             return "", None
 
-        match_block, match_tok = _block("MATCH")
-        match_end = match_tok["end"] if match_tok else 0
+        def _blocks(label: str, *, after: int = -1) -> List[Tuple[str, Dict[str, Any]]]:
+            blocks: List[Tuple[str, Dict[str, Any]]] = []
+            for tok in tokens:
+                if tok["label"] == label and tok["start"] > after:
+                    next_starts = [t["start"] for t in tokens if t["start"] > tok["start"]]
+                    end_idx = min(next_starts) if next_starts else len(text)
+                    blocks.append((text[tok["end"] : end_idx].strip(), tok))
+            return blocks
+
+        match_blocks = _blocks("MATCH")
+        match_end = match_tokens[-1]["end"] if match_tokens else 0
         with_block, with_tok = _block("WITH", after=match_end)
 
         def _block_before(label: str, limit: int) -> Tuple[str, Optional[Dict[str, Any]]]:
@@ -518,7 +529,7 @@ class ISOQueryIR:
         edges: List[IREdge] = []
         filters: List[IRFilter] = []
 
-        if match_block:
+        if match_blocks:
             def _parse_value(val_raw: str) -> Any:
                 val_raw = val_raw.strip()
                 if val_raw.lower() in {"true", "false"}:
@@ -532,22 +543,6 @@ class ISOQueryIR:
             node_pattern = re.compile(
                 r"\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*([A-Za-z0-9_]+))?\s*(?:\{([^}]*)\})?\s*\)"
             )
-            for alias, label, props in node_pattern.findall(match_block):
-                existing = nodes.get(alias)
-                if existing and existing.label:
-                    pass
-                else:
-                    nodes[alias] = IRNode(alias=alias, label=label or (existing.label if existing else None))
-                if props:
-                    for assignment in props.split(","):
-                        if ":" not in assignment:
-                            continue
-                        key, val = assignment.split(":", 1)
-                        key = key.strip()
-                        val = val.strip()
-                        if key:
-                            filters.append(IRFilter(alias=alias, prop=key, op="=", value=_parse_value(val)))
-
             edge_forward = re.compile(
                 r"(?=(\(\s*(?P<src>[A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*(?P<src_label>[A-Za-z0-9_]+))?\s*(?:\{[^}]*\})?\s*\)"
                 r"\s*-\s*\[:\s*(?P<rel>[A-Za-z0-9_]+)\s*\]\s*->\s*"
@@ -560,37 +555,53 @@ class ISOQueryIR:
             )
 
             seen_edges: Set[Tuple[str, str, str]] = set()
-            for m in edge_forward.finditer(match_block):
-                src, src_label, rel, dst, dst_label = (
-                    m.group("src"),
-                    m.group("src_label"),
-                    m.group("rel"),
-                    m.group("dst"),
-                    m.group("dst_label"),
-                )
-                nodes.setdefault(src, IRNode(alias=src, label=src_label))
-                nodes.setdefault(dst, IRNode(alias=dst, label=dst_label))
-                key = (src, rel, dst)
-                if key not in seen_edges:
-                    seen_edges.add(key)
-                    edges.append(IREdge(left_alias=src, rel=rel, right_alias=dst))
 
-            for m in edge_backward.finditer(match_block):
-                left, left_label, rel, right, right_label = (
-                    m.group("left"),
-                    m.group("left_label"),
-                    m.group("rel"),
-                    m.group("right"),
-                    m.group("right_label"),
-                )
-                # Direction is right -> left because of "<-"
-                src, dst = right, left
-                nodes.setdefault(src, IRNode(alias=src, label=right_label))
-                nodes.setdefault(dst, IRNode(alias=dst, label=left_label))
-                key = (src, rel, dst)
-                if key not in seen_edges:
-                    seen_edges.add(key)
-                    edges.append(IREdge(left_alias=src, rel=rel, right_alias=dst))
+            for match_block, _ in match_blocks:
+                for alias, label, props in node_pattern.findall(match_block):
+                    existing = nodes.get(alias)
+                    if not (existing and existing.label):
+                        nodes[alias] = IRNode(alias=alias, label=label or (existing.label if existing else None))
+                    if props:
+                        for assignment in props.split(","):
+                            if ":" not in assignment:
+                                continue
+                            key, val = assignment.split(":", 1)
+                            key = key.strip()
+                            val = val.strip()
+                            if key:
+                                filters.append(IRFilter(alias=alias, prop=key, op="=", value=_parse_value(val)))
+
+                for m in edge_forward.finditer(match_block):
+                    src, src_label, rel, dst, dst_label = (
+                        m.group("src"),
+                        m.group("src_label"),
+                        m.group("rel"),
+                        m.group("dst"),
+                        m.group("dst_label"),
+                    )
+                    nodes.setdefault(src, IRNode(alias=src, label=src_label))
+                    nodes.setdefault(dst, IRNode(alias=dst, label=dst_label))
+                    key = (src, rel, dst)
+                    if key not in seen_edges:
+                        seen_edges.add(key)
+                        edges.append(IREdge(left_alias=src, rel=rel, right_alias=dst))
+
+                for m in edge_backward.finditer(match_block):
+                    left, left_label, rel, right, right_label = (
+                        m.group("left"),
+                        m.group("left_label"),
+                        m.group("rel"),
+                        m.group("right"),
+                        m.group("right_label"),
+                    )
+                    # Direction is right -> left because of "<-"
+                    src, dst = right, left
+                    nodes.setdefault(src, IRNode(alias=src, label=right_label))
+                    nodes.setdefault(dst, IRNode(alias=dst, label=left_label))
+                    key = (src, rel, dst)
+                    if key not in seen_edges:
+                        seen_edges.add(key)
+                        edges.append(IREdge(left_alias=src, rel=rel, right_alias=dst))
         else:
             errors.append("MATCH clause missing")
 
@@ -1479,51 +1490,36 @@ class Refiner:
 
     def _repair_ir_schema(self, ir: ISOQueryIR) -> bool:
         changed = False
-        alias_labels = {a: n.label for a, n in ir.nodes.items()}
-
-        def _alias_for_label(label: str) -> Optional[str]:
-            for alias, lbl in alias_labels.items():
-                if lbl == label:
-                    return alias
-            return None
-
         for edge in ir.edges:
-            left_label = alias_labels.get(edge.left_alias)
-            right_label = alias_labels.get(edge.right_alias)
+            # Ensure nodes exist in the IR
+            left_node = ir.nodes.setdefault(edge.left_alias, IRNode(alias=edge.left_alias))
+            right_node = ir.nodes.setdefault(edge.right_alias, IRNode(alias=edge.right_alias))
+            left_label = left_node.label
+            right_label = right_node.label
+
+            # If labels already align with a schema edge, nothing to repair.
             if left_label and right_label and any(
                 e.src == left_label and e.rel == edge.rel and e.dst == right_label for e in self.graph.edges
             ):
                 continue
+
+            # Try to fill missing labels based on any schema edge with the same relationship.
             for schema_edge in self.graph.edges:
                 if schema_edge.rel != edge.rel:
                     continue
-                # align left alias label
-                if left_label is None:
-                    ir.nodes.setdefault(edge.left_alias, IRNode(alias=edge.left_alias, label=schema_edge.src))
-                    alias_labels[edge.left_alias] = schema_edge.src
-                    left_label = schema_edge.src
-                    changed = True
-                # align right alias label
-                if right_label is None:
-                    ir.nodes.setdefault(edge.right_alias, IRNode(alias=edge.right_alias, label=schema_edge.dst))
-                    alias_labels[edge.right_alias] = schema_edge.dst
-                    right_label = schema_edge.dst
-                    changed = True
-                # if right alias label mismatched but matching alias exists, swap
-                if left_label == schema_edge.src and right_label != schema_edge.dst:
-                    replacement = _alias_for_label(schema_edge.dst)
-                    if replacement:
-                        edge.right_alias = replacement
-                        right_label = schema_edge.dst
-                        changed = True
-                if right_label == schema_edge.dst and left_label != schema_edge.src:
-                    replacement = _alias_for_label(schema_edge.src)
-                    if replacement:
-                        edge.left_alias = replacement
+
+                # We only mutate missing labels to avoid collapsing distinct aliases that share a label.
+                left_matches = left_label is None or left_label == schema_edge.src
+                right_matches = right_label is None or right_label == schema_edge.dst
+                if left_matches and right_matches:
+                    if left_label is None:
+                        left_node.label = schema_edge.src
                         left_label = schema_edge.src
                         changed = True
-                # final check
-                if left_label == schema_edge.src and right_label == schema_edge.dst:
+                    if right_label is None:
+                        right_node.label = schema_edge.dst
+                        right_label = schema_edge.dst
+                        changed = True
                     break
         return changed
 
