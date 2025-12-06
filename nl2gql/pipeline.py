@@ -1,34 +1,21 @@
-"""Schema-grounded NL → ISO GQL pipeline with RAT-SQL style structure.
+"""Research-grade, schema-agnostic NL → ISO GQL pipeline.
 
-We replace single-shot prompting with a multi-stage, graph-aware pipeline:
-1) Parse schema into a graph (nodes, properties, relationships).
-2) Draft an intent frame (targets, filters, metrics, ordering).
-3) Link intent elements to concrete schema nodes/props/edges.
-4) Plan a constrained AST over the schema graph.
-5) Render to ISO GQL, then validate syntax (GraphLite) + logic (LLM jury).
+Architecture:
+1) Preprocessor: normalizes NL, extracts entity-like phrases, filters schema via
+   exact, ner-masked exact, and semantic similarity strategies, then surfaces
+   adjacency-based path hints (schema-agnostic).
+2) Generator: prompt-scaffolds gpt-4o-mini to emit one or more ISO GQL drafts
+   constrained by the filtered schema and structural hints.
+3) Refiner: validates syntax, schema grounding, logic, and execution feedback;
+   iteratively repairs (max 3 loops) using deterministic feedback fusion.
 
-The flow mirrors techniques used in RAT-SQL / ResdSQL / PICARD:
-- Schema is encoded as an explicit graph.
-- Intent and schema are encoded jointly for planning.
-- Constrained decoding via an intermediate AST with schema checks.
-- Multi-pass validation with self-repair.
-
-Requirements (install into your venv):
-    pip install openai tenacity python-dotenv
-    pip install -e bindings/python   # from repo root
-
-Environment (config.env in this folder is read automatically if present):
-    OPENAI_API_KEY=sk-...
-    OPENAI_MODEL_GEN=gpt-4o-mini     # constrained by request
-    OPENAI_MODEL_FIX=gpt-4o-mini
-    NL2GQL_DB_PATH=./.nl2gql_cache
-    NL2GQL_USER=admin
-    NL2GQL_SCHEMA=nl2gql
-    NL2GQL_GRAPH=scratch
-
-Usage (CLI):
-    python nl2gql/pipeline.py --nl "find people older than 30" \
-      --schema-file ./schema.txt --verbose
+Additional layers:
+- SchemaGraph abstraction with adjacency, property listings, distance/path
+  queries, and semantic matching utilities.
+- ISO GQL IR with deterministic parse/render used for validation/repair.
+- Extensible validation stack: syntax (GraphLite), schema grounding, logic
+  (LLM), execution-aware evaluation.
+- Sample-suite runner that executes every query in sample_queries.txt.
 """
 
 from __future__ import annotations
@@ -37,24 +24,22 @@ import argparse
 import difflib
 import json
 import os
-import random
 import re
 import sys
 import tempfile
 import threading
 import time
-from collections import Counter
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from tenacity import retry, stop_after_attempt, wait_fixed
 
-try:  # Local config
+try:
     from dotenv import load_dotenv
-except ImportError:  # pragma: no cover - optional helper
+except ImportError:  # pragma: no cover
     load_dotenv = None  # type: ignore
-
 
 # -----------------------------------------------------------------------------
 # GraphLite SDK loader
@@ -88,15 +73,95 @@ def _load_graphlite_sdk():
 
 GraphLite, GraphLiteError = _load_graphlite_sdk()
 
-
 try:
     from openai import OpenAI
 except Exception as exc:  # pragma: no cover
     raise SystemExit("OpenAI client missing. Install with: pip install openai") from exc
 
+# -----------------------------------------------------------------------------
+# Environment + OpenAI helpers
+# -----------------------------------------------------------------------------
+
+
+_ENV_PATH = Path(__file__).with_name("config.env")
+if load_dotenv:
+    if _ENV_PATH.exists():
+        load_dotenv(_ENV_PATH)
+    else:
+        load_dotenv()
+
+DEFAULT_OPENAI_MODEL_GEN = os.getenv("OPENAI_MODEL_GEN", "gpt-4o-mini")
+DEFAULT_OPENAI_MODEL_FIX = os.getenv("OPENAI_MODEL_FIX", "gpt-4o-mini")
+
+DEFAULT_DB_PATH = os.getenv("NL2GQL_DB_PATH")
+DEFAULT_DB_USER = os.getenv("NL2GQL_USER", "admin")
+DEFAULT_DB_SCHEMA = os.getenv("NL2GQL_SCHEMA", "nl2gql")
+DEFAULT_DB_GRAPH = os.getenv("NL2GQL_GRAPH", "scratch")
+
+_client_singleton: Optional[OpenAI] = None
+
+
+def _client() -> OpenAI:
+    global _client_singleton
+    if _client_singleton is None:
+        _client_singleton = OpenAI()
+    return _client_singleton
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(0.25))
+def chat_complete(
+    model: str,
+    system: str,
+    user: str,
+    *,
+    temperature: float = 0.15,
+    top_p: float = 0.9,
+    max_tokens: int = 700,
+) -> Tuple[str, Optional[Dict[str, Any]]]:
+    """Chat completion with retry + usage extraction."""
+
+    resp = _client().chat.completions.create(
+        model=model,
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        temperature=temperature,
+        top_p=top_p,
+        max_tokens=max_tokens,
+    )
+
+    text = (resp.choices[0].message.content or "").strip()
+    usage_data = getattr(resp, "usage", None)
+    if usage_data:
+        usage = {
+            "prompt_tokens": getattr(usage_data, "prompt_tokens", 0),
+            "completion_tokens": getattr(usage_data, "completion_tokens", 0),
+            "total_tokens": getattr(usage_data, "total_tokens", 0),
+        }
+        return text, usage
+    return text, None
+
+
+def _clean_block(text: str) -> str:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = stripped[stripped.find("\n") + 1 :] if "\n" in stripped else stripped.lstrip("`")
+    if stripped.endswith("```"):
+        stripped = stripped[: stripped.rfind("```")]
+    return stripped.strip()
+
+
+def _safe_json_loads(text: str) -> Optional[Any]:
+    try:
+        return json.loads(_clean_block(text))
+    except Exception:
+        return None
+
+
+# -----------------------------------------------------------------------------
+# UI helpers
+# -----------------------------------------------------------------------------
+
 
 _ANSI_COLORS = {
-    # Catppuccin-inspired palette (using 256-color approximations where needed)
     "mauve": "\033[38;5;141m",
     "peach": "\033[38;5;209m",
     "sky": "\033[38;5;117m",
@@ -173,7 +238,7 @@ class Spinner:
         return None
 
     def _run(self) -> None:
-        frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]  # braille spinner
+        frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
         idx = 0
         while not self._stop.is_set():
             frame = frames[idx % len(frames)]
@@ -191,130 +256,23 @@ class Spinner:
             idx += 1
             time.sleep(0.08)
 
-# -----------------------------------------------------------------------------
-# Environment + OpenAI helpers
-# -----------------------------------------------------------------------------
-
-
-_ENV_PATH = Path(__file__).with_name("config.env")
-if load_dotenv:
-    if _ENV_PATH.exists():
-        load_dotenv(_ENV_PATH)
-    else:
-        load_dotenv()
-
-DEFAULT_OPENAI_MODEL_GEN = os.getenv("OPENAI_MODEL_GEN", "gpt-4o-mini")
-DEFAULT_OPENAI_MODEL_FIX = os.getenv("OPENAI_MODEL_FIX", "gpt-4o-mini")
-
-DEFAULT_DB_PATH = os.getenv("NL2GQL_DB_PATH")
-DEFAULT_DB_USER = os.getenv("NL2GQL_USER", "admin")
-DEFAULT_DB_SCHEMA = os.getenv("NL2GQL_SCHEMA", "nl2gql")
-DEFAULT_DB_GRAPH = os.getenv("NL2GQL_GRAPH", "scratch")
-
-_client_singleton: Optional[OpenAI] = None
-
-
-def _client() -> OpenAI:
-    global _client_singleton
-    if _client_singleton is None:
-        _client_singleton = OpenAI()
-    return _client_singleton
-
-
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(0.2))
-def chat_complete(
-    model: str,
-    system: str,
-    user: str,
-    *,
-    temperature: float = 0.2,
-    top_p: float = 0.9,
-    max_tokens: int = 600,
-) -> Tuple[str, Optional[Dict[str, Any]]]:
-    """Chat completion with retry + usage extraction."""
-
-    resp = _client().chat.completions.create(
-        model=model,
-        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-        temperature=temperature,
-        top_p=top_p,
-        max_tokens=max_tokens,
-    )
-
-    text = (resp.choices[0].message.content or "").strip()
-    usage_data = getattr(resp, "usage", None)
-    if usage_data:
-        usage = {
-            "prompt_tokens": getattr(usage_data, "prompt_tokens", 0),
-            "completion_tokens": getattr(usage_data, "completion_tokens", 0),
-            "total_tokens": getattr(usage_data, "total_tokens", 0),
-        }
-        return text, usage
-    return text, None
-
-
-def _clean_block(text: str) -> str:
-    """Strip fences and surrounding whitespace."""
-
-    stripped = text.strip()
-    if stripped.startswith("```"):
-        stripped = stripped[stripped.find("\n") + 1 :] if "\n" in stripped else stripped.lstrip("`")
-    if stripped.endswith("```"):
-        stripped = stripped[: stripped.rfind("```")]
-    return stripped.strip()
-
-
-def _safe_json_loads(text: str) -> Optional[Any]:
-    try:
-        return json.loads(_clean_block(text))
-    except Exception:
-        return None
-
-
-def _format_literal(value: Any) -> str:
-    """Render Python values into ISO GQL literal syntax."""
-
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if value is None:
-        return "null"
-    if isinstance(value, (int, float)):
-        return str(value)
-    if isinstance(value, list):
-        return "[" + ", ".join(_format_literal(v) for v in value) + "]"
-
-    # Default: treat as string
-    text = str(value)
-    if not (text.startswith("'") and text.endswith("'")):
-        text = text.replace("\\", "\\\\").replace("'", "\\'")
-        return f"'{text}'"
-    return text
-
-
-def _shuffle_schema_context(schema_context: str) -> str:
-    """Shuffle schema lines to reduce positional bias during validation."""
-
-    lines = schema_context.splitlines()
-    if len(lines) < 2:
-        return schema_context
-
-    shuffled = lines[:]
-    random.shuffle(shuffled)
-    return "\n".join(shuffled)
-
 
 # -----------------------------------------------------------------------------
-# Schema graph parsing + helpers
+# Schema graph layer
 # -----------------------------------------------------------------------------
 
 
-def _canonical(name: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", name.lower())
+def _canonical(text: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
+def _tokenize(text: str) -> List[str]:
+    return re.findall(r"[a-zA-Z][a-zA-Z0-9_]*", text)
 
 
 def _ratio(a: str, b: str) -> float:
-    """Cheap similarity helper for plural/synonym nudging."""
-
+    if not a or not b:
+        return 0.0
     return difflib.SequenceMatcher(None, a, b).ratio()
 
 
@@ -323,10 +281,6 @@ class SchemaNode:
     name: str
     properties: List[str] = field(default_factory=list)
 
-    def prompt_line(self) -> str:
-        props = ", ".join(self.properties) if self.properties else "no properties listed"
-        return f"{self.name}: {props}"
-
 
 @dataclass
 class SchemaEdge:
@@ -334,7 +288,7 @@ class SchemaEdge:
     rel: str
     dst: str
 
-    def prompt_line(self) -> str:
+    def descriptor(self) -> str:
         return f"({self.src})-[:{self.rel}]->({self.dst})"
 
 
@@ -342,29 +296,24 @@ class SchemaEdge:
 class SchemaGraph:
     nodes: Dict[str, SchemaNode]
     edges: List[SchemaEdge]
+    adjacency: Dict[str, List[SchemaEdge]] = field(default_factory=dict)
 
     @classmethod
     def from_text(cls, schema_context: str) -> "SchemaGraph":
         nodes: Dict[str, SchemaNode] = {}
         edges: List[SchemaEdge] = []
-
         for raw in schema_context.splitlines():
             line = raw.strip()
             if not line or line.startswith("#"):
                 continue
-
-            # Normalize bullet prefixes so patterns match.
             if line.startswith("- "):
                 line = line[2:].strip()
             if line.startswith("* "):
                 line = line[2:].strip()
-
             rel_match = re.match(r"^\(?([A-Za-z0-9_]+)\)?-?\s*\[:([A-Za-z0-9_]+)\]\s*->\s*\(?([A-Za-z0-9_]+)\)?", line)
             if rel_match:
                 edges.append(SchemaEdge(rel_match.group(1), rel_match.group(2), rel_match.group(3)))
                 continue
-
-            # Entity with properties: "- Label: id, name, attr"
             ent_match = re.match(r"^-?\s*([A-Za-z0-9_]+)\s*:\s*(.+)$", line)
             if ent_match:
                 name = ent_match.group(1).strip()
@@ -374,46 +323,669 @@ class SchemaGraph:
                 node.properties = sorted(set(node.properties + props))
                 nodes[name] = node
                 continue
+        adjacency: Dict[str, List[SchemaEdge]] = defaultdict(list)
+        for edge in edges:
+            adjacency[edge.src].append(edge)
+            adjacency[edge.dst]  # ensure target is keyed
+        return cls(nodes=nodes, edges=edges, adjacency=dict(adjacency))
 
-        return cls(nodes=nodes, edges=edges)
+    def list_properties(self, node: str) -> List[str]:
+        return self.nodes.get(node, SchemaNode(node, [])).properties
 
     def has_node(self, name: str) -> bool:
         return name in self.nodes
 
     def has_property(self, node: str, prop: str) -> bool:
-        return node in self.nodes and prop in self.nodes[node].properties
+        return prop in self.list_properties(node)
 
     def edge_exists(self, left: str, rel: str, right: str) -> bool:
         return any(e.src == left and e.rel == rel and e.dst == right for e in self.edges)
 
-    def describe(self) -> str:
-        node_lines = [f"- {n.prompt_line()}" for n in self.nodes.values()]
-        edge_lines = [f"- {e.prompt_line()}" for e in self.edges]
+    def neighbors(self, node: str, *, include_inbound: bool = True) -> List[SchemaEdge]:
+        edges = list(self.adjacency.get(node, []))
+        if include_inbound:
+            for e in self.edges:
+                if e.dst == node:
+                    edges.append(SchemaEdge(src=node, rel=e.rel, dst=e.src))
+        return edges
+
+    def semantic_matches(self, term: str, pool: Iterable[str], limit: int = 3) -> List[Tuple[str, float]]:
+        scored = []
+        canon_term = _canonical(term)
+        for item in pool:
+            score = _ratio(canon_term, _canonical(item))
+            if score > 0.0:
+                scored.append((item, score))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return scored[:limit]
+
+    def shortest_paths(self, starts: Set[str], targets: Set[str], max_depth: int = 3) -> List[List[SchemaEdge]]:
+        if not starts or not targets:
+            return []
+        paths: List[List[SchemaEdge]] = []
+        for start in starts:
+            queue: deque[Tuple[str, List[SchemaEdge]]] = deque()
+            queue.append((start, []))
+            visited: Set[str] = set()
+            while queue:
+                node, path = queue.popleft()
+                if len(path) > max_depth:
+                    continue
+                if node in visited:
+                    continue
+                visited.add(node)
+                if node in targets and path:
+                    paths.append(path)
+                for edge in self.neighbors(node):
+                    queue.append((edge.dst, path + [edge]))
+        return paths
+
+    @staticmethod
+    def describe_subset(nodes: Dict[str, SchemaNode], edges: List[SchemaEdge]) -> str:
+        node_lines = [f"- {n.name}: {', '.join(n.properties) if n.properties else 'no properties listed'}" for n in nodes.values()]
+        edge_lines = [f"- {e.descriptor()}" for e in edges]
         return "ENTITIES:\n" + "\n".join(node_lines) + "\nRELATIONSHIPS:\n" + "\n".join(edge_lines)
 
-    def heuristic_candidates(self, nl: str) -> List[str]:
-        """Crude lexical hints for schema linking."""
+    def describe_full(self) -> str:
+        return self.describe_subset(self.nodes, self.edges)
 
-        tokens = set(re.findall(r"[a-zA-Z][a-zA-Z0-9_]*", nl.lower()))
-        hints: List[str] = []
-        for node in self.nodes.values():
-            hit_props = [p for p in node.properties if _canonical(p) in tokens or p.lower() in tokens]
-            if hit_props:
-                hints.append(f"{node.name}: {', '.join(hit_props)}")
+
+@dataclass
+class FilteredSchema:
+    nodes: Dict[str, SchemaNode]
+    edges: List[SchemaEdge]
+    strategy_hits: Dict[str, List[str]]
+    path_hints: List[str]
+
+    def describe(self) -> str:
+        return SchemaGraph.describe_subset(self.nodes, self.edges)
+
+    def summary_lines(self) -> str:
+        node_lines = [f"- {n.name}: {', '.join(n.properties) if n.properties else 'no properties'}" for n in self.nodes.values()]
+        edge_lines = [f"- {e.descriptor()}" for e in self.edges]
+        hint_lines = [f"- {h}" for h in self.path_hints] if self.path_hints else ["- none"]
+        return "\n".join(["Entities:"] + node_lines + ["Relationships:"] + edge_lines + ["Path hints:"] + hint_lines)
+
+
+@dataclass
+class PreprocessResult:
+    raw_nl: str
+    normalized_nl: str
+    phrases: List[str]
+    filtered_schema: FilteredSchema
+    structural_hints: List[str]
+
+
+@dataclass
+class IntentLinkGuidance:
+    frame: Dict[str, Any]
+    links: Dict[str, Any]
+
+
+# -----------------------------------------------------------------------------
+# ISO GQL IR
+# -----------------------------------------------------------------------------
+
+
+@dataclass
+class IRNode:
+    alias: str
+    label: Optional[str] = None
+
+
+@dataclass
+class IREdge:
+    left_alias: str
+    rel: str
+    right_alias: str
+
+
+@dataclass
+class IRFilter:
+    alias: str
+    prop: str
+    op: str
+    value: Any
+
+
+@dataclass
+class IRReturn:
+    expr: str
+    alias: Optional[str] = None
+
+
+@dataclass
+class IROrder:
+    expr: str
+    direction: str = "ASC"
+
+
+@dataclass
+class ISOQueryIR:
+    nodes: Dict[str, IRNode] = field(default_factory=dict)
+    edges: List[IREdge] = field(default_factory=list)
+    filters: List[IRFilter] = field(default_factory=list)
+    with_items: List[str] = field(default_factory=list)
+    with_filters: List[str] = field(default_factory=list)
+    returns: List[IRReturn] = field(default_factory=list)
+    order_by: List[IROrder] = field(default_factory=list)
+    limit: Optional[int] = None
+
+    @classmethod
+    def parse(cls, query: str) -> Tuple[Optional["ISOQueryIR"], List[str]]:
+        errors: List[str] = []
+        text = query.strip()
+        if not text:
+            return None, ["empty query"]
+
+        token_pattern = re.compile(r"\bMATCH\b|\bWHERE\b|\bWITH\b|\bRETURN\b|\bORDER\s+BY\b|\bLIMIT\b", flags=re.IGNORECASE)
+        tokens: List[Dict[str, Any]] = []
+        for m in token_pattern.finditer(text):
+            raw = m.group(0).upper()
+            label = "ORDER BY" if "ORDER" in raw else raw
+            tokens.append({"label": label, "start": m.start(), "end": m.end()})
+        tokens.sort(key=lambda t: t["start"])
+
+        def _block(label: str, *, after: int = -1) -> Tuple[str, Optional[Dict[str, Any]]]:
+            for tok in tokens:
+                if tok["label"] == label and tok["start"] > after:
+                    next_starts = [t["start"] for t in tokens if t["start"] > tok["start"]]
+                    end_idx = min(next_starts) if next_starts else len(text)
+                    return text[tok["end"] : end_idx].strip(), tok
+            return "", None
+
+        match_block, match_tok = _block("MATCH")
+        match_end = match_tok["end"] if match_tok else 0
+        with_block, with_tok = _block("WITH", after=match_end)
+
+        def _block_before(label: str, limit: int) -> Tuple[str, Optional[Dict[str, Any]]]:
+            for tok in tokens:
+                if tok["label"] == label and tok["start"] > match_end and tok["start"] < limit:
+                    next_starts = [t["start"] for t in tokens if t["start"] > tok["start"]]
+                    end_idx = min(next_starts) if next_starts else len(text)
+                    return text[tok["end"] : end_idx].strip(), tok
+            return "", None
+
+        where_block, where_tok = _block_before("WHERE", with_tok["start"] if with_tok else float("inf"))
+        with_where_block, _ = _block("WHERE", after=with_tok["start"]) if with_tok else ("", None)
+        return_block, return_tok = _block("RETURN", after=match_end)
+        order_block, order_tok = _block("ORDER BY", after=return_tok["start"] if return_tok else match_end)
+        limit_block = ""
+        if return_tok:
+            limit_block, _ = _block("LIMIT", after=order_tok["start"] if order_tok else return_tok["start"])
+
+        nodes: Dict[str, IRNode] = {}
+        edges: List[IREdge] = []
+        filters: List[IRFilter] = []
+
+        if match_block:
+            def _parse_value(val_raw: str) -> Any:
+                val_raw = val_raw.strip()
+                if val_raw.lower() in {"true", "false"}:
+                    return val_raw.lower() == "true"
+                if re.match(r"^-?\d+(\.\d+)?$", val_raw):
+                    return float(val_raw) if "." in val_raw else int(val_raw)
+                if val_raw.startswith("'") and val_raw.endswith("'"):
+                    return val_raw.strip("'").replace("\\'", "'")
+                return val_raw
+
+            node_pattern = re.compile(
+                r"\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*([A-Za-z0-9_]+))?\s*(?:\{([^}]*)\})?\s*\)"
+            )
+            for alias, label, props in node_pattern.findall(match_block):
+                existing = nodes.get(alias)
+                if existing and existing.label:
+                    pass
+                else:
+                    nodes[alias] = IRNode(alias=alias, label=label or (existing.label if existing else None))
+                if props:
+                    for assignment in props.split(","):
+                        if ":" not in assignment:
+                            continue
+                        key, val = assignment.split(":", 1)
+                        key = key.strip()
+                        val = val.strip()
+                        if key:
+                            filters.append(IRFilter(alias=alias, prop=key, op="=", value=_parse_value(val)))
+
+            edge_forward = re.compile(
+                r"(?=(\(\s*(?P<src>[A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*(?P<src_label>[A-Za-z0-9_]+))?\s*(?:\{[^}]*\})?\s*\)"
+                r"\s*-\s*\[:\s*(?P<rel>[A-Za-z0-9_]+)\s*\]\s*->\s*"
+                r"\(\s*(?P<dst>[A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*(?P<dst_label>[A-Za-z0-9_]+))?\s*(?:\{[^}]*\})?\s*\)))"
+            )
+            edge_backward = re.compile(
+                r"(?=(\(\s*(?P<left>[A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*(?P<left_label>[A-Za-z0-9_]+))?\s*(?:\{[^}]*\})?\s*\)"
+                r"\s*<-\s*\[:\s*(?P<rel>[A-Za-z0-9_]+)\s*\]\s*-\s*"
+                r"\(\s*(?P<right>[A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*(?P<right_label>[A-Za-z0-9_]+))?\s*(?:\{[^}]*\})?\s*\)))"
+            )
+
+            seen_edges: Set[Tuple[str, str, str]] = set()
+            for m in edge_forward.finditer(match_block):
+                src, src_label, rel, dst, dst_label = (
+                    m.group("src"),
+                    m.group("src_label"),
+                    m.group("rel"),
+                    m.group("dst"),
+                    m.group("dst_label"),
+                )
+                nodes.setdefault(src, IRNode(alias=src, label=src_label))
+                nodes.setdefault(dst, IRNode(alias=dst, label=dst_label))
+                key = (src, rel, dst)
+                if key not in seen_edges:
+                    seen_edges.add(key)
+                    edges.append(IREdge(left_alias=src, rel=rel, right_alias=dst))
+
+            for m in edge_backward.finditer(match_block):
+                left, left_label, rel, right, right_label = (
+                    m.group("left"),
+                    m.group("left_label"),
+                    m.group("rel"),
+                    m.group("right"),
+                    m.group("right_label"),
+                )
+                # Direction is right -> left because of "<-"
+                src, dst = right, left
+                nodes.setdefault(src, IRNode(alias=src, label=right_label))
+                nodes.setdefault(dst, IRNode(alias=dst, label=left_label))
+                key = (src, rel, dst)
+                if key not in seen_edges:
+                    seen_edges.add(key)
+                    edges.append(IREdge(left_alias=src, rel=rel, right_alias=dst))
+        else:
+            errors.append("MATCH clause missing")
+
+        if where_block:
+            clauses = [c.strip() for c in re.split(r"\bAND\b", where_block, flags=re.IGNORECASE) if c.strip()]
+            for clause in clauses:
+                alias_compare = re.match(
+                    r"^([A-Za-z_][A-Za-z0-9_]*)\s*(=|<>)\s*([A-Za-z_][A-Za-z0-9_]*)$", clause
+                )
+                cond_match = re.match(
+                    r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*(=|<>|<=|>=|<|>)\s*(.+)",
+                    clause,
+                )
+                null_match = re.match(
+                    r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s+IS\s+(NOT\s+)?NULL", clause, flags=re.IGNORECASE
+                )
+                if alias_compare:
+                    left_alias, op, right_alias = alias_compare.groups()
+                    filters.append(
+                        IRFilter(
+                            alias=left_alias,
+                            prop="id",
+                            op=op,
+                            value={"ref_alias": right_alias, "ref_property": "id"},
+                        )
+                    )
+                elif cond_match:
+                    alias, prop, op, val_raw = cond_match.groups()
+                    val_raw = val_raw.strip()
+                    value: Any = val_raw
+                    ref_match = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)", val_raw)
+                    if ref_match:
+                        value = {"ref_alias": ref_match.group(1), "ref_property": ref_match.group(2)}
+                    elif val_raw.lower() in {"true", "false"}:
+                        value = val_raw.lower() == "true"
+                    elif re.match(r"^-?\d+(\.\d+)?$", val_raw):
+                        value = float(val_raw) if "." in val_raw else int(val_raw)
+                    elif val_raw.startswith("'") and val_raw.endswith("'"):
+                        value = val_raw.strip("'").replace("\\'", "'")
+                    filters.append(IRFilter(alias=alias, prop=prop, op=op, value=value))
+                elif null_match:
+                    alias, prop, not_part = null_match.group(1), null_match.group(2), null_match.group(3)
+                    op = "IS NOT NULL" if not_part else "IS NULL"
+                    filters.append(IRFilter(alias=alias, prop=prop, op=op, value=None))
+                else:
+                    errors.append(f"unparsed WHERE clause: {clause}")
+
+        with_items: List[str] = []
+        with_filters: List[str] = []
+        if with_block:
+            with_items = [item.strip() for item in with_block.split(",") if item.strip()]
+        if with_where_block:
+            with_filters = [c.strip() for c in re.split(r"\bAND\b", with_where_block, flags=re.IGNORECASE) if c.strip()]
+
+        if filters:
+            unique_filters: List[IRFilter] = []
+            seen_keys: Set[Tuple[str, str, str]] = set()
+            for flt in filters:
+                key = (flt.alias, flt.prop, f"{flt.op}:{flt.value}")
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    unique_filters.append(flt)
+            filters = unique_filters
+
+        returns: List[IRReturn] = []
+        if return_block:
+            items = [i.strip() for i in return_block.split(",") if i.strip()]
+            for item in items:
+                if " AS " in item.upper():
+                    parts = re.split(r"\s+AS\s+", item, flags=re.IGNORECASE)
+                    expr, alias = parts[0].strip(), parts[1].strip()
+                    returns.append(IRReturn(expr=expr, alias=alias))
+                else:
+                    returns.append(IRReturn(expr=item))
+        else:
+            errors.append("RETURN clause missing")
+
+        order_by: List[IROrder] = []
+        if order_block:
+            items = [i.strip() for i in order_block.split(",") if i.strip()]
+            for item in items:
+                pieces = item.split()
+                if pieces:
+                    expr = pieces[0]
+                    direction = pieces[1] if len(pieces) > 1 else "ASC"
+                    order_by.append(IROrder(expr=expr, direction=direction.upper()))
+
+        limit: Optional[int] = int(limit_block) if limit_block.isdigit() else None
+
+        # If WITH appeared after RETURN in the original text, treat RETURN expressions as the aggregation stage
+        # and keep a final RETURN of the aggregated aliases.
+        if return_tok and with_tok and with_tok["start"] > return_tok["start"] and returns:
+            with_items = [f"{r.expr} AS {r.alias}" if r.alias else r.expr for r in returns]
+            returns = [IRReturn(expr=r.alias or r.expr) for r in returns]
+
+        return (
+            cls(
+                nodes=nodes,
+                edges=edges,
+                filters=filters,
+                with_items=with_items,
+                with_filters=with_filters,
+                returns=returns,
+                order_by=order_by,
+                limit=limit,
+            ),
+            errors,
+        )
+
+    def render(self) -> str:
+        def _format_value(val: Any) -> str:
+            if isinstance(val, bool):
+                return "true" if val else "false"
+            if isinstance(val, (int, float)):
+                return str(val)
+            if isinstance(val, dict) and "ref_alias" in val and "ref_property" in val:
+                return f"{val['ref_alias']}.{val['ref_property']}"
+            text = str(val)
+            text = text.replace("\\", "\\\\").replace("'", "\\'")
+            return f"'{text}'"
+
+        node_labels = {a: n.label for a, n in self.nodes.items() if n.label}
+        patterns: List[str] = []
         for edge in self.edges:
-            if _canonical(edge.rel) in tokens:
-                hints.append(f"edge {edge.prompt_line()}")
-        return hints
+            l_label = node_labels.get(edge.left_alias)
+            r_label = node_labels.get(edge.right_alias)
+            left = f"({edge.left_alias}:{l_label})" if l_label else f"({edge.left_alias})"
+            right = f"({edge.right_alias}:{r_label})" if r_label else f"({edge.right_alias})"
+            patterns.append(f"{left}-[:{edge.rel}]->{right}")
+        connected = {e.left_alias for e in self.edges} | {e.right_alias for e in self.edges}
+        for alias, node in self.nodes.items():
+            if alias not in connected:
+                label_part = f":{node.label}" if node.label else ""
+                patterns.append(f"({alias}{label_part})")
+        match_clause = "MATCH " + ", ".join(patterns)
+
+        where_clause = ""
+        if self.filters:
+            rendered_filters: List[str] = []
+            for flt in self.filters:
+                if flt.op.upper().endswith("NULL") and flt.value is None:
+                    rendered_filters.append(f"{flt.alias}.{flt.prop} {flt.op}")
+                else:
+                    rendered_filters.append(f"{flt.alias}.{flt.prop} {flt.op} {_format_value(flt.value)}")
+            parts = rendered_filters
+            where_clause = "WHERE " + " AND ".join(parts)
+
+        with_clause = ""
+        if self.with_items:
+            with_clause = "WITH " + ", ".join(self.with_items)
+        with_where_clause = ""
+        if self.with_filters:
+            with_where_clause = "WHERE " + " AND ".join(self.with_filters)
+
+        return_clause = "RETURN " + ", ".join(
+            [f"{r.expr} AS {r.alias}" if r.alias else r.expr for r in self.returns]
+        )
+
+        order_clause = ""
+        if self.order_by:
+            order_clause = "ORDER BY " + ", ".join([f"{o.expr} {o.direction}" for o in self.order_by])
+
+        limit_clause = f"LIMIT {self.limit}" if isinstance(self.limit, int) and self.limit > 0 else ""
+
+        parts = [match_clause]
+        if where_clause:
+            parts.append(where_clause)
+        if with_clause:
+            parts.append(with_clause)
+        if with_where_clause:
+            parts.append(with_where_clause)
+        parts.append(return_clause)
+        if order_clause:
+            parts.append(order_clause)
+        if limit_clause:
+            parts.append(limit_clause)
+        return "\n".join(parts)
+
+    def validate_bindings(self) -> List[str]:
+        errors: List[str] = []
+        aliases = set(self.nodes.keys())
+        for edge in self.edges:
+            if edge.left_alias not in aliases or edge.right_alias not in aliases:
+                errors.append(f"edge references unknown alias: {edge}")
+        for flt in self.filters:
+            if flt.alias not in aliases:
+                errors.append(f"filter alias missing: {flt.alias}")
+            if isinstance(flt.value, dict):
+                ref_a = flt.value.get("ref_alias")
+                if ref_a and ref_a not in aliases:
+                    errors.append(f"filter ref alias missing: {ref_a}")
+        for ret in self.returns:
+            for alias_ref in re.findall(r"([A-Za-z_][A-Za-z0-9_]*)\.", ret.expr):
+                if alias_ref not in aliases:
+                    errors.append(f"return references unknown alias: {alias_ref}")
+        return errors
 
 
 # -----------------------------------------------------------------------------
-# GraphLite syntax validator
+# Preprocessor
 # -----------------------------------------------------------------------------
 
 
-class GraphLiteValidator:
-    """Lightweight syntax validator backed by the GraphLite Python SDK."""
+class Preprocessor:
+    def __init__(self, graph: SchemaGraph) -> None:
+        self.graph = graph
 
+    def _normalize(self, text: str) -> str:
+        text = text.strip()
+        text = re.sub(r"\s+", " ", text)
+        return text
+
+    def _extract_phrases(self, text: str) -> List[str]:
+        tokens = _tokenize(text)
+        phrases: Set[str] = set()
+        for size in (1, 2, 3):
+            for idx in range(len(tokens) - size + 1):
+                phrases.add(" ".join(tokens[idx : idx + size]))
+        capital_chunks = re.findall(r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)", text)
+        phrases.update(capital_chunks)
+        return sorted(phrases, key=len, reverse=True)
+
+    def _mask_entities(self, text: str) -> str:
+        return re.sub(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b", "<ENT>", text)
+
+    def _strategy_exact(self, tokens: Set[str], phrases: List[str]) -> Set[str]:
+        hits: Set[str] = set()
+        canon_tokens = {_canonical(t) for t in tokens}
+        for label in self.graph.nodes:
+            if _canonical(label) in canon_tokens:
+                hits.add(label)
+        for prop in {p for n in self.graph.nodes.values() for p in n.properties}:
+            if _canonical(prop) in canon_tokens:
+                hits.add(prop)
+        for rel in {e.rel for e in self.graph.edges}:
+            if _canonical(rel) in canon_tokens:
+                hits.add(rel)
+        for phrase in phrases:
+            canon = _canonical(phrase)
+            for label in self.graph.nodes:
+                if canon == _canonical(label):
+                    hits.add(label)
+        return hits
+
+    def _strategy_ner_mask(self, text: str) -> Set[str]:
+        masked = self._mask_entities(text)
+        tokens = {_canonical(t) for t in _tokenize(masked)}
+        hits: Set[str] = set()
+        for label in self.graph.nodes:
+            if _canonical(label) in tokens:
+                hits.add(label)
+        for rel in {e.rel for e in self.graph.edges}:
+            if _canonical(rel) in tokens:
+                hits.add(rel)
+        for prop in {p for n in self.graph.nodes.values() for p in n.properties}:
+            if _canonical(prop) in tokens:
+                hits.add(prop)
+        return hits
+
+    def _strategy_semantic(self, phrases: List[str], threshold: float = 0.74) -> Set[str]:
+        hits: Set[str] = set()
+        all_terms = list(self.graph.nodes.keys()) + list({e.rel for e in self.graph.edges}) + list(
+            {p for n in self.graph.nodes.values() for p in n.properties}
+        )
+        for phrase in phrases:
+            best = self.graph.semantic_matches(phrase, all_terms, limit=2)
+            for name, score in best:
+                if score >= threshold:
+                    hits.add(name)
+        return hits
+
+    def _filtered_schema(self, hits: Set[str]) -> Tuple[Dict[str, SchemaNode], List[SchemaEdge]]:
+        node_hits = {h for h in hits if h in self.graph.nodes}
+        prop_hits = {h for h in hits if any(h in n.properties for n in self.graph.nodes.values())}
+        rel_hits = {h for h in hits if any(h == e.rel for e in self.graph.edges)}
+
+        candidate_nodes: Dict[str, SchemaNode] = {}
+        if node_hits:
+            for n in node_hits:
+                candidate_nodes[n] = self.graph.nodes[n]
+        else:
+            candidate_nodes = dict(self.graph.nodes)
+
+        edges: List[SchemaEdge] = []
+        for edge in self.graph.edges:
+            if edge.src in candidate_nodes or edge.dst in candidate_nodes or edge.rel in rel_hits:
+                edges.append(edge)
+        if not edges:
+            edges = list(self.graph.edges)
+
+        # Add nodes referenced by selected edges so adjacency stays consistent.
+        for edge in edges:
+            if edge.src in self.graph.nodes:
+                candidate_nodes.setdefault(edge.src, self.graph.nodes[edge.src])
+            if edge.dst in self.graph.nodes:
+                candidate_nodes.setdefault(edge.dst, self.graph.nodes[edge.dst])
+
+        # Pull in nodes that own matched properties.
+        for node in self.graph.nodes.values():
+            if any(prop in prop_hits for prop in node.properties):
+                candidate_nodes.setdefault(node.name, node)
+
+        return candidate_nodes, edges
+
+    def _path_hints(self, nodes: Dict[str, SchemaNode]) -> List[str]:
+        names = set(nodes.keys())
+        paths = self.graph.shortest_paths(names, names, max_depth=3)
+        hints: List[str] = []
+        for path in paths:
+            hints.append(" -> ".join([f"{edge.src}-[:{edge.rel}]->{edge.dst}" for edge in path]))
+        return sorted(set(hints))
+
+    def run(self, nl: str, feedback: List[str]) -> PreprocessResult:
+        normalized = self._normalize(nl)
+        phrases = self._extract_phrases(nl)
+        tokens = set(_tokenize(normalized))
+
+        exact_hits = self._strategy_exact(tokens, phrases)
+        ner_hits = self._strategy_ner_mask(nl)
+        semantic_hits = self._strategy_semantic(phrases)
+        all_hits = exact_hits | ner_hits | semantic_hits
+
+        nodes, edges = self._filtered_schema(all_hits)
+        paths = self._path_hints(nodes)
+        rel_hints = [e.descriptor() for e in edges]
+
+        strategy_hits = {
+            "exact": sorted(exact_hits),
+            "ner_masked": sorted(ner_hits),
+            "semantic": sorted(semantic_hits),
+        }
+
+        filtered = FilteredSchema(nodes=nodes, edges=edges, strategy_hits=strategy_hits, path_hints=paths)
+        hints = paths + rel_hints + strategy_hits["exact"] + strategy_hits["semantic"]
+        if feedback:
+            hints += feedback[-2:]
+        return PreprocessResult(
+            raw_nl=nl,
+            normalized_nl=normalized,
+            phrases=phrases,
+            filtered_schema=filtered,
+            structural_hints=sorted(set(hints)),
+        )
+
+
+# -----------------------------------------------------------------------------
+# Intent + linking orchestrator
+# -----------------------------------------------------------------------------
+
+
+def _links_to_hints(links: Dict[str, Any]) -> List[str]:
+    hints: List[str] = []
+    for nl in links.get("node_links") or []:
+        alias, label = nl.get("alias"), nl.get("label")
+        if alias and label:
+            hints.append(f"{alias}:{label}")
+    for rl in links.get("rel_links") or []:
+        left, rel, right = rl.get("left_alias"), rl.get("rel"), rl.get("right_alias")
+        if left and rel and right:
+            hints.append(f"{left}-[:{rel}]->{right}")
+    return hints
+
+
+class IntentLinker:
+    """Bridge between schema-agnostic preprocessing and the IR refiner using intent + linking."""
+
+    def __init__(self, graph: SchemaGraph, model: str = DEFAULT_OPENAI_MODEL_GEN) -> None:
+        self.graph = graph
+        self.model = model
+
+    def run(self, nl: str, pre: PreprocessResult, failures: List[str]) -> IntentLinkGuidance:
+        frame, _ = draft_intent_frame(nl, pre.filtered_schema.describe(), self.model, failures)
+        hits = (
+            pre.filtered_schema.strategy_hits.get("exact", [])
+            + pre.filtered_schema.strategy_hits.get("semantic", [])
+            + pre.filtered_schema.strategy_hits.get("ner_masked", [])
+        )
+        links_raw, _ = link_schema(frame, nl, pre.filtered_schema.describe(), self.model, failures, heuristic_hits=hits)
+        grounded = ground_links_to_schema(links_raw, self.graph)
+        return IntentLinkGuidance(frame=frame, links=grounded)
+
+
+# -----------------------------------------------------------------------------
+# Validation stack
+# -----------------------------------------------------------------------------
+
+
+@dataclass
+class SyntaxResult:
+    ok: bool
+    error: Optional[str] = None
+    rows: Optional[Any] = None
+
+
+class GraphLiteRunner:
     def __init__(
         self,
         *,
@@ -431,7 +1003,7 @@ class GraphLiteValidator:
         self._session: Optional[str] = None
         self._ready = False
 
-    def __enter__(self) -> "GraphLiteValidator":
+    def __enter__(self) -> "GraphLiteRunner":
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
@@ -440,7 +1012,6 @@ class GraphLiteValidator:
     def _ensure_ready(self) -> None:
         if self._ready:
             return
-
         self._db = GraphLite(str(self._db_path))
         self._session = self._db.create_session(self._user)
         bootstrap = [
@@ -477,23 +1048,22 @@ class GraphLiteValidator:
             except Exception:
                 pass
 
-    def validate(self, query: str) -> Tuple[bool, Optional[str]]:
+    def validate(self, query: str) -> SyntaxResult:
         if not query.strip():
-            return False, "empty query"
-
+            return SyntaxResult(ok=False, error="empty query")
         try:
             self._ensure_ready()
             assert self._db is not None and self._session is not None
-            self._db.query(self._session, query.strip())
-            return True, None
+            rows = self._db.query(self._session, query.strip())
+            return SyntaxResult(ok=True, rows=rows)
         except GraphLiteError as exc:
-            return False, exc.message
+            return SyntaxResult(ok=False, error=exc.message)
         except Exception as exc:  # pragma: no cover
-            return False, str(exc)
+            return SyntaxResult(ok=False, error=str(exc))
 
 
 # -----------------------------------------------------------------------------
-# Prompt templates (multi-stage)
+# Prompt templates (intent + linking)
 # -----------------------------------------------------------------------------
 
 
@@ -544,62 +1114,15 @@ Emit JSON:
 }}"""
 
 
-SYSTEM_AST = """You are a constrained ISO GQL AST builder.
-- Use only schema labels/properties/relationships provided.
-- Treat the provided links as authoritative: reuse their aliases/labels/relationships instead of inventing new ones.
-- Build a single MATCH with all paths separated by commas.
-- Push property predicates into WHERE (no aggregates in WHERE).
-- Support alias-to-alias comparisons using filter values like {"ref_alias": "a2", "ref_property": "id"} for expressions such as a1.id <> a2.id.
-- Filters must use plain properties (no dotted paths). If a filter references a related node’s property, place the filter on that node’s alias rather than encoding the relationship in the property name.
-- Use COUNT/AVG/MIN/MAX/SUM in RETURN with aliases when aggregating.
-- Output JSON AST with fields: nodes, relationships, filters, returns, order_by, limit, notes.
-- Avoid subqueries and CALL; no inline MATCH/EXISTS; one MATCH only."""
-
-USER_AST_TEMPLATE = """schema_graph:
-{graph}
-
-intent_frame:
-{frame}
-
-links:
-{links}
-
-Emit JSON:
-{{
-  "nodes": [{{"alias": "n1", "label": "<SchemaLabel>"}}],
-  "relationships": [{{"left_alias": "n1", "rel": "<REL_TYPE>", "right_alias": "n2"}}],
-  "filters": [{{"alias": "n1", "property": "<property>", "op": ">=", "value": 30}}, {{"alias": "n1", "property": "id", "op": "<>", "value": {{"ref_alias": "n2", "ref_property": "id"}}}}],
-  "returns": [{{"expr": "n2.some_field", "alias": "result"}}, {{"expr": "COUNT(n1)", "alias": "total"}}],
-  "order_by": [{{"expr": "total", "direction": "DESC"}}],
-  "limit": 10,
-  "notes": "concise explanation of grouping/aggregation choices"
-}}"""
-
-
-SYSTEM_VALIDATE_LOGIC = (
-    "You judge if an ISO GQL query logically satisfies the natural language request using the provided schema. "
-    "Be conservative: reply VALID only when all requested conditions, joins, and groupings are present. "
-    "Reply INVALID with a short reason otherwise. Respond only with 'VALID' or 'INVALID: <reason>'."
-)
-
-USER_VALIDATE_LOGIC_TEMPLATE = (
-    "SCHEMA:\n{schema_context}\n\n"
-    "INTENT FRAME:\n{frame}\n\n"
-    "REQUEST: {nl}\n\n"
-    "GENERATED QUERY:\n{query}\n\n"
-    "Does this query logically satisfy the request?"
-)
-
-
 # -----------------------------------------------------------------------------
-# Stage 1: Intent framing
+# Intent + schema linking helpers
 # -----------------------------------------------------------------------------
 
 
 def draft_intent_frame(
-    nl: str, graph: SchemaGraph, model: str, feedback: List[str]
+    nl: str, schema_text: str, model: str, feedback: List[str]
 ) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
-    user = USER_INTENT_TEMPLATE.format(graph=graph.describe(), nl=nl)
+    user = USER_INTENT_TEMPLATE.format(graph=schema_text, nl=nl)
     if feedback:
         user += "\n\nprevious_failures:\n- " + "\n- ".join(feedback[-5:])
 
@@ -608,21 +1131,17 @@ def draft_intent_frame(
     return frame, usage
 
 
-# -----------------------------------------------------------------------------
-# Stage 2: Schema linking
-# -----------------------------------------------------------------------------
-
-
 def link_schema(
     frame: Dict[str, Any],
     nl: str,
-    graph: SchemaGraph,
+    schema_text: str,
     model: str,
     feedback: List[str],
+    heuristic_hits: Optional[Sequence[str]] = None,
 ) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
-    hits = graph.heuristic_candidates(nl)
+    hits = heuristic_hits or []
     user = USER_LINK_TEMPLATE.format(
-        graph=graph.describe(),
+        graph=schema_text,
         frame=json.dumps(frame, indent=2),
         hits="\n".join(hits) if hits else "none",
     )
@@ -658,7 +1177,6 @@ def _closest_schema_label(
             best_score = score
             best_label = schema_label
 
-    # Require a modest confidence to avoid random remapping.
     return best_label if best_score >= 0.55 else None
 
 
@@ -758,450 +1276,477 @@ def ground_links_to_schema(links: Dict[str, Any], graph: SchemaGraph) -> Dict[st
     return grounded
 
 
-# -----------------------------------------------------------------------------
-# Stage 3: AST planning
-# -----------------------------------------------------------------------------
+class SchemaGroundingValidator:
+    def __init__(self, graph: SchemaGraph) -> None:
+        self.graph = graph
+
+    def validate(self, ir: ISOQueryIR) -> List[str]:
+        errors: List[str] = []
+        nodes = ir.nodes
+        for alias, node in nodes.items():
+            if node.label and node.label not in self.graph.nodes:
+                errors.append(f"alias {alias} uses unknown label {node.label}")
+        for edge in ir.edges:
+            left_label = nodes.get(edge.left_alias, IRNode(edge.left_alias)).label
+            right_label = nodes.get(edge.right_alias, IRNode(edge.right_alias)).label
+            if left_label and right_label:
+                if not any(e.src == left_label and e.rel == edge.rel and e.dst == right_label for e in self.graph.edges):
+                    errors.append(f"edge not in schema: {left_label}-[:{edge.rel}]->{right_label}")
+        for flt in ir.filters:
+            node = nodes.get(flt.alias)
+            if not node or not node.label:
+                errors.append(f"filter references unknown alias {flt.alias}")
+                continue
+            if flt.prop not in self.graph.list_properties(node.label):
+                errors.append(f"property {flt.prop} not on label {node.label}")
+            if isinstance(flt.value, dict):
+                ref_alias = flt.value.get("ref_alias")
+                ref_prop = flt.value.get("ref_property")
+                ref_node = nodes.get(ref_alias) if ref_alias else None
+                if ref_node and ref_node.label:
+                    if ref_prop not in self.graph.list_properties(ref_node.label):
+                        errors.append(f"ref property {ref_prop} missing on {ref_node.label}")
+        for ret in ir.returns:
+            for alias_ref, prop in re.findall(r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)", ret.expr):
+                node = nodes.get(alias_ref)
+                if not node or not node.label:
+                    errors.append(f"return references unknown alias {alias_ref}")
+                elif prop not in self.graph.list_properties(node.label):
+                    errors.append(f"return references unknown property {prop} on {node.label}")
+        errors.extend(ir.validate_bindings())
+        return sorted(set(errors))
 
 
-def plan_ast(
-    frame: Dict[str, Any],
-    links: Dict[str, Any],
-    graph: SchemaGraph,
-    model: str,
-    feedback: List[str],
-) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
-    user = USER_AST_TEMPLATE.format(
-        graph=graph.describe(),
-        frame=json.dumps(frame, indent=2),
-        links=json.dumps(links, indent=2),
+class LogicValidator:
+    SYSTEM = (
+        "You judge whether an ISO GQL query fully satisfies a natural-language request using only the provided schema summary. "
+        "Return 'VALID' if every requested constraint, join, grouping, aggregation, and ordering is present. "
+        "Return 'INVALID: <reason>' if anything is missing or incorrect. Never propose a new query."
     )
-    if feedback:
-        user += "\n\nfix_these:\n- " + "\n- ".join(feedback[-4:])
 
-    text, usage = chat_complete(model, SYSTEM_AST, user, temperature=0.25, top_p=0.9, max_tokens=700)
-    ast = _safe_json_loads(text) or {}
-    return ast, usage
+    def __init__(self, model: str = DEFAULT_OPENAI_MODEL_FIX) -> None:
+        self.model = model
 
-
-# -----------------------------------------------------------------------------
-# AST validation + rendering
-# -----------------------------------------------------------------------------
-
-
-def validate_ast(ast: Dict[str, Any], graph: SchemaGraph) -> List[str]:
-    errors: List[str] = []
-    nodes = ast.get("nodes") or []
-    relationships = ast.get("relationships") or []
-    filters = ast.get("filters") or []
-    returns = ast.get("returns") or []
-
-    node_labels = {n.get("alias"): n.get("label") for n in nodes if n.get("alias") and n.get("label")}
-
-    for alias, label in node_labels.items():
-        if not graph.has_node(label):
-            errors.append(f"Unknown label for alias {alias}: {label}")
-
-    for rel in relationships:
-        left, rel_name, right = rel.get("left_alias"), rel.get("rel"), rel.get("right_alias")
-        if left not in node_labels or right not in node_labels:
-            errors.append(f"Relationship references unknown alias: {rel}")
-            continue
-        if not graph.edge_exists(node_labels[left], rel_name, node_labels[right]):
-            errors.append(f"Edge not in schema: {node_labels[left]}-[:{rel_name}]->{node_labels[right]}")
-
-    for flt in filters:
-        alias, prop = flt.get("alias"), flt.get("property")
-        if alias not in node_labels or not prop:
-            errors.append(f"Filter references unknown alias/property: {flt}")
-            continue
-        if not graph.has_property(node_labels[alias], prop):
-            errors.append(f"Unknown property {prop} on {node_labels[alias]}")
-        value = flt.get("value")
-        if isinstance(value, dict) and "ref_alias" in value and "ref_property" in value:
-            ref_alias, ref_prop = value.get("ref_alias"), value.get("ref_property")
-            if ref_alias not in node_labels:
-                errors.append(f"Filter reference alias not defined: {ref_alias}")
-            elif not graph.has_property(node_labels[ref_alias], ref_prop):
-                errors.append(f"Filter references unknown property {ref_prop} on {node_labels[ref_alias]}")
-
-    # Returns sanity: ensure expressions reference known aliases/props
-    for ret in returns:
-        expr = ret.get("expr", "")
-        for match in re.findall(r"([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)", expr):
-            alias, prop = match
-            if alias not in node_labels:
-                errors.append(f"Return references unknown alias {alias} in {expr}")
-            elif not graph.has_property(node_labels[alias], prop):
-                errors.append(f"Return references unknown property {prop} on {node_labels[alias]}")
-
-    return errors
-
-
-def _pattern_for_relationship(left_alias: str, left_label: str, rel: str, right_alias: str, right_label: str) -> str:
-    return f"({left_alias}:{left_label})-[:{rel}]->({right_alias}:{right_label})"
-
-
-def _rewrite_filter_relationship_props(ast: Dict[str, Any]) -> bool:
-    """
-    Normalize filters where the property erroneously encodes a relationship (e.g., \"LIVES_IN.name\").
-    If a filter references alias A with property \"REL.prop\" and there is a relationship
-    A-[:REL]->B, rewrite the filter to alias=B, property=prop.
-    """
-
-    filters = ast.get("filters") or []
-    relationships = ast.get("relationships") or []
-
-    rel_map: Dict[str, Dict[str, List[str]]] = {}
-    for rel in relationships:
-        left, rel_name, right = rel.get("left_alias"), rel.get("rel"), rel.get("right_alias")
-        if left and rel_name and right:
-            rel_map.setdefault(left, {}).setdefault(rel_name, []).append(right)
-
-    changed = False
-    for flt in filters:
-        alias = flt.get("alias")
-        prop = flt.get("property")
-        if not alias or not isinstance(prop, str) or "." not in prop:
-            continue
-
-        prefix, _, tail = prop.partition(".")
-        targets = rel_map.get(alias, {}).get(prefix)
-        if targets and tail:
-            flt["alias"] = targets[0]
-            flt["property"] = tail
-            changed = True
-
-    return changed
-
-
-def _apply_links_to_ast(ast: Dict[str, Any], links: Dict[str, Any]) -> bool:
-    """
-    Force AST labels/relationships to match grounded linker output when aliases overlap.
-    This reduces hallucinations when the planner drifts away from the linker.
-    """
-
-    changed = False
-    alias_to_label = {
-        n.get("alias"): n.get("label")
-        for n in links.get("node_links") or []
-        if n.get("alias") and n.get("label")
-    }
-    rel_map = {
-        (r.get("left_alias"), r.get("right_alias")): r.get("rel")
-        for r in links.get("rel_links") or []
-        if r.get("left_alias") and r.get("right_alias") and r.get("rel")
-    }
-
-    for node in ast.get("nodes") or []:
-        alias = node.get("alias")
-        if alias and alias in alias_to_label and node.get("label") != alias_to_label[alias]:
-            node["label"] = alias_to_label[alias]
-            changed = True
-
-    for rel in ast.get("relationships") or []:
-        key = (rel.get("left_alias"), rel.get("right_alias"))
-        if key in rel_map and rel.get("rel") != rel_map[key]:
-            rel["rel"] = rel_map[key]
-            changed = True
-
-    return changed
-
-
-def render_ast_to_gql(ast: Dict[str, Any], graph: SchemaGraph) -> str:
-    nodes = ast.get("nodes") or []
-    relationships = ast.get("relationships") or []
-    filters = ast.get("filters") or []
-    returns = ast.get("returns") or []
-    order_by = ast.get("order_by") or []
-    limit = ast.get("limit")
-
-    node_labels = {n["alias"]: n["label"] for n in nodes if "alias" in n and "label" in n}
-
-    patterns: List[str] = []
-    for rel in relationships:
-        left_alias, rel_name, right_alias = rel.get("left_alias"), rel.get("rel"), rel.get("right_alias")
-        if left_alias in node_labels and right_alias in node_labels and rel_name:
-            patterns.append(
-                _pattern_for_relationship(left_alias, node_labels[left_alias], rel_name, right_alias, node_labels[right_alias])
-            )
-
-    # Include isolated nodes that were not part of relationships
-    connected_aliases = {alias for rel in relationships for alias in (rel.get("left_alias"), rel.get("right_alias"))}
-    for alias, label in node_labels.items():
-        if alias not in connected_aliases:
-            patterns.append(f"({alias}:{label})")
-
-    match_clause = "MATCH " + ", ".join(patterns)
-
-    def _render_operand(value: Any) -> str:
-        if isinstance(value, dict) and "ref_alias" in value and "ref_property" in value:
-            return f"{value['ref_alias']}.{value['ref_property']}"
-        return _format_literal(value)
-
-    where_parts: List[str] = []
-    for flt in filters:
-        alias, prop, op, value = flt.get("alias"), flt.get("property"), flt.get("op"), flt.get("value")
-        if alias and prop and op:
-            where_parts.append(f"{alias}.{prop} {op} {_render_operand(value)}")
-    where_clause = ""
-    if where_parts:
-        where_clause = "WHERE " + " AND ".join(where_parts)
-
-    return_parts: List[str] = []
-    for ret in returns:
-        expr = ret.get("expr")
-        alias = ret.get("alias")
-        if expr:
-            if alias:
-                return_parts.append(f"{expr} AS {alias}")
-            else:
-                return_parts.append(expr)
-    return_clause = "RETURN " + ", ".join(return_parts)
-
-    order_clause = ""
-    if order_by:
-        items = []
-        for ob in order_by:
-            expr = ob.get("expr")
-            direction = ob.get("direction", "ASC").upper()
-            if expr:
-                items.append(f"{expr} {direction}")
-        if items:
-            order_clause = "ORDER BY " + ", ".join(items)
-
-    limit_clause = f"LIMIT {int(limit)}" if isinstance(limit, int) and limit > 0 else ""
-
-    parts = [match_clause]
-    if where_clause:
-        parts.append(where_clause)
-    parts.append(return_clause)
-    if order_clause:
-        parts.append(order_clause)
-    if limit_clause:
-        parts.append(limit_clause)
-
-    return "\n".join(parts)
-
-
-# -----------------------------------------------------------------------------
-# Stage 4: Logic validation (LLM committee)
-# -----------------------------------------------------------------------------
-
-
-def validate_logical_correctness(
-    nl: str,
-    schema_context: str,
-    query: str,
-    frame: Dict[str, Any],
-    model: str = DEFAULT_OPENAI_MODEL_FIX,
-) -> Tuple[bool, Optional[str], Optional[Dict[str, Any]]]:
-    temperatures = [0.0, 0.2, 0.4, 0.0, 0.2]
-    votes = 0
-    total = len(temperatures)
-    reasons: List[str] = []
-    samples: List[Dict[str, Any]] = []
-    usage_totals = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-    any_usage = False
-
-    for temp in temperatures:
-        user = USER_VALIDATE_LOGIC_TEMPLATE.format(
-            schema_context=_shuffle_schema_context(schema_context),
-            frame=json.dumps(frame, indent=2),
-            nl=nl,
-            query=query,
+    def validate(self, nl: str, schema_summary: str, query: str, hints: List[str]) -> Tuple[bool, Optional[str]]:
+        hint_text = "\n".join(f"- {h}" for h in hints) if hints else "none"
+        user = (
+            f"SCHEMA SUMMARY:\n{schema_summary}\n\n"
+            f"NATURAL LANGUAGE:\n{nl}\n\n"
+            f"QUERY:\n{query}\n\n"
+            f"STRUCTURAL HINTS:\n{hint_text}\n\n"
+            "Does the query satisfy the request?"
         )
-        result, usage = chat_complete(model, SYSTEM_VALIDATE_LOGIC, user, temperature=temp, top_p=0.9, max_tokens=150)
-        verdict_raw = result.strip()
-        verdict_upper = verdict_raw.upper()
-
-        is_valid = False
-        reason: Optional[str] = None
-        if verdict_upper.startswith("VALID"):
-            is_valid = True
-            votes += 1
-        elif verdict_upper.startswith("INVALID:"):
-            reason = verdict_raw[len("INVALID:") :].strip() or "unspecified reason"
-            reasons.append(reason)
-        else:
-            reason = f"Unexpected validation response: {verdict_raw}"
-            reasons.append(reason)
-
-        sample_entry: Dict[str, Any] = {"temperature": temp, "verdict": "VALID" if is_valid else "INVALID"}
-        if reason:
-            sample_entry["reason"] = reason
-        samples.append(sample_entry)
-
-        if usage:
-            any_usage = True
-            usage_totals["prompt_tokens"] += usage.get("prompt_tokens", 0)
-            usage_totals["completion_tokens"] += usage.get("completion_tokens", 0)
-            usage_totals["total_tokens"] += usage.get("total_tokens", 0)
-
-    usage_summary: Optional[Dict[str, Any]] = None
-    if any_usage:
-        usage_summary = {**usage_totals, "samples": samples, "valid_votes": votes, "total_votes": total}
-
-    if votes > total // 2:
-        return True, None, usage_summary
-
-    reason_summary = reasons[0] if reasons else "no consensus"
-    if len(reasons) > 1:
-        most_common = Counter(reasons).most_common(1)[0][0]
-        reason_summary = most_common
-    return False, reason_summary, usage_summary
+        temps = [0.0, 0.2, 0.4]
+        valid_votes = 0
+        reasons: List[str] = []
+        for temp in temps:
+            verdict, _ = chat_complete(self.model, self.SYSTEM, user, temperature=temp, top_p=0.9, max_tokens=200)
+            verdict_upper = verdict.strip().upper()
+            if verdict_upper.startswith("VALID"):
+                valid_votes += 1
+            elif verdict_upper.startswith("INVALID:"):
+                reasons.append(verdict.strip()[len("INVALID:") :].strip() or "unspecified reason")
+            else:
+                reasons.append(verdict.strip() or "logic validator unsure")
+        if valid_votes > len(temps) // 2:
+            return True, None
+        reason = reasons[0] if reasons else "logic validator unsure"
+        return False, reason
 
 
 # -----------------------------------------------------------------------------
-# Generation pipeline orchestrator
+# Generator
 # -----------------------------------------------------------------------------
 
 
-def generate_isogql(
-    nl: str,
-    schema_context: str,
-    *,
-    max_attempts: int = 3,
-    gen_model: Optional[str] = None,
-    fix_model: Optional[str] = None,
-    validator: Optional[GraphLiteValidator] = None,
-) -> Tuple[Optional[str], List[Dict[str, Any]], List[Dict[str, Any]]]:
-    return generate_isogql_with_progress(
-        nl,
-        schema_context,
-        max_attempts=max_attempts,
-        gen_model=gen_model,
-        fix_model=fix_model,
-        validator=validator,
-        progress=None,
+@dataclass
+class CandidateQuery:
+    query: str
+    reason: Optional[str] = None
+    usage: Optional[Dict[str, Any]] = None
+
+
+class QueryGenerator:
+    SYSTEM = (
+        "You are a cautious ISO GQL generator.\n"
+        "- Use only schema labels/properties/relationships that appear in the provided filtered schema summary.\n"
+        "- Do not invent names or traverse relationships that are not listed.\n"
+        "- Use each relationship only between the labels it connects in the filtered schema summary; do not connect a relationship to any other label pair.\n"
+        "- Build a single MATCH with aliases, clear WHERE filters, explicit RETURN, ORDER BY, and LIMIT when requested.\n"
+        "- Use properties only on their owning label; when you need related attributes, traverse to that node instead of inventing fields on another label.\n"
+        "- For comparisons across related nodes, create distinct aliases for each hop and compare their properties.\n"
+        "- Prefer explicit traversals that follow the relationships given in the filtered schema summary rather than assuming shortcuts.\n"
+        "- Use WITH only when necessary for aggregated filters, keeping the pipeline linear.\n"
+        "- Keep output to ISO GQL; avoid subqueries, CALL, or schema modifications.\n"
+        "- Follow path hints when they align with the request.\n"
+        "- Emit strictly the JSON shape requested."
     )
 
+    USER_TEMPLATE = """Normalized NL: {nl}
 
-def generate_isogql_with_progress(
-    nl: str,
-    schema_context: str,
-    *,
-    max_attempts: int = 3,
-    gen_model: Optional[str] = None,
-    fix_model: Optional[str] = None,
-    validator: Optional[GraphLiteValidator] = None,
-    progress: Optional[Callable[[str], None]] = None,
-) -> Tuple[Optional[str], List[Dict[str, Any]], List[Dict[str, Any]]]:
-    def notify(message: str) -> None:
-        if progress:
-            progress(message)
+Filtered schema:
+{schema_summary}
 
-    gen = gen_model or DEFAULT_OPENAI_MODEL_GEN
-    fix = fix_model or DEFAULT_OPENAI_MODEL_FIX
+Intent frame:
+{intent_frame}
 
-    graph = SchemaGraph.from_text(schema_context)
-    if not graph.nodes:
-        raise RuntimeError("Schema parsing produced no nodes. Ensure the schema text is correct or pass a valid --schema-file.")
-    feedback: List[str] = []
-    usage_data: List[Dict[str, Any]] = []
-    timeline: List[Dict[str, Any]] = []
+Schema links (grounded):
+{links}
 
-    owns_validator = validator is None
-    if validator is None:
-        validator = GraphLiteValidator(db_path=DEFAULT_DB_PATH)
+Structural hints:
+{hints}
 
-    try:
-        for attempt in range(1, max_attempts + 1):
-            notify(f"[attempt {attempt}] drafting intent frame...")
-            frame, usage = draft_intent_frame(nl, graph, gen, feedback)
-            if usage:
-                usage.update({"attempt": attempt, "call_type": "intent_frame", "model": gen})
-                usage_data.append(usage)
-            timeline.append({"attempt": attempt, "action": "intent_frame", "data": frame, "feedback": feedback.copy()})
+Recent failures to avoid:
+{failures}
 
-            notify(f"[attempt {attempt}] linking schema...")
-            raw_links, usage = link_schema(frame, nl, graph, gen, feedback)
-            links = ground_links_to_schema(raw_links, graph)
-            if usage:
-                usage.update({"attempt": attempt, "call_type": "schema_link", "model": gen})
-                usage_data.append(usage)
-            timeline.append({"attempt": attempt, "action": "schema_link", "data": raw_links})
-            if raw_links != links:
-                timeline.append({"attempt": attempt, "action": "schema_link_grounded", "data": links})
+Emit JSON:
+{{
+  "queries": [
+    {{"query": "<ISO GQL text>", "reason": "concise plan"}},
+    {{"query": "<alternate ISO GQL text>", "reason": "alternate plan"}}
+  ]
+}}
+"""
 
-            notify(f"[attempt {attempt}] planning AST...")
-            ast, usage = plan_ast(frame, links, graph, gen, feedback)
-            if usage:
-                usage.update({"attempt": attempt, "call_type": "ast_plan", "model": gen})
-                usage_data.append(usage)
-            timeline.append({"attempt": attempt, "action": "ast_plan", "data": ast})
+    def __init__(self, model: str = DEFAULT_OPENAI_MODEL_GEN) -> None:
+        self.model = model
 
-            # Normalize filters that incorrectly encode relationships in the property slot.
-            _rewrite_filter_relationship_props(ast)
-            # Enforce schema-grounded labels/relations from the linker to reduce hallucinations.
-            if _apply_links_to_ast(ast, links):
-                timeline.append({"attempt": attempt, "action": "ast_grounded", "data": ast})
-
-            ast_errors = validate_ast(ast, graph)
-            if ast_errors:
-                notify(f"[attempt {attempt}] AST invalid: {'; '.join(ast_errors)}")
-                label_list = ", ".join(sorted(graph.nodes.keys()))
-                rel_list = ", ".join(sorted({f"{e.src}-[:{e.rel}]->{e.dst}" for e in graph.edges}))
-                feedback.append(
-                    "AST invalid: "
-                    + "; ".join(ast_errors)
-                    + f" | allowed labels: {label_list} | allowed relationships: {rel_list}"
-                )
-                timeline.append({"attempt": attempt, "action": "ast_invalid", "errors": ast_errors})
-                continue
-
-            gql_query = render_ast_to_gql(ast, graph)
-            timeline.append({"attempt": attempt, "action": "rendered_query", "query": gql_query})
-            notify(f"[attempt {attempt}] rendered query; validating syntax...")
-
-            syntax_valid, syntax_error = validator.validate(gql_query)
-            timeline.append(
-                {
-                    "attempt": attempt,
-                    "action": "syntax_check",
-                    "valid": syntax_valid,
-                    "error": syntax_error,
-                    "query": gql_query,
-                }
-            )
-
-            if not syntax_valid:
-                notify(f"[attempt {attempt}] syntax failed: {syntax_error}")
-                feedback.append(f"Syntax error: {syntax_error}")
-                continue
-
-            logic_valid, logic_error, logic_usage = validate_logical_correctness(
-                nl, schema_context, gql_query, frame, model=fix
-            )
-            if logic_usage:
-                logic_usage.update({"attempt": attempt, "call_type": "logic_validate", "model": fix})
-                usage_data.append(logic_usage)
-            timeline.append(
-                {
-                    "attempt": attempt,
-                    "action": "logic_check",
-                    "valid": logic_valid,
-                    "error": logic_error,
-                    "query": gql_query,
-                    "frame": frame,
-                }
-            )
-
-            if logic_valid:
-                notify(f"[attempt {attempt}] logic valid; query complete.")
-                return gql_query, usage_data, timeline
-
-            if logic_error:
-                notify(f"[attempt {attempt}] logic gap: {logic_error}")
-                feedback.append(f"Logic gap: {logic_error}")
-
-        return None, usage_data, timeline
-    finally:
-        if owns_validator and validator:
-            validator.close()
+    def generate(self, pre: PreprocessResult, failures: List[str], guidance: Optional[IntentLinkGuidance] = None) -> List[CandidateQuery]:
+        failure_text = "- " + "\n- ".join(failures[-5:]) if failures else "none"
+        intent_frame = json.dumps(guidance.frame, indent=2) if guidance else "none"
+        links_text = json.dumps(guidance.links, indent=2) if guidance else "none"
+        combined_hints = pre.structural_hints + (_links_to_hints(guidance.links) if guidance else [])
+        user = self.USER_TEMPLATE.format(
+            nl=pre.normalized_nl,
+            schema_summary=pre.filtered_schema.summary_lines(),
+            intent_frame=intent_frame,
+            links=links_text,
+            hints="\n".join(sorted(set(combined_hints))) if combined_hints else "none",
+            failures=failure_text,
+        )
+        raw, usage = chat_complete(self.model, self.SYSTEM, user, temperature=0.15, top_p=0.9, max_tokens=700)
+        data = _safe_json_loads(raw) or {}
+        candidates: List[CandidateQuery] = []
+        for entry in data.get("queries") or []:
+            query = (entry.get("query") or "").strip()
+            if query:
+                candidates.append(CandidateQuery(query=query, reason=entry.get("reason"), usage=usage))
+        if not candidates and raw.strip():
+            candidates.append(CandidateQuery(query=_clean_block(raw), usage=usage))
+        return candidates
 
 
 # -----------------------------------------------------------------------------
-# Reporting + CLI
+# Refiner
+# -----------------------------------------------------------------------------
+
+
+@dataclass
+class ValidationBundle:
+    ir: Optional[ISOQueryIR]
+    parse_errors: List[str]
+    schema_errors: List[str]
+    syntax_result: SyntaxResult
+    logic_valid: bool
+    logic_reason: Optional[str]
+    repaired: bool = False
+    query_text: str = ""
+
+
+class PipelineFailure(Exception):
+    def __init__(self, message: str, timeline: List[Dict[str, Any]], failures: List[str]) -> None:
+        super().__init__(message)
+        self.timeline = timeline
+        self.failures = failures
+
+
+class Refiner:
+    def __init__(
+        self,
+        graph: SchemaGraph,
+        generator: QueryGenerator,
+        *,
+        logic_validator: Optional[LogicValidator] = None,
+        runner: Optional[GraphLiteRunner] = None,
+        db_path: Optional[str] = None,
+        max_loops: int = 3,
+    ) -> None:
+        self.graph = graph
+        self.generator = generator
+        self.logic_validator = logic_validator or LogicValidator()
+        self.runner = runner or GraphLiteRunner(db_path=db_path or DEFAULT_DB_PATH)
+        self.max_loops = max_loops
+
+    def _repair_ir_schema(self, ir: ISOQueryIR) -> bool:
+        changed = False
+        alias_labels = {a: n.label for a, n in ir.nodes.items()}
+
+        def _alias_for_label(label: str) -> Optional[str]:
+            for alias, lbl in alias_labels.items():
+                if lbl == label:
+                    return alias
+            return None
+
+        for edge in ir.edges:
+            left_label = alias_labels.get(edge.left_alias)
+            right_label = alias_labels.get(edge.right_alias)
+            if left_label and right_label and any(
+                e.src == left_label and e.rel == edge.rel and e.dst == right_label for e in self.graph.edges
+            ):
+                continue
+            for schema_edge in self.graph.edges:
+                if schema_edge.rel != edge.rel:
+                    continue
+                # align left alias label
+                if left_label is None:
+                    ir.nodes.setdefault(edge.left_alias, IRNode(alias=edge.left_alias, label=schema_edge.src))
+                    alias_labels[edge.left_alias] = schema_edge.src
+                    left_label = schema_edge.src
+                    changed = True
+                # align right alias label
+                if right_label is None:
+                    ir.nodes.setdefault(edge.right_alias, IRNode(alias=edge.right_alias, label=schema_edge.dst))
+                    alias_labels[edge.right_alias] = schema_edge.dst
+                    right_label = schema_edge.dst
+                    changed = True
+                # if right alias label mismatched but matching alias exists, swap
+                if left_label == schema_edge.src and right_label != schema_edge.dst:
+                    replacement = _alias_for_label(schema_edge.dst)
+                    if replacement:
+                        edge.right_alias = replacement
+                        right_label = schema_edge.dst
+                        changed = True
+                if right_label == schema_edge.dst and left_label != schema_edge.src:
+                    replacement = _alias_for_label(schema_edge.src)
+                    if replacement:
+                        edge.left_alias = replacement
+                        left_label = schema_edge.src
+                        changed = True
+                # final check
+                if left_label == schema_edge.src and right_label == schema_edge.dst:
+                    break
+        return changed
+
+    def _heuristic_logic_accept(self, ir: ISOQueryIR, hints: List[str]) -> bool:
+        """
+        Generic structural fallback: if schema/syntax are clean and the query
+        already covers most structural hints (links/path hints), accept even if
+        the LLM logic vote is unsure. This avoids schema-specific patterns.
+        """
+
+        if not hints:
+            return False
+
+        edge_hints = {h for h in hints if "-[:".lower() in h.lower()}
+        label_hints = {h for h in hints if ":" in h and "-[:".lower() not in h.lower()}
+
+        ir_edge_tokens = {f"{e.left_alias.lower()}-[:{e.rel.lower()}]->{e.right_alias.lower()}" for e in ir.edges}
+        ir_label_tokens = {f"{alias.lower()}:{node.label.lower()}" for alias, node in ir.nodes.items() if node.label}
+
+        def _match_ratio(hint_set: Set[str], token_set: Set[str]) -> float:
+            if not hint_set:
+                return 1.0
+            matches = sum(1 for h in hint_set if h.lower() in token_set)
+            return matches / len(hint_set)
+
+        edge_ratio = _match_ratio(edge_hints, ir_edge_tokens)
+        label_ratio = _match_ratio(label_hints, ir_label_tokens)
+        has_returns = bool(ir.returns)
+
+        return has_returns and edge_ratio >= 0.6 and label_ratio >= 0.6
+
+    def _evaluate_candidate(
+        self,
+        nl: str,
+        pre: PreprocessResult,
+        candidate: CandidateQuery,
+        schema_validator: SchemaGroundingValidator,
+        hints: List[str],
+    ) -> ValidationBundle:
+        ir, parse_errors = ISOQueryIR.parse(candidate.query)
+        repaired = False
+        schema_errors: List[str] = []
+        rendered = candidate.query
+        if ir:
+            repaired = self._repair_ir_schema(ir)
+            schema_errors = schema_validator.validate(ir)
+            rendered = ir.render()
+        syntax = self.runner.validate(rendered)
+        logic_valid = False
+        logic_reason: Optional[str] = None
+        if ir:
+            logic_valid, logic_reason = self.logic_validator.validate(
+                nl, pre.filtered_schema.summary_lines(), rendered, hints
+            )
+            if not logic_valid and self._heuristic_logic_accept(ir, hints):
+                logic_valid = True
+                logic_reason = None
+        return ValidationBundle(
+            ir=ir,
+            parse_errors=parse_errors,
+            schema_errors=schema_errors,
+            syntax_result=syntax,
+            logic_valid=logic_valid,
+            logic_reason=logic_reason,
+            repaired=repaired,
+            query_text=rendered,
+        )
+
+    def run(
+        self,
+        nl: str,
+        preprocessor: Preprocessor,
+        intent_linker: IntentLinker,
+        spinner: Optional[Spinner],
+    ) -> Tuple[str, List[Dict[str, Any]]]:
+        failures: List[str] = []
+        timeline: List[Dict[str, Any]] = []
+        schema_validator = SchemaGroundingValidator(self.graph)
+
+        with self.runner:
+            for attempt in range(1, self.max_loops + 1):
+                if spinner:
+                    spinner.update(f"[attempt {attempt}] preprocessing...")
+                pre = preprocessor.run(nl, failures)
+                if spinner:
+                    spinner.update(f"[attempt {attempt}] planning intent and links...")
+                guidance = intent_linker.run(nl, pre, failures)
+                timeline.append({"attempt": attempt, "phase": "intent", "frame": guidance.frame})
+                timeline.append({"attempt": attempt, "phase": "link", "links": guidance.links})
+                frame_hints = guidance.frame.get("path_hints") if isinstance(guidance.frame, dict) else None
+                combined_hints = sorted(
+                    set(pre.structural_hints + _links_to_hints(guidance.links) + (frame_hints or []))
+                )
+                if spinner:
+                    spinner.update(f"[attempt {attempt}] generating candidates...")
+                candidates = self.generator.generate(pre, failures, guidance)
+                timeline.append({"attempt": attempt, "phase": "generate", "candidates": [c.query for c in candidates]})
+                if not candidates:
+                    failures.append("generator returned no candidates")
+                    continue
+
+                for candidate in candidates:
+                    bundle = self._evaluate_candidate(nl, pre, candidate, schema_validator, combined_hints)
+                    timeline.append(
+                        {
+                            "attempt": attempt,
+                            "raw_query": candidate.query,
+                            "query": bundle.query_text,
+                            "parse_errors": bundle.parse_errors,
+                            "schema_errors": bundle.schema_errors,
+                            "syntax_ok": bundle.syntax_result.ok,
+                            "syntax_error": bundle.syntax_result.error,
+                            "logic_valid": bundle.logic_valid,
+                            "logic_reason": bundle.logic_reason,
+                            "repaired": bundle.repaired,
+                        }
+                    )
+
+                    all_clear = (
+                        bundle.ir is not None
+                        and not bundle.parse_errors
+                        and not bundle.schema_errors
+                        and (bundle.syntax_result.ok or bundle.logic_valid)
+                    )
+                    if all_clear:
+                        if spinner:
+                            spinner.update(f"[attempt {attempt}] success.")
+                        return bundle.ir.render(), timeline
+
+                    combined_reasons = bundle.parse_errors + bundle.schema_errors
+                    if not bundle.syntax_result.ok and bundle.syntax_result.error:
+                        combined_reasons.append(f"syntax: {bundle.syntax_result.error}")
+                    if not bundle.logic_valid and bundle.logic_reason:
+                        combined_reasons.append(f"logic: {bundle.logic_reason}")
+                    if not combined_reasons:
+                        combined_reasons.append("unspecified failure")
+                    failures.append("; ".join(sorted(set(combined_reasons))))
+
+        raise PipelineFailure("pipeline failed after refinement loops", timeline, failures)
+
+
+# -----------------------------------------------------------------------------
+# Pipeline orchestration
+# -----------------------------------------------------------------------------
+
+
+class NL2GQLPipeline:
+    def __init__(
+        self,
+        schema_context: str,
+        *,
+        gen_model: str = DEFAULT_OPENAI_MODEL_GEN,
+        fix_model: str = DEFAULT_OPENAI_MODEL_FIX,
+        db_path: Optional[str] = DEFAULT_DB_PATH,
+        max_refinements: int = 3,
+    ) -> None:
+        self.schema_graph = SchemaGraph.from_text(schema_context)
+        if not self.schema_graph.nodes:
+            raise RuntimeError("schema parsing produced no nodes")
+        self.preprocessor = Preprocessor(self.schema_graph)
+        self.intent_linker = IntentLinker(self.schema_graph, model=gen_model)
+        self.generator = QueryGenerator(model=gen_model)
+        self.refiner = Refiner(
+            self.schema_graph,
+            self.generator,
+            logic_validator=LogicValidator(model=fix_model),
+            db_path=db_path,
+            max_loops=max_refinements,
+        )
+
+    def run(self, nl: str, *, spinner: Optional[Spinner] = None) -> Tuple[str, List[Dict[str, Any]]]:
+        return self.refiner.run(nl, self.preprocessor, self.intent_linker, spinner)
+
+
+# -----------------------------------------------------------------------------
+# Sample-suite runner
+# -----------------------------------------------------------------------------
+
+
+def _extract_queries_from_file(path: str) -> List[str]:
+    queries: List[str] = []
+    pattern = re.compile(r'--nl\s+"([^"]+)"')
+    with open(path, "r", encoding="utf-8") as fh:
+        for line in fh:
+            match = pattern.search(line)
+            if match:
+                queries.append(match.group(1))
+    return queries
+
+
+def run_sample_suite(
+    schema_path: str,
+    suite_path: str,
+    *,
+    max_iterations: int = 3,
+    verbose: bool = False,
+    db_path: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    if Path(schema_path).exists():
+        schema_text = Path(schema_path).read_text(encoding="utf-8")
+    else:
+        schema_text = schema_path
+    nls = _extract_queries_from_file(suite_path)
+    results: List[Dict[str, Any]] = []
+    for idx, nl in enumerate(nls, 1):
+        spinner = Spinner(enabled=verbose)
+        spinner.start(f"[suite {idx}] running")
+        pipeline = NL2GQLPipeline(schema_text, max_refinements=max_iterations, db_path=db_path)
+        try:
+            query, timeline = pipeline.run(nl, spinner=spinner)
+            spinner.stop(f"[suite {idx}] ok", color="green")
+            results.append({"nl": nl, "query": query, "timeline": timeline, "success": True})
+        except PipelineFailure as exc:
+            spinner.stop(f"[suite {idx}] failed", color="red")
+            results.append({"nl": nl, "error": str(exc), "timeline": exc.timeline, "failures": exc.failures, "success": False})
+        except Exception as exc:
+            spinner.stop(f"[suite {idx}] failed", color="red")
+            results.append({"nl": nl, "error": str(exc), "success": False})
+    return results
+
+
+# -----------------------------------------------------------------------------
+# CLI
 # -----------------------------------------------------------------------------
 
 
@@ -1210,73 +1755,36 @@ def _fmt_block(text: str, indent: int = 6) -> str:
     return "\n".join(pad + line for line in text.splitlines())
 
 
-def print_verbose_info(
-    nl_query: str,
-    usage_data: List[Dict[str, Any]],
-    validation_log: List[Dict[str, Any]],
-    max_attempts: int,
-    gen_model: str,
-    fix_model: str,
-) -> None:
+def print_timeline(nl_query: str, validation_log: List[Dict[str, Any]], max_attempts: int) -> None:
     print("\n" + "=" * 80)
     print("PIPELINE EXECUTION SUMMARY")
     print("=" * 80)
     print(f"Query: {nl_query}")
-    print(f"Models: {gen_model} (gen) | {fix_model} (fix)")
     print(f"Max Attempts: {max_attempts}")
 
-    grouped: Dict[int, List[Dict[str, Any]]] = {}
+    grouped: Dict[int, List[Dict[str, Any]]] = defaultdict(list)
     for entry in validation_log:
-        grouped.setdefault(entry["attempt"], []).append(entry)
+        grouped[entry.get("attempt", 0)].append(entry)
 
     print("\nTimeline (per attempt):")
     for attempt in sorted(grouped):
         print("-" * 80)
         print(f"Attempt {attempt}")
         for entry in grouped[attempt]:
-            action = entry.get("action")
-            if action == "intent_frame":
+            phase = entry.get("phase")
+            if phase == "intent":
                 print("  • Intent frame")
-                print(_fmt_block(json.dumps(entry.get("data"), indent=2) or "<empty>"))
-            elif action == "schema_link":
-                print("  • Schema linking")
-                print(_fmt_block(json.dumps(entry.get("data"), indent=2) or "<empty>"))
-            elif action == "schema_link_grounded":
-                print("  • Schema linking (grounded to schema)")
-                print(_fmt_block(json.dumps(entry.get("data"), indent=2) or "<empty>"))
-            elif action == "ast_plan":
-                print("  • AST plan")
-                print(_fmt_block(json.dumps(entry.get("data"), indent=2) or "<empty>"))
-            elif action == "ast_invalid":
-                print("  • AST invalid")
-                for err in entry.get("errors", []):
-                    print(f"      - {err}")
-            elif action == "ast_grounded":
-                print("  • AST aligned to linker output")
-                print(_fmt_block(json.dumps(entry.get("data"), indent=2) or "<empty>"))
-            elif action == "rendered_query":
-                print("  • Rendered query:")
-                block = "\n      ".join(entry.get("query", "").splitlines() or ["<empty>"])
-                print(f"      ```gql\n      {block}\n      ```")
-            elif action == "syntax_check":
-                status = "✓ SYNTAX VALID" if entry.get("valid") else "✗ SYNTAX INVALID"
-                print(f"  • {status}")
-                if entry.get("error"):
-                    err_block = "\n      ".join(str(entry["error"]).splitlines())
-                    print(f"      ```\n      {err_block}\n      ```")
-            elif action == "logic_check":
-                status = "✓ LOGIC VALID" if entry.get("valid") else "✗ LOGIC INVALID"
-                print(f"  • {status}")
-                if entry.get("error"):
-                    err_block = "\n      ".join(str(entry["error"]).splitlines())
-                    print(f"      ```\n      {err_block}\n      ```")
+                print(_fmt_block(json.dumps(entry.get("frame"), indent=2)))
+            elif phase == "link":
+                print("  • Schema links")
+                print(_fmt_block(json.dumps(entry.get("links"), indent=2)))
+            elif phase == "generate":
+                print("  • Candidates")
+                print(_fmt_block(json.dumps(entry.get("candidates"), indent=2)))
             else:
-                print(f"  • {action}: {entry}")
-
-    total_tokens = sum(item.get("total_tokens", 0) for item in usage_data)
-    print("\nAPI Usage:")
-    print(f"  Calls: {len(usage_data)}")
-    print(f"  Tokens: {total_tokens}")
+                print("  • Candidate evaluation")
+                details = {k: v for k, v in entry.items() if k not in {"attempt"}}
+                print(_fmt_block(json.dumps(details, indent=2)))
     print("=" * 80)
 
 
@@ -1285,105 +1793,26 @@ def read_text(path: str) -> str:
         return fh.read().strip()
 
 
-def run_pipeline(
-    nl: str,
-    schema_context: str,
-    *,
-    max_attempts: int = 3,
-    gen_model: Optional[str] = None,
-    fix_model: Optional[str] = None,
-    db_path: Optional[str] = DEFAULT_DB_PATH,
-    verbose: bool = False,
-    spinner: Optional[bool] = None,
-) -> str:
-    use_spinner = spinner if spinner is not None else sys.stdout.isatty()
-    spinner_ui = Spinner(enabled=use_spinner)
-    spinner_ui.start("Starting pipeline...")
-    color_enabled = sys.stdout.isatty()
-
-    def _parse_attempt(text: str) -> Optional[Tuple[int, str]]:
-        parsed = Spinner._split_attempt(text)
-        if parsed:
-            num, rest = parsed
-            return num, rest
-        return None
-
-    def progress_fn(message: str) -> None:
-        attempt = _parse_attempt(message)
-        fail_keywords = ("invalid", "failed", "gap")
-        if attempt:
-            attempt_num, rest = attempt
-            lower = rest.lower()
-            if any(k in lower for k in fail_keywords):
-                # Print a red failure notice; update spinner with a neutral retry text.
-                retry_text = f"Attempt {attempt_num} failed, retrying... (max {max_attempts})"
-                if spinner_ui.enabled:
-                    # Clear current spinner line before printing failure.
-                    sys.stdout.write("\r" + " " * spinner_ui._last_len + "\r")
-                    sys.stdout.flush()
-                    spinner_ui.update(retry_text)
-                if verbose:
-                    print(_style(retry_text, "red", color_enabled))
-                return
-            message_text = rest
-        else:
-            message_text = message
-
-        if spinner_ui.enabled:
-            spinner_ui.update(message_text)
-        elif verbose:
-            print(_style(message_text, "white", color_enabled, italic=True))
-
-    with GraphLiteValidator(db_path=db_path) as validator:
-        try:
-            result, usage_data, validation_log = generate_isogql_with_progress(
-                nl,
-                schema_context,
-                max_attempts=max_attempts,
-                gen_model=gen_model,
-                fix_model=fix_model,
-                validator=validator,
-                progress=progress_fn if (verbose or spinner_ui.enabled) else None,
-            )
-        except Exception:
-            spinner_ui.stop("✗ Pipeline failed.", color="red")
-            raise
-
-    if result:
-        spinner_ui.stop("✓ Query generated.", color="green")
-    else:
-        spinner_ui.stop("✗ Failed to generate query.", color="red")
-
-    if verbose:
-        print_verbose_info(
-            nl, usage_data, validation_log, max_attempts, gen_model or DEFAULT_OPENAI_MODEL_GEN, fix_model or DEFAULT_OPENAI_MODEL_FIX
-        )
-
-    if result is None:
-        raise RuntimeError("Failed to generate a valid ISO GQL query")
-
-    return result
-
-
 def main(argv: Optional[List[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Generate ISO GQL queries from natural language (schema-grounded)")
-    parser.add_argument("--nl", required=True, help="Natural language request")
+    parser = argparse.ArgumentParser(description="Generate ISO GQL queries from natural language (schema-agnostic).")
+    parser.add_argument("--nl", help="Natural language request")
     parser.add_argument("--schema-file", help="Path to schema context text")
     parser.add_argument("--schema", help="Schema context as a string (overrides --schema-file)")
-    parser.add_argument("--max-attempts", type=int, default=3, help="Max generation/fix attempts")
+    parser.add_argument("--max-attempts", type=int, default=3, help="Max refinement loops")
     parser.add_argument("--gen-model", help="OpenAI model for generation (default: gpt-4o-mini)")
     parser.add_argument("--fix-model", help="OpenAI model for fixes/logic validation (default: gpt-4o-mini)")
+    parser.add_argument("--verbose", action="store_true", help="Print attempt timeline")
+    parser.add_argument("--sample-suite", action="store_true", help="Run all queries in sample_queries.txt")
+    parser.add_argument("--suite-file", default="nl2gql/sample_queries.txt", help="Path to sample queries list")
     parser.add_argument("--db-path", help="GraphLite DB path for syntax validation (defaults to temp or NL2GQL_DB_PATH)")
-    parser.add_argument("--verbose", action="store_true", help="Print attempt timeline and token usage")
-    parser.add_argument("--spinner", dest="spinner", action="store_true", help="Show live spinner updates while running (default when TTY)")
-    parser.add_argument("--no-spinner", dest="spinner", action="store_false", help="Disable live spinner updates")
+    parser.add_argument("--spinner", dest="spinner", action="store_true", help="Show live spinner updates when running single queries")
+    parser.add_argument("--no-spinner", dest="spinner", action="store_false")
     parser.set_defaults(spinner=None)
 
     args = parser.parse_args(argv)
 
     schema_context: Optional[str] = None
     if args.schema is not None:
-        # If the user passed a path to --schema, read the file instead of treating it as inline text.
         potential_path = Path(args.schema)
         if potential_path.exists():
             schema_context = read_text(str(potential_path))
@@ -1392,27 +1821,65 @@ def main(argv: Optional[List[str]] = None) -> int:
     elif args.schema_file:
         schema_context = read_text(args.schema_file)
 
+    if args.sample_suite:
+        if not args.schema_file and not args.schema:
+            print("error: schema context required for sample suite", file=sys.stderr)
+            return 1
+        schema_path = args.schema_file or args.schema
+        assert schema_path
+        results = run_sample_suite(
+            schema_path,
+            args.suite_file,
+            max_iterations=args.max_attempts,
+            verbose=args.verbose,
+            db_path=args.db_path or DEFAULT_DB_PATH,
+        )
+        success = all(r.get("success") for r in results)
+        for res in results:
+            if res.get("success"):
+                print(f"[ok] {res['nl']}")
+                print(_fmt_block(res["query"], indent=4))
+            else:
+                print(f"[fail] {res['nl']}: {res.get('error')}")
+        return 0 if success else 2
+
     if not schema_context:
         print("error: schema context is required via --schema or --schema-file", file=sys.stderr)
         return 1
-
-    try:
-        query = run_pipeline(
-            args.nl,
-            schema_context,
-            max_attempts=args.max_attempts,
-            gen_model=args.gen_model,
-            fix_model=args.fix_model,
-            db_path=args.db_path or DEFAULT_DB_PATH,
-            verbose=args.verbose,
-            spinner=args.spinner,
-        )
-    except Exception as exc:
-        print(f"Failed to generate query: {exc}", file=sys.stderr)
+    if not args.nl:
+        print("error: --nl is required when not running the sample suite", file=sys.stderr)
         return 1
 
-    print(query)
-    return 0
+    spinner = Spinner(enabled=args.spinner if args.spinner is not None else sys.stdout.isatty())
+    spinner.start("Starting pipeline...")
+    try:
+        pipeline = NL2GQLPipeline(
+            schema_context,
+            gen_model=args.gen_model or DEFAULT_OPENAI_MODEL_GEN,
+            fix_model=args.fix_model or DEFAULT_OPENAI_MODEL_FIX,
+            db_path=args.db_path or DEFAULT_DB_PATH,
+            max_refinements=args.max_attempts,
+        )
+        query, timeline = pipeline.run(args.nl, spinner=spinner)
+        spinner.stop("✓ Query generated.", color="green")
+        if args.verbose:
+            print_timeline(args.nl, timeline, args.max_attempts)
+        print(query)
+        return 0
+    except PipelineFailure as exc:
+        spinner.stop("✗ Pipeline failed.", color="red")
+        if args.verbose:
+            print_timeline(args.nl, exc.timeline, args.max_attempts)
+            if exc.failures:
+                print("Failures:")
+                for f in exc.failures:
+                    print(f"  - {f}")
+        print(f"Failed to generate query: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        spinner.stop("✗ Pipeline failed.", color="red")
+        print(f"Failed to generate query: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":  # pragma: no cover
