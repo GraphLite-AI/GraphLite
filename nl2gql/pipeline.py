@@ -188,6 +188,7 @@ _ANSI_COLORS = {
     "peach": "\033[38;5;209m",
     "sky": "\033[38;5;117m",
     "teal": "\033[38;5;37m",
+    "blue": "\033[34m",
     "white": "\033[37m",
     "green": "\033[32m",
     "red": "\033[31m",
@@ -199,7 +200,7 @@ _ANSI_COLORS = {
 def _style(text: str, color: str, enabled: bool, *, italic: bool = False) -> str:
     if not enabled:
         return text
-    code = _ANSI_COLORS.get(color, "")
+    code = _ANSI_COLORS.get("blue" if italic else color, "")
     italic_code = _ANSI_COLORS["italic"] if italic else ""
     if not (code or italic_code):
         return text
