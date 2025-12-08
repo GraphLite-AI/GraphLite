@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -94,6 +95,7 @@ def run_sample_suite(
     results: List[Dict[str, Any]] = []
 
     def _run_task(task: Dict[str, Any]) -> Dict[str, Any]:
+        start = time.perf_counter()
         reset_usage_log()
         pipeline = NL2GQLPipeline(task["schema_text"], max_refinements=max_iterations, db_path=db_path)
         try:
@@ -108,6 +110,8 @@ def run_sample_suite(
                 "query": query,
                 "timeline": timeline,
                 "usage": usage,
+                "elapsed_ms": int((time.perf_counter() - start) * 1000),
+                "worker_count": max_workers,
                 "success": True,
             }
         except PipelineFailure as exc:
@@ -122,6 +126,8 @@ def run_sample_suite(
                 "timeline": exc.timeline,
                 "failures": exc.failures,
                 "usage": usage,
+                "elapsed_ms": int((time.perf_counter() - start) * 1000),
+                "worker_count": max_workers,
                 "success": False,
             }
         except Exception as exc:
@@ -134,6 +140,8 @@ def run_sample_suite(
                 "nl": task["nl"],
                 "error": str(exc),
                 "usage": usage,
+                "elapsed_ms": int((time.perf_counter() - start) * 1000),
+                "worker_count": max_workers,
                 "success": False,
             }
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -119,6 +120,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             outcome = "OK" if res.get("success") else "FAIL"
             print(f"{label} → {outcome}")
             print(f"NL : {res['nl']}")
+            if "elapsed_ms" in res:
+                print(f"Elapsed: {res['elapsed_ms']} ms  | workers: {res.get('worker_count')}")
             if res.get("success"):
                 print("ISO GQL:")
                 print(_fmt_block(res["query"], indent=4))
@@ -148,6 +151,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     spinner = Spinner(enabled=args.spinner if args.spinner is not None else sys.stdout.isatty())
     reset_usage_log()
     spinner.start("Starting pipeline...")
+    start = time.perf_counter()
     try:
         pipeline = NL2GQLPipeline(
             schema_context,
@@ -165,6 +169,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 f"\nToken usage → prompt: {usage['prompt_tokens']}, "
                 f"completion: {usage['completion_tokens']}, total: {usage['total_tokens']}"
             )
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
+            print(f"Elapsed: {elapsed_ms} ms")
         print(query)
         return 0
     except PipelineFailure as exc:
@@ -180,6 +186,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 f"\nToken usage → prompt: {usage['prompt_tokens']}, "
                 f"completion: {usage['completion_tokens']}, total: {usage['total_tokens']}"
             )
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
+            print(f"Elapsed: {elapsed_ms} ms")
         print(f"Failed to generate query: {exc}", file=sys.stderr)
         return 1
     except Exception as exc:
@@ -190,6 +198,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 f"\nToken usage → prompt: {usage['prompt_tokens']}, "
                 f"completion: {usage['completion_tokens']}, total: {usage['total_tokens']}"
             )
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
+            print(f"Elapsed: {elapsed_ms} ms")
         print(f"Failed to generate query: {exc}", file=sys.stderr)
         return 1
 
