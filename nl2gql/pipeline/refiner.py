@@ -290,12 +290,11 @@ class Refiner:
         logic_valid = False
         logic_reason: Optional[str] = None
         if ir:
+            # Rely solely on the structured logic validator; avoid heuristic overrides
+            # so obviously incomplete queries (missing metrics, wrong filters) do not slip through.
             logic_valid, logic_reason = self.logic_validator.validate(
                 nl, pre.filtered_schema.summary_lines(), rendered, hints
             )
-            if not logic_valid and self._heuristic_logic_accept(ir, hints):
-                logic_valid = True
-                logic_reason = None
         return ValidationBundle(
             ir=ir,
             parse_errors=parse_errors,
@@ -361,7 +360,8 @@ class Refiner:
                         bundle.ir is not None
                         and not bundle.parse_errors
                         and not bundle.schema_errors
-                        and (bundle.syntax_result.ok or bundle.logic_valid)
+                        and bundle.syntax_result.ok
+                        and bundle.logic_valid
                     )
                     if all_clear:
                         if spinner:
