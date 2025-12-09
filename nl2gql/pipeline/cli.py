@@ -81,7 +81,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--nl", help="Natural language request")
     parser.add_argument("--schema-file", help="Path to schema context text")
     parser.add_argument("--schema", help="Schema context as a string (overrides --schema-file)")
-    parser.add_argument("--max-attempts", type=int, default=4, help="Max refinement loops")
+    parser.add_argument("--max-attempts", type=int, default=2, help="Max refinement loops")
     parser.add_argument("--gen-model", help="OpenAI model for generation (default: gpt-4o-mini)")
     parser.add_argument("--fix-model", help="OpenAI model for fixes/logic validation (default: gpt-4o-mini)")
     parser.add_argument("--verbose", action="store_true", help="Print attempt timeline")
@@ -111,7 +111,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         try:
             results = run_sample_suite(
                 args.suite_file,
-                max_iterations=min(args.max_attempts, 3),
+                max_iterations=args.max_attempts,
                 verbose=args.verbose,
                 db_path=args.db_path or DEFAULT_DB_PATH,
                 workers=args.suite_workers,
@@ -176,7 +176,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             gen_model=args.gen_model or DEFAULT_OPENAI_MODEL_GEN,
             fix_model=args.fix_model or DEFAULT_OPENAI_MODEL_FIX,
             db_path=args.db_path or DEFAULT_DB_PATH,
-            max_refinements=min(args.max_attempts, 3),
+            max_refinements=args.max_attempts,
         )
         query, timeline = pipeline.run(args.nl, spinner=spinner, trace_path=args.trace_json)
         spinner.stop("✓ Query generated.", color="green")

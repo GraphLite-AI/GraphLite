@@ -58,7 +58,7 @@ class Refiner:
         logic_validator: Optional[LogicValidator] = None,
         runner: Optional[GraphLiteRunner] = None,
         db_path: Optional[str] = None,
-        max_loops: int = 3,
+        max_loops: int = 2,
     ) -> None:
         self.graph = graph
         self.generator = generator
@@ -963,9 +963,7 @@ class Refiner:
                             }
                         )
 
-                    logic_ok = bundle.logic_valid or (
-                        not bundle.parse_errors and not bundle.schema_errors and not bundle.coverage_errors
-                    )
+                    logic_ok = bundle.logic_valid
                     syntax_ok = bundle.syntax_result.ok or (
                         bundle.syntax_result.error
                         and not bundle.parse_errors

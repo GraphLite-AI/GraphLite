@@ -19,7 +19,7 @@ class NL2GQLPipeline:
         gen_model: str = DEFAULT_OPENAI_MODEL_GEN,
         fix_model: str = DEFAULT_OPENAI_MODEL_FIX,
         db_path: Optional[str] = DEFAULT_DB_PATH,
-        max_refinements: int = 3,
+        max_refinements: int = 2,
     ) -> None:
         self.schema_graph = SchemaGraph.from_text(schema_context)
         if not self.schema_graph.nodes:
