@@ -991,14 +991,22 @@ class Refiner:
                     # Track the least-bad candidate to allow a graceful fallback.
                     score = (
                         len(bundle.parse_errors)
+                        + len(bundle.structural_errors)
                         + len(bundle.schema_errors)
                         + len(bundle.coverage_errors)
                         + (0 if bundle.syntax_result.ok else 1)
                         + (0 if bundle.logic_valid else 1)
                     )
                     if best_score is None or score < best_score:
-                        best_score = score
-                        best_query = bundle.query_text or candidate.query
+                        if (
+                            not bundle.parse_errors
+                            and not bundle.structural_errors
+                            and not bundle.schema_errors
+                            and not bundle.coverage_errors
+                            and bundle.syntax_result.ok
+                        ):
+                            best_score = score
+                            best_query = bundle.query_text or candidate.query
 
                     combined_reasons = (
                         bundle.parse_errors + bundle.structural_errors + bundle.schema_errors + bundle.coverage_errors
