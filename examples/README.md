@@ -73,9 +73,16 @@ python3 drug_discovery.py
 
 ### Java Examples
 
+First, build and install the Java bindings to your local Maven repository:
+```bash
+cd bindings/java
+mvn install -DskipTests -Dmaven.javadoc.skip=true
+```
+
+Then run the example:
 ```bash
 cd examples/java/bindings
-# Compile and run (instructions in BasicUsage.java)
+mvn clean compile exec:java
 ```
 
 ## Example Descriptions
