@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Set, Tuple
 
 from .schema_graph import FilteredSchema, SchemaEdge, SchemaGraph, SchemaNode
-from .utils import canonical, ratio, tokenize
+from .utils import canonical, tokenize
 
 
 @dataclass
@@ -36,9 +36,6 @@ class Preprocessor:
         phrases.update(capital_chunks)
         return sorted(phrases, key=len, reverse=True)
 
-    def _mask_entities(self, text: str) -> str:
-        return re.sub(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b", "<ENT>", text)
-
     def _strategy_exact(self, tokens: Set[str], phrases: List[str]) -> Set[str]:
         hits: Set[str] = set()
         canon_tokens = {canonical(t) for t in tokens}
@@ -56,21 +53,6 @@ class Preprocessor:
             for label in self.graph.nodes:
                 if canon == canonical(label):
                     hits.add(label)
-        return hits
-
-    def _strategy_ner_mask(self, text: str) -> Set[str]:
-        masked = self._mask_entities(text)
-        tokens = {canonical(t) for t in tokenize(masked)}
-        hits: Set[str] = set()
-        for label in self.graph.nodes:
-            if canonical(label) in tokens:
-                hits.add(label)
-        for rel in {e.rel for e in self.graph.edges}:
-            if canonical(rel) in tokens:
-                hits.add(rel)
-        for prop in {p for n in self.graph.nodes.values() for p in n.properties}:
-            if canonical(prop) in tokens:
-                hits.add(prop)
         return hits
 
     def _strategy_semantic(self, phrases: List[str], threshold: float = 0.74) -> Set[str]:
@@ -124,15 +106,42 @@ class Preprocessor:
             hints.append(" -> ".join([f"{edge.src}-[:{edge.rel}]->{edge.dst}" for edge in path]))
         return sorted(set(hints))
 
+    def _select_hints(
+        self,
+        path_hints: List[str],
+        rel_hints: List[str],
+        mention_hints: List[str],
+        feedback: List[str],
+        limit: int = 12,
+    ) -> List[str]:
+        """
+        Prioritize structural cues (paths + explicit edges), then surface mention hits
+        and recent feedback in a deterministic order to keep prompts compact.
+        """
+        ordered: List[str] = []
+        ordered.extend(path_hints)
+        ordered.extend(rel_hints)
+        ordered.extend(mention_hints)
+        if feedback:
+            ordered.extend(feedback[-2:])
+        seen: Set[str] = set()
+        trimmed: List[str] = []
+        for hint in ordered:
+            if hint and hint not in seen:
+                seen.add(hint)
+                trimmed.append(hint)
+            if len(trimmed) >= limit:
+                break
+        return trimmed
+
     def run(self, nl: str, feedback: List[str]) -> PreprocessResult:
         normalized = self._normalize(nl)
         phrases = self._extract_phrases(nl)
         tokens = set(tokenize(normalized))
 
         exact_hits = self._strategy_exact(tokens, phrases)
-        ner_hits = self._strategy_ner_mask(nl)
         semantic_hits = self._strategy_semantic(phrases)
-        all_hits = exact_hits | ner_hits | semantic_hits
+        all_hits = exact_hits | semantic_hits
 
         nodes, edges = self._filtered_schema(all_hits)
         paths = self._path_hints(nodes)
@@ -140,20 +149,19 @@ class Preprocessor:
 
         strategy_hits = {
             "exact": sorted(exact_hits),
-            "ner_masked": sorted(ner_hits),
+            "ner_masked": [],
             "semantic": sorted(semantic_hits),
         }
 
         filtered = FilteredSchema(nodes=nodes, edges=edges, strategy_hits=strategy_hits, path_hints=paths)
-        hints = paths + rel_hints + strategy_hits["exact"] + strategy_hits["semantic"]
-        if feedback:
-            hints += feedback[-2:]
+        mention_hints = strategy_hits["exact"] + strategy_hits["semantic"]
+        trimmed_hints = self._select_hints(paths, rel_hints, mention_hints, feedback)
         return PreprocessResult(
             raw_nl=nl,
             normalized_nl=normalized,
             phrases=phrases,
             filtered_schema=filtered,
-            structural_hints=sorted(set(hints)),
+            structural_hints=trimmed_hints,
         )
 
 

@@ -19,3 +19,4 @@ def test_schema_graph_parses_nodes_and_edges():
     assert "Person" in description and "Company" in description
 
 
+

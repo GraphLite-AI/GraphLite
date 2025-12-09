@@ -1,0 +1,92 @@
+{
+  "preprocess": [
+    {
+      "nl": "List Person name and Company industry for each WORKS_AT relationship",
+      "expected_nodes": ["Person", "Company"],
+      "expected_edges": ["(Person)-[:WORKS_AT]->(Company)"]
+    },
+    {
+      "nl": "Show company for every person",
+      "expected_nodes": ["Person", "Company"],
+      "expected_edges": ["(Person)-[:WORKS_AT]->(Company)"]
+    },
+    {
+      "nl": "Top customers by spend in 2024",
+      "schema": [
+        "- Customer: id, name, email, signup_date, loyalty_tier, city, state",
+        "- Order: id, placed_at, status, total_amount, channel",
+        "- (Customer)-[:PLACED]->(Order)"
+      ],
+      "expected_nodes": ["Customer", "Order"],
+      "expected_edges": ["(Customer)-[:PLACED]->(Order)"]
+    }
+  ],
+  "validation": [
+    {
+      "query": "MATCH (p:Person)-[:WORKS_AT]->(c:Company) RETURN c.name",
+      "required_edges": [["Person", "WORKS_AT", "Company"]],
+      "should_fail": false
+    },
+    {
+      "query": "MATCH (p:Person) RETURN p.name",
+      "required_edges": [["Person", "WORKS_AT", "Company"]],
+      "should_fail": true
+    },
+    {
+      "nl": "Find the top 5 artists by distinct listeners in the last 30 days; return artist name, listener count, and total plays; order by listener count desc then total plays desc.",
+      "query": "MATCH (n2:Listener)-[:`PLAYED`]->(n3:Play)\nMATCH (n3:Play)-[:`FOR_TRACK`]->(t:Track)\nMATCH (t:Track)-[:`BY_ARTIST`]->(n1:Artist)\nWITH n1, COUNT(DISTINCT n2.id) AS listener_count, COUNT(n3.id) AS total_plays, n1.name AS artist_name, listener_count AS listener, total_plays AS total_pl, n3.id AS n3_id, n2.id AS n2_id\nRETURN artist_name, listener, total_pl, n3_id, n2_id\nORDER BY listener DESC, total_pl DESC\nLIMIT 5",
+      "schema": [
+        "- Listener: id, name, country, signup_date, subscription_tier",
+        "- Artist: id, name, country",
+        "- Album: id, title, release_year, genre",
+        "- Track: id, title, duration_seconds, explicit",
+        "- Play: id, played_at, device_type, duration_seconds, completed",
+        "- Playlist: id, title, follower_count, created_at",
+        "- (Track)-[:BY_ARTIST]->(Artist)",
+        "- (Track)-[:ON_ALBUM]->(Album)",
+        "- (Listener)-[:PLAYED]->(Play)",
+        "- (Play)-[:FOR_TRACK]->(Track)",
+        "- (Listener)-[:CURATED]->(Playlist)",
+        "- (Playlist)-[:HAS_TRACK]->(Track)"
+      ],
+      "required_labels": ["Artist", "Listener", "Play"],
+      "required_edges": [["Listener", "PLAYED", "Play"]],
+      "required_properties": [["Artist", "name"], ["Listener", "id"], ["Play", "id"]],
+      "required_metrics": ["COUNT(DISTINCT Listener.id) AS listener_count", "COUNT(Play.id) AS total_plays"],
+      "required_order": ["listener_count DESC", "total_plays DESC"],
+      "limit": 5,
+      "should_fail": true
+    },
+    {
+      "nl": "Delivered orders with customer name",
+      "query": "MATCH (c:Customer)-[:PLACED]->(o:Order) WHERE o.status = 'delivered' RETURN c.name, o.total_amount",
+      "schema": [
+        "- Customer: id, name, email, signup_date, loyalty_tier, city, state",
+        "- Order: id, placed_at, status, total_amount, channel",
+        "- (Customer)-[:PLACED]->(Order)"
+      ],
+      "required_labels": ["Customer", "Order"],
+      "required_edges": [["Customer", "PLACED", "Order"]],
+      "required_properties": [["Customer", "name"], ["Order", "status"]],
+      "should_fail": false
+    },
+    {
+      "nl": "Patients with long appointments",
+      "query": "MATCH (p:Patient) RETURN p.name",
+      "schema": [
+        "- Patient: id, name, age, insurance, city, state",
+        "- Doctor: id, name, specialty, years_experience, accepts_new_patients",
+        "- Clinic: id, name, city, state",
+        "- Appointment: id, scheduled_at, status, reason, duration_minutes",
+        "- (Patient)-[:HAS_APPOINTMENT]->(Appointment)",
+        "- (Appointment)-[:WITH_DOCTOR]->(Doctor)",
+        "- (Doctor)-[:PRACTICES_AT]->(Clinic)",
+        "- (Patient)-[:LIVES_IN]->(Clinic)"
+      ],
+      "required_edges": [["Patient", "HAS_APPOINTMENT", "Appointment"]],
+      "should_fail": true
+    }
+  ]
+}
+
+

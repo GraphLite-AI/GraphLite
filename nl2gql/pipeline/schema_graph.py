@@ -145,3 +145,4 @@ class FilteredSchema:
         return "\n".join(["Entities:"] + node_lines + ["Relationships:"] + edge_lines + ["Path hints:"] + hint_lines)
 
 
+

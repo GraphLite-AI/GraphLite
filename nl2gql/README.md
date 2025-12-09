@@ -1,48 +1,82 @@
 # NL2GQL Inference Pipeline
 
-Multi-stage, schema-grounded natural language → ISO GQL generation modeled after RAT-SQL style planning: intent framing, schema linking, constrained AST, rendering, and syntax/logic validation (GraphLite + LLM jury).
+Schema-grounded NL → ISO GQL generation with staged planning: intent framing, schema linking, constrained AST, syntax/logic validation, and bounded repair loops.
 
 ## Setup
 
-- Install Python deps in your venv: `pip install openai tenacity python-dotenv`.
-- Install GraphLite Python bindings from repo root so syntax validation works: `cargo build -p graphlite-ffi --release && pip install -e bindings/python`.
-- Copy `nl2gql/config.example.env` → `nl2gql/config.env` if you want a local file; only `OPENAI_API_KEY` is required. Everything else is optional.
-- Optional env vars (defaults if unset): `OPENAI_MODEL_GEN=gpt-4o-mini`, `OPENAI_MODEL_FIX=gpt-4o-mini`, `NL2GQL_DB_PATH=./.nl2gql_cache`, `NL2GQL_USER=admin`, `NL2GQL_SCHEMA=nl2gql`, `NL2GQL_GRAPH=scratch`.
+- Install deps in a venv: `pip install openai tenacity python-dotenv`.
+- Install GraphLite Python bindings (syntax validator): `cargo build -p graphlite-ffi --release && pip install -e bindings/python` (from repo root).
+- Copy `nl2gql/config.example.env` → `nl2gql/config.env` (or set env vars). Required: `OPENAI_API_KEY`. Optional defaults: `OPENAI_MODEL_GEN=gpt-4o-mini`, `OPENAI_MODEL_FIX=gpt-4o-mini`, `NL2GQL_DB_PATH=./.nl2gql_cache`, `NL2GQL_USER=admin`, `NL2GQL_SCHEMA=nl2gql`, `NL2GQL_GRAPH=scratch`.
 
-## Usage (modular pipeline)
+## Quickstart (single query)
 
-- Single run:
 ```bash
 python3 -m nl2gql.pipeline.cli \
-  --nl "find people older than 30" \
+  --nl "List people older than 30" \
   --schema-file nl2gql/sample_schema.txt \
-  --verbose
+  --trace-json /tmp/nl2gql_trace_ok \
+  --verbose --no-spinner
 ```
-- Sample suite:
+
+- Prints the final ISO GQL plus a per-attempt timeline when `--verbose` is set.
+- `--trace-json` writes per-attempt JSON files (prompts, links, contracts, candidates, validation results) to the given directory; the CLI echoes the path after completion.
+- More sample NL prompts: `nl2gql/sample_queries.txt`.
+
+## Debug with JSON traces (recommended for agents)
+
+- For a failing request, keep traces for inspection:
+```bash
+python3 -m nl2gql.pipeline.cli \
+  --nl "List spacecraft missions launched before 1990" \
+  --schema-file nl2gql/sample_schema.txt \
+  --trace-json /tmp/nl2gql_trace_fail \
+  --verbose --no-spinner --max-attempts 2
+```
+- Each `attempt_*.json` includes: normalized NL + schema summary, intent frame, schema links, contract, logic hints, generator prompt/raw output, and every candidate with parse/schema/coverage/syntax/logic results.
+- Use these files to quickly spot grounding gaps, malformed plans, or syntax/logic failures without rerunning the pipeline.
+
+## Component harness (stage smoke tests)
+
+- Default cases: `python -m nl2gql.pipeline.component_harness`
+- Custom cases/reporting:
+```bash
+python -m nl2gql.pipeline.component_harness \
+  --cases nl2gql/tests/component/data/component_cases.json \
+  --include-output --json /tmp/component_report.json --csv /tmp/component_report.csv
+```
+- Flags: `--schema-file/--schema`, `--skip-syntax` (run without GraphLite bindings), `--check-logic` (LLM logic validator), `--include-output` (keep per-stage details).
+
+## Sample suite (end-to-end)
+
 ```bash
 python3 -m nl2gql.pipeline.cli \
   --sample-suite \
   --suite-file nl2gql/sample_suites.json \
   --max-attempts 3
 ```
-- Flags: `--schema-file` or `--schema` (inline), `--max-attempts`, `--gen-model` / `--fix-model`, `--db-path`, `--spinner/--no-spinner`, `--verbose`.
 
-## Pipeline outline
+Prints pass/fail per query plus optional usage totals when `--verbose` is set.
 
-- Modules: `schema_graph`, `preprocess`, `intent_linker`, `generator`, `validators`, `runner`, `refiner`, `cli`.
-- Steps: parse schema → draft intent → link to schema → generate constrained IR/ISO GQL → syntax (GraphLite) + logic check → repair loop (bounded).
+## Flags at a glance
+
+- `--nl` (NL prompt), `--schema-file` or `--schema` (inline text)
+- `--max-attempts` (refinement loops, capped at 3)
+- `--gen-model` / `--fix-model` (OpenAI models)
+- `--db-path` (GraphLite DB for syntax checks)
+- `--verbose` (per-attempt timeline + usage)
+- `--trace-json <dir>` (write per-attempt JSON traces)
+- `--spinner/--no-spinner` (live status)
+- `--sample-suite`, `--suite-file`, `--suite-workers`
 
 ## Tests
 
 - Run all: `pytest`
-- What they cover (unit-level, deterministic stubs):
-  - Schema parsing / property & edge checks
-  - Preprocessor filtering + hint surfacing
-  - IR parse/render round-trip + alias normalization/repairs
-  - Grounding/link normalization and refiner happy-path
+- Covered: schema parsing, preprocessing, IR render/round-trip, grounding/link normalization, refiner happy paths.
+- Component harness doubles as stage-level smoke + reporting for agents (see above).
 
 ## Troubleshooting
 
-- If you see “GraphLite Python bindings are missing”, rebuild/install bindings from repo root.
-- Ensure `config.env` is loaded or set `OPENAI_API_KEY` in your environment.
-- When logic or syntax fails, rerun with `--verbose` to inspect per-attempt feedback and AST errors.
+- Missing GraphLite bindings → rebuild/install (`cargo build -p graphlite-ffi --release && pip install -e bindings/python`).
+- Missing API key → set `OPENAI_API_KEY` (optionally via `config.env`).
+- Extra debug: set `NL2GQL_DEBUG_DIR=/tmp/nl2gql_debug` to persist per-attempt diagnostics (separate from `--trace-json`).
+- Rerun with `--verbose` and `--trace-json` to inspect exact prompts/decisions when logic or syntax fails.

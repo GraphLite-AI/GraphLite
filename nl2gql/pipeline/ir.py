@@ -56,6 +56,11 @@ class ISOQueryIR:
         if not text:
             return None, ["empty query"]
 
+        def _clean(token: Optional[str]) -> Optional[str]:
+            if token is None:
+                return None
+            return token.strip("`").strip()
+
         def _parse_value(val_raw: str) -> Any:
             val_raw = val_raw.strip()
             if val_raw.lower() in {"true", "false"}:
@@ -66,7 +71,9 @@ class ISOQueryIR:
                 return val_raw.strip("'").replace("\\'", "'")
             return val_raw
 
-        token_pattern = re.compile(r"\bMATCH\b|\bWHERE\b|\bWITH\b|\bRETURN\b|\bORDER\s+BY\b|\bLIMIT\b", flags=re.IGNORECASE)
+        token_pattern = re.compile(
+            r"\bMATCH\b|\bWHERE\b|\bWITH\b|\bRETURN\b|\bHAVING\b|\bORDER\s+BY\b|\bLIMIT\b", flags=re.IGNORECASE
+        )
         tokens: List[Dict[str, Any]] = []
         for m in token_pattern.finditer(text):
             raw = m.group(0).upper()
@@ -108,10 +115,18 @@ class ISOQueryIR:
         where_block, where_tok = _block_before("WHERE", with_tok["start"] if with_tok else float("inf"))
         with_where_block, _ = _block("WHERE", after=with_tok["start"]) if with_tok else ("", None)
         return_block, return_tok = _block("RETURN", after=match_end)
-        order_block, order_tok = _block("ORDER BY", after=return_tok["start"] if return_tok else match_end)
+        having_block, having_tok = _block("HAVING", after=return_tok["start"] if return_tok else match_end)
+        order_block, order_tok = _block("ORDER BY", after=having_tok["start"] if having_tok else (return_tok["start"] if return_tok else match_end))
         limit_block = ""
-        if return_tok:
-            limit_block, _ = _block("LIMIT", after=order_tok["start"] if order_tok else return_tok["start"])
+        limit_after = None
+        if order_tok:
+            limit_after = order_tok["start"]
+        elif having_tok:
+            limit_after = having_tok["start"]
+        elif return_tok:
+            limit_after = return_tok["start"]
+        if limit_after is not None:
+            limit_block, _ = _block("LIMIT", after=limit_after)
 
         nodes: Dict[str, IRNode] = {}
         edges: List[IREdge] = []
@@ -121,24 +136,24 @@ class ISOQueryIR:
 
         if match_blocks:
             node_pattern = re.compile(
-                r"\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*([A-Za-z0-9_]+))?\s*(?:\{([^}]*)\})?\s*\)"
+                r"\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*([A-Za-z0-9_`]+))?\s*(?:\{([^}]*)\})?\s*\)"
             )
             edge_forward = re.compile(
-                r"(?=(\(\s*(?P<src>[A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*(?P<src_label>[A-Za-z0-9_]+))?\s*(?:\{[^}]*\})?\s*\)"
-                r"\s*-\s*\[:\s*(?P<rel>[A-Za-z0-9_]+)\s*\]\s*->\s*"
-                r"\(\s*(?P<dst>[A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*(?P<dst_label>[A-Za-z0-9_]+))?\s*(?:\{[^}]*\})?\s*\)))"
+                r"(?=(\(\s*(?P<src>[A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*(?P<src_label>[A-Za-z0-9_`]+))?\s*(?:\{[^}]*\})?\s*\)"
+                r"\s*-\s*\[:\s*(?P<rel>[A-Za-z0-9_`]+)\s*\]\s*->\s*"
+                r"\(\s*(?P<dst>[A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*(?P<dst_label>[A-Za-z0-9_`]+))?\s*(?:\{[^}]*\})?\s*\)))"
             )
             edge_backward = re.compile(
-                r"(?=(\(\s*(?P<left>[A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*(?P<left_label>[A-Za-z0-9_]+))?\s*(?:\{[^}]*\})?\s*\)"
-                r"\s*<-\s*\[:\s*(?P<rel>[A-Za-z0-9_]+)\s*\]\s*-\s*"
-                r"\(\s*(?P<right>[A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*(?P<right_label>[A-Za-z0-9_]+))?\s*(?:\{[^}]*\})?\s*\)))"
+                r"(?=(\(\s*(?P<left>[A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*(?P<left_label>[A-Za-z0-9_`]+))?\s*(?:\{[^}]*\})?\s*\)"
+                r"\s*<-\s*\[:\s*(?P<rel>[A-Za-z0-9_`]+)\s*\]\s*-\s*"
+                r"\(\s*(?P<right>[A-Za-z_][A-Za-z0-9_]*)\s*(?::\s*(?P<right_label>[A-Za-z0-9_`]+))?\s*(?:\{[^}]*\})?\s*\)))"
             )
 
             for match_block, _ in match_blocks:
                 for alias, label, props in node_pattern.findall(match_block):
                     existing = nodes.get(alias)
                     if not (existing and existing.label):
-                        nodes[alias] = IRNode(alias=alias, label=label or (existing.label if existing else None))
+                        nodes[alias] = IRNode(alias=alias, label=_clean(label) or (existing.label if existing else None))
                     if props:
                         for assignment in props.split(","):
                             if ":" not in assignment:
@@ -157,6 +172,9 @@ class ISOQueryIR:
                         m.group("dst"),
                         m.group("dst_label"),
                     )
+                    src_label = _clean(src_label)
+                    dst_label = _clean(dst_label)
+                    rel = _clean(rel) or rel
                     nodes.setdefault(src, IRNode(alias=src, label=src_label))
                     nodes.setdefault(dst, IRNode(alias=dst, label=dst_label))
                     key = (src, rel, dst)
@@ -173,6 +191,9 @@ class ISOQueryIR:
                         m.group("right_label"),
                     )
                     src, dst = right, left
+                    left_label = _clean(left_label)
+                    right_label = _clean(right_label)
+                    rel = _clean(rel) or rel
                     nodes.setdefault(src, IRNode(alias=src, label=right_label))
                     nodes.setdefault(dst, IRNode(alias=dst, label=left_label))
                     key = (src, rel, dst)
@@ -192,11 +213,16 @@ class ISOQueryIR:
                     r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*(=|<>|<=|>=|<|>)\s*(.+)",
                     clause,
                 )
+                in_match = re.match(
+                    r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s+IN\s+\[([^\]]+)\]",
+                    clause,
+                    flags=re.IGNORECASE,
+                )
                 null_match = re.match(
                     r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s+IS\s+(NOT\s+)?NULL", clause, flags=re.IGNORECASE
                 )
                 path_match = re.match(
-                    r"\(\s*(?P<src>[A-Za-z_][A-Za-z0-9_]*)\s*\)\s*-\s*\[:\s*(?P<rel>[A-Za-z0-9_]+)\s*\]\s*->\s*\(\s*(?:(?P<dst>[A-Za-z_][A-Za-z0-9_]*)\s*)?(?::\s*(?P<dst_label>[A-Za-z0-9_]+))?\s*(?:\{(?P<props>[^}]*)\})?\s*\)",
+                    r"\(\s*(?P<src>[A-Za-z_][A-Za-z0-9_]*)\s*\)\s*-\s*\[:\s*(?P<rel>[A-Za-z0-9_`]+)\s*\]\s*->\s*\(\s*(?:(?P<dst>[A-Za-z_][A-Za-z0-9_]*)\s*)?(?::\s*(?P<dst_label>[A-Za-z0-9_`]+))?\s*(?:\{(?P<props>[^}]*)\})?\s*\)",
                     clause,
                 )
                 if alias_compare:
@@ -223,15 +249,24 @@ class ISOQueryIR:
                     elif val_raw.startswith("'") and val_raw.endswith("'"):
                         value = val_raw.strip("'").replace("\\'", "'")
                     filters.append(IRFilter(alias=alias, prop=prop, op=op, value=value))
+                elif in_match:
+                    alias, prop, list_raw = in_match.groups()
+                    values = []
+                    for token in list_raw.split(","):
+                        token = token.strip()
+                        if not token:
+                            continue
+                        values.append(_parse_value(token))
+                    filters.append(IRFilter(alias=alias, prop=prop, op="IN", value=values))
                 elif null_match:
                     alias, prop, not_part = null_match.group(1), null_match.group(2), null_match.group(3)
                     op = "IS NOT NULL" if not_part else "IS NULL"
                     filters.append(IRFilter(alias=alias, prop=prop, op=op, value=None))
                 elif path_match:
                     src_alias = path_match.group("src")
-                    rel = path_match.group("rel")
+                    rel = _clean(path_match.group("rel")) or path_match.group("rel")
                     dst_alias = path_match.group("dst")
-                    dst_label = path_match.group("dst_label") or None
+                    dst_label = _clean(path_match.group("dst_label")) or None
                     props_raw = path_match.group("props") or ""
 
                     nodes.setdefault(src_alias, IRNode(alias=src_alias))
@@ -265,6 +300,9 @@ class ISOQueryIR:
             with_items = [item.strip() for item in with_block.split(",") if item.strip()]
         if with_where_block:
             with_filters = [c.strip() for c in re.split(r"\bAND\b", with_where_block, flags=re.IGNORECASE) if c.strip()]
+        if having_block:
+            having_filters = [c.strip() for c in re.split(r"\bAND\b", having_block, flags=re.IGNORECASE) if c.strip()]
+            with_filters.extend(having_filters)
 
         if filters:
             unique_filters: List[IRFilter] = []
@@ -320,11 +358,20 @@ class ISOQueryIR:
         )
 
     def render(self) -> str:
+        def _quote_rel(rel: str) -> str:
+            # Only quote when the rel contains characters that require escaping.
+            if re.match(r"^[A-Za-z0-9_]+$", rel or ""):
+                return rel
+            safe = (rel or "").replace("`", "``")
+            return f"`{safe}`"
+
         def _format_value(val: Any) -> str:
             if isinstance(val, bool):
                 return "true" if val else "false"
             if isinstance(val, (int, float)):
                 return str(val)
+            if isinstance(val, (list, tuple)):
+                return "[" + ", ".join(_format_value(v) for v in val) + "]"
             if isinstance(val, dict) and "ref_alias" in val and "ref_property" in val:
                 return f"{val['ref_alias']}.{val['ref_property']}"
             text = str(val).strip()
@@ -340,13 +387,16 @@ class ISOQueryIR:
             r_label = node_labels.get(edge.right_alias)
             left = f"({edge.left_alias}:{l_label})" if l_label else f"({edge.left_alias})"
             right = f"({edge.right_alias}:{r_label})" if r_label else f"({edge.right_alias})"
-            patterns.append(f"{left}-[:{edge.rel}]->{right}")
+            patterns.append(f"{left}-[:{_quote_rel(edge.rel)}]->{right}")
         connected = {e.left_alias for e in self.edges} | {e.right_alias for e in self.edges}
         for alias, node in self.nodes.items():
             if alias not in connected:
                 label_part = f":{node.label}" if node.label else ""
                 patterns.append(f"({alias}{label_part})")
-        match_clause = "MATCH " + ", ".join(patterns)
+        if patterns:
+            match_clause = "MATCH " + "\nMATCH ".join(patterns)
+        else:
+            match_clause = "MATCH"
 
         where_clause = ""
         if self.filters:

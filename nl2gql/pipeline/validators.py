@@ -53,6 +53,8 @@ class SchemaGroundingValidator:
 class LogicValidator:
     SYSTEM = (
         "You judge whether an ISO GQL query fully satisfies a natural-language request using only the provided schema summary. "
+        "Hints are optional suggestions; ignore any hint that is not clearly required by the natural language request. "
+        "Do NOT invent extra required entities or relationships beyond what the request asks for. "
         "Return 'VALID' if every requested constraint, join, grouping, aggregation, and ordering is present. "
         "Return 'INVALID: <reason>' if anything is missing or incorrect. Never propose a new query."
     )
@@ -66,25 +68,21 @@ class LogicValidator:
             f"SCHEMA SUMMARY:\n{schema_summary}\n\n"
             f"NATURAL LANGUAGE:\n{nl}\n\n"
             f"QUERY:\n{query}\n\n"
-            f"STRUCTURAL HINTS:\n{hint_text}\n\n"
-            "Does the query satisfy the request?"
+            f"STRUCTURAL HINTS (optional):\n{hint_text}\n\n"
+            "Does the query satisfy the request while staying faithful to the natural-language ask?"
         )
-        temps = [0.0, 0.2, 0.4]
-        valid_votes = 0
-        reasons: List[str] = []
-        for temp in temps:
-            verdict, _ = chat_complete(self.model, self.SYSTEM, user, temperature=temp, top_p=0.9, max_tokens=200)
-            verdict_upper = verdict.strip().upper()
-            if verdict_upper.startswith("VALID"):
-                valid_votes += 1
-            elif verdict_upper.startswith("INVALID:"):
-                reasons.append(verdict.strip()[len("INVALID:") :].strip() or "unspecified reason")
-            else:
-                reasons.append(verdict.strip() or "logic validator unsure")
-        if valid_votes > len(temps) // 2:
+        # Keep logic gating strict but reduce randomness by using a single
+        # low-temperature evaluation with a tighter nucleus sample.
+        temps = [0.0]
+        verdict, _ = chat_complete(self.model, self.SYSTEM, user, temperature=temps[0], top_p=0.3, max_tokens=160)
+        verdict_upper = verdict.strip().upper()
+        if verdict_upper.startswith("VALID"):
             return True, None
-        reason = reasons[0] if reasons else "logic validator unsure"
-        return False, reason
+        if verdict_upper.startswith("INVALID:"):
+            reason = verdict.strip()[len("INVALID:") :].strip() or "unspecified reason"
+            return False, reason
+        # Treat non-standard replies as uncertain but do not fabricate extra reasons.
+        return False, verdict.strip() or "logic validator unsure"
 
 
 __all__ = ["SchemaGroundingValidator", "LogicValidator"]

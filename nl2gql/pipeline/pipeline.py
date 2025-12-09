@@ -35,10 +35,11 @@ class NL2GQLPipeline:
             max_loops=max_refinements,
         )
 
-    def run(self, nl: str, *, spinner=None) -> Tuple[str, list]:
-        return self.refiner.run(nl, self.preprocessor, self.intent_linker, spinner)
+    def run(self, nl: str, *, spinner=None, trace_path: Optional[str] = None) -> Tuple[str, list]:
+        return self.refiner.run(nl, self.preprocessor, self.intent_linker, spinner, trace_path=trace_path)
 
 
 __all__ = ["NL2GQLPipeline"]
+
 
 

@@ -21,6 +21,17 @@ def _fmt_block(text: str, indent: int = 6) -> str:
     return "\n".join(pad + line for line in text.splitlines())
 
 
+def _print_trace_hint(trace_dir: Optional[str], color_enabled: bool) -> None:
+    """Surface where JSON traces were written for debugging."""
+    if not trace_dir:
+        return
+    try:
+        resolved = Path(trace_dir).expanduser().resolve()
+    except Exception:
+        resolved = Path(trace_dir)
+    print(f"{style('[trace]', 'cyan', color_enabled)} per-attempt JSON traces: {resolved}")
+
+
 def print_timeline(nl_query: str, validation_log: List[Dict[str, any]], max_attempts: int) -> None:
     print("\n" + "=" * 80)
     print("PIPELINE EXECUTION SUMMARY")
@@ -44,6 +55,12 @@ def print_timeline(nl_query: str, validation_log: List[Dict[str, any]], max_atte
             elif phase == "link":
                 print("  • Schema links")
                 print(_fmt_block(json.dumps(entry.get("links"), indent=2)))
+            elif phase == "contract":
+                print("  • Contract requirements")
+                print(_fmt_block(json.dumps(entry.get("requirements"), indent=2)))
+            elif phase == "hints":
+                print("  • Logic hints")
+                print(_fmt_block(json.dumps(entry.get("logic_hints"), indent=2)))
             elif phase == "generate":
                 print("  • Candidates")
                 print(_fmt_block(json.dumps(entry.get("candidates"), indent=2)))
@@ -75,8 +92,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--spinner", dest="spinner", action="store_true", help="Show live spinner updates when running single queries")
     parser.add_argument("--no-spinner", dest="spinner", action="store_false")
     parser.set_defaults(spinner=None)
+    parser.add_argument("--trace-json", help="Directory to write per-attempt JSON traces (prompts/links/contracts/results)")
 
     args = parser.parse_args(argv)
+    color_enabled = sys.stdout.isatty()
 
     schema_context: Optional[str] = None
     if args.schema is not None:
@@ -92,7 +111,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         try:
             results = run_sample_suite(
                 args.suite_file,
-                max_iterations=args.max_attempts,
+                max_iterations=min(args.max_attempts, 3),
                 verbose=args.verbose,
                 db_path=args.db_path or DEFAULT_DB_PATH,
                 workers=args.suite_workers,
@@ -103,7 +122,6 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         total = len(results)
         passes = sum(1 for r in results if r.get("success"))
-        color_enabled = sys.stdout.isatty()
 
         print("\nSAMPLE SUITE SUMMARY")
         print(f"Results: {passes}/{total} passed")
@@ -158,9 +176,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             gen_model=args.gen_model or DEFAULT_OPENAI_MODEL_GEN,
             fix_model=args.fix_model or DEFAULT_OPENAI_MODEL_FIX,
             db_path=args.db_path or DEFAULT_DB_PATH,
-            max_refinements=args.max_attempts,
+            max_refinements=min(args.max_attempts, 3),
         )
-        query, timeline = pipeline.run(args.nl, spinner=spinner)
+        query, timeline = pipeline.run(args.nl, spinner=spinner, trace_path=args.trace_json)
         spinner.stop("✓ Query generated.", color="green")
         if args.verbose:
             print_timeline(args.nl, timeline, args.max_attempts)
@@ -172,6 +190,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             elapsed_ms = int((time.perf_counter() - start) * 1000)
             print(f"Elapsed: {elapsed_ms} ms")
         print(query)
+        _print_trace_hint(args.trace_json, color_enabled)
         return 0
     except PipelineFailure as exc:
         spinner.stop("✗ Pipeline failed.", color="red")
@@ -189,6 +208,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             elapsed_ms = int((time.perf_counter() - start) * 1000)
             print(f"Elapsed: {elapsed_ms} ms")
         print(f"Failed to generate query: {exc}", file=sys.stderr)
+        _print_trace_hint(args.trace_json, color_enabled)
         return 1
     except Exception as exc:
         spinner.stop("✗ Pipeline failed.", color="red")
@@ -200,6 +220,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
             elapsed_ms = int((time.perf_counter() - start) * 1000)
             print(f"Elapsed: {elapsed_ms} ms")
+        _print_trace_hint(args.trace_json, color_enabled)
         print(f"Failed to generate query: {exc}", file=sys.stderr)
         return 1
 

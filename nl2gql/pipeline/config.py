@@ -26,3 +26,4 @@ DEFAULT_DB_SCHEMA = os.getenv("NL2GQL_SCHEMA", "nl2gql")
 DEFAULT_DB_GRAPH = os.getenv("NL2GQL_GRAPH", "scratch")
 
 
+

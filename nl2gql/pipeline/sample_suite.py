@@ -73,6 +73,7 @@ def run_sample_suite(
     db_path: Optional[str] = None,
     workers: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
+    max_iterations = min(max_iterations, 3)
     suites = _load_sample_suite(suite_path)
     tasks: List[Dict[str, Any]] = []
     for suite_idx, suite in enumerate(suites, 1):

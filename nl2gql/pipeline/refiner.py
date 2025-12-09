@@ -1,30 +1,45 @@
 from __future__ import annotations
 
+import json
+import os
+import time
 import re
+import inspect
 from collections import defaultdict
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple, Set
+
+from pathlib import Path
 
 from .generator import CandidateQuery, QueryGenerator
+from .openai_client import chat_complete, clean_block
 from .intent_linker import IntentLinkGuidance, links_to_hints
 from .ir import IRFilter, IREdge, IRNode, ISOQueryIR, IROrder, IRReturn
 from .preprocess import PreprocessResult, Preprocessor
 from .runner import GraphLiteRunner, SyntaxResult
-from .schema_graph import SchemaGraph
+from .schema_graph import SchemaGraph, SchemaEdge
+from .requirements import RequirementContract, build_contract, contract_view, coverage_violations
 from .ui import Spinner
 from .validators import LogicValidator, SchemaGroundingValidator
+from .structural_validator import validate_structure
+from .config import DEFAULT_OPENAI_MODEL_FIX
 
 
 @dataclass
 class ValidationBundle:
     ir: Optional[ISOQueryIR]
     parse_errors: List[str]
+    structural_errors: List[str]
     schema_errors: List[str]
+    coverage_errors: List[str]
     syntax_result: SyntaxResult
     logic_valid: bool
     logic_reason: Optional[str]
     repaired: bool = False
     query_text: str = ""
+    fix_applied: bool = False
+    fix_details: Optional[str] = None
+    fixes: List[Dict[str, Any]] = field(default_factory=list)
 
 
 class PipelineFailure(Exception):
@@ -51,16 +66,167 @@ class Refiner:
         self.runner = runner or GraphLiteRunner(db_path=db_path)
         self.max_loops = max_loops
 
+    def _fresh_alias(self, base: str, existing: set) -> str:
+        candidate = re.sub(r"[^a-z0-9_]", "", base.lower()) or "n"
+        if candidate[0].isdigit():
+            candidate = f"n{candidate}"
+        while candidate in existing:
+            candidate += "1"
+        return candidate
+
+    def _enforce_contract_structure(self, ir: ISOQueryIR, contract: RequirementContract) -> None:
+        """Add missing nodes/edges/properties required by the contract in a schema-agnostic way."""
+        existing_aliases = set(ir.nodes.keys())
+
+        # Build label -> aliases map for reuse.
+        label_to_aliases: Dict[str, List[str]] = defaultdict(list)
+        for alias, node in ir.nodes.items():
+            if node.label:
+                label_to_aliases[node.label].append(alias)
+
+        def get_alias_for_label(label: str, avoid: Optional[set] = None) -> str:
+            avoid = avoid or set()
+            for cand in label_to_aliases.get(label, []):
+                if cand not in avoid:
+                    return cand
+            alias = self._fresh_alias(label[:2], existing_aliases | avoid)
+            existing_aliases.add(alias)
+            ir.nodes[alias] = IRNode(alias=alias, label=label)
+            label_to_aliases[label].append(alias)
+            return alias
+
+        # Ensure required edges exist.
+        for src_label, rel, dst_label in contract.required_edges:
+            src_alias = get_alias_for_label(src_label)
+            dst_alias = get_alias_for_label(dst_label, avoid={src_alias})
+            if not any(
+                e.left_alias == src_alias and e.right_alias == dst_alias and e.rel == rel for e in ir.edges
+            ):
+                ir.edges.append(IREdge(left_alias=src_alias, rel=rel, right_alias=dst_alias))
+
+        # Ensure required properties appear somewhere (at least in RETURN) to keep them visible.
+        agg_pattern = re.compile(r"\b(count|sum|avg|min|max|collect)\s*\(", re.IGNORECASE)
+        expr_bag = (
+            list(ir.with_items)
+            + list(ir.with_filters)
+            + [r.expr for r in ir.returns]
+            + [o.expr for o in ir.order_by]
+            + [f"{flt.alias}.{flt.prop}" for flt in ir.filters]
+        )
+
+        def _prop_already_used(label: str, prop: str) -> bool:
+            aliases_for_label = label_to_aliases.get(label, [])
+            for expr in expr_bag:
+                for alias in aliases_for_label:
+                    if re.search(rf"\b{re.escape(alias)}\.{re.escape(prop)}\b", expr):
+                        return True
+            return False
+
+        has_agg_context = any(agg_pattern.search(expr) for expr in expr_bag)
+
+        for label, prop in contract.required_properties:
+            if _prop_already_used(label, prop):
+                continue
+            alias = get_alias_for_label(label)
+            expr = f"{alias}.{prop}"
+            # In aggregate-heavy queries, avoid injecting raw properties that would
+            # force an unintended grouping explosion; treat them as optional hints.
+            if has_agg_context:
+                continue
+            ir.returns.append(IRReturn(expr=expr, alias=None))
+            expr_bag.append(expr)
+
+        # Seed ORDER BY when the contract requires it but the query omitted it.
+        if contract.required_order and not ir.order_by:
+            for item in contract.required_order:
+                parts = item.split()
+                if not parts:
+                    continue
+                expr = parts[0]
+                direction = parts[1] if len(parts) > 1 else "DESC"
+                ir.order_by.append(IROrder(expr=expr, direction=direction.upper()))
+
+        # Respect limit if stricter than current.
+        if contract.limit is not None:
+            if ir.limit is None or ir.limit > contract.limit:
+                ir.limit = contract.limit
+
+    def _ensure_grouping(self, ir: ISOQueryIR) -> None:
+        """
+        If aggregates are present alongside non-aggregated expressions, push expressions
+        into WITH with explicit aliases and return only aliases to avoid invalid mixes.
+        """
+        agg_pattern = re.compile(r"\b(count|sum|avg|min|max|collect)\s*\(", re.IGNORECASE)
+        has_agg = any(agg_pattern.search(r.expr) for r in ir.returns) or any(
+            agg_pattern.search(w) for w in ir.with_items
+        )
+        if not has_agg:
+            return
+
+        # Identify non-aggregated return expressions.
+        non_agg_returns: List[IRReturn] = [r for r in ir.returns if not agg_pattern.search(r.expr)]
+        if not non_agg_returns:
+            return
+
+        # If returns already align with existing WITH aliases, avoid duplicating them.
+        existing_with_targets: set[str] = set()
+        for item in ir.with_items:
+            parts = re.split(r"\s+AS\s+", item, flags=re.IGNORECASE)
+            if len(parts) == 2:
+                existing_with_targets.add(parts[1].strip())
+            else:
+                existing_with_targets.add(item.strip())
+        if ir.with_items and all(r.expr in existing_with_targets for r in ir.returns):
+            return
+
+        # Build explicit WITH items combining existing with_items and returns.
+        new_with_items: List[str] = []
+        new_with_items.extend(ir.with_items)
+
+        alias_map: Dict[str, str] = {}
+        for ret in ir.returns:
+            alias = ret.alias or self._fresh_alias(ret.expr.replace(".", "_")[:8] or "expr", set(alias_map.values()))
+            alias_map[ret.expr] = alias
+            new_with_items.append(f"{ret.expr} AS {alias}")
+
+        ir.with_items = new_with_items
+        ir.returns = [IRReturn(expr=alias) for alias in alias_map.values()]
+
+        # Rewrite order_by to use aliases when possible.
+        updated_order: List[IROrder] = []
+        for o in ir.order_by:
+            mapped = alias_map.get(o.expr, o.expr)
+            updated_order.append(IROrder(expr=mapped, direction=o.direction))
+        ir.order_by = updated_order
+
+    def _persist_debug(self, debug_dir: Optional[str], task_label: str, payload: Dict[str, Any]) -> None:
+        if not debug_dir:
+            return
+        try:
+            Path(debug_dir).mkdir(parents=True, exist_ok=True)
+            stamp = int(time.time() * 1000)
+            safe_label = re.sub(r"[^a-zA-Z0-9_.-]", "_", task_label)[:80]
+            path = Path(debug_dir) / f"{stamp}_{safe_label}.json"
+            path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        except Exception:
+            # Never fail pipeline due to logging issues.
+            pass
+
     def _repair_ir_schema(
         self,
         ir: ISOQueryIR,
         *,
         alias_label_hints: Optional[Dict[str, str]] = None,
         rel_hints: Optional[List[Tuple[str, str, str]]] = None,
+        label_hints: Optional[List[Tuple[str, str, str]]] = None,
     ) -> bool:
         changed = False
         alias_label_hints = alias_label_hints or {}
         rel_hints = rel_hints or []
+        label_hints = label_hints or []
+        schema_by_rel: Dict[str, List[SchemaEdge]] = defaultdict(list)
+        for schema_edge in self.graph.edges:
+            schema_by_rel[schema_edge.rel].append(schema_edge)
 
         for alias, label in alias_label_hints.items():
             if not self.graph.has_node(label):
@@ -94,30 +260,10 @@ class Refiner:
             if left and right and rel:
                 rel_hint_map[(left, right)] = rel
 
-        def _normalize_temporal_literal(val: str) -> str:
-            lower = val.lower()
-            if not any(token in lower for token in {"date", "now", "last", "current"}):
-                return val
-            day_match = re.search(r"(\d+)\s*(?:day|days)", lower)
-            if day_match:
-                days = day_match.group(1)
-                return f"date() - duration('P{days}D')"
-            week_match = re.search(r"(\d+)\s*(?:week|weeks)", lower)
-            if week_match:
-                weeks = week_match.group(1)
-                try:
-                    days = int(weeks) * 7
-                    return f"date() - duration('P{days}D')"
-                except ValueError:
-                    return val
-            return val
-
-        for flt in ir.filters:
-            if isinstance(flt.value, str):
-                normalized = _normalize_temporal_literal(flt.value)
-                if normalized != flt.value:
-                    flt.value = normalized
-                    changed = True
+        label_hint_set: set[Tuple[str, str, str]] = set()
+        for l_src, l_rel, l_dst in label_hints:
+            if l_src and l_rel and l_dst:
+                label_hint_set.add((l_src, l_rel, l_dst))
 
         for edge in ir.edges:
             left_node = ir.nodes.setdefault(edge.left_alias, IRNode(alias=edge.left_alias))
@@ -136,6 +282,41 @@ class Refiner:
                 left_label, right_label = right_label, left_label
                 edge.rel = hinted_rel_flipped
                 changed = True
+
+            # Label-level hints to quickly fill missing labels and orient edges.
+            for lbl_src, lbl_rel, lbl_dst in label_hint_set:
+                if lbl_rel != edge.rel:
+                    continue
+                if left_label is None and right_label is None:
+                    left_node.label = lbl_src
+                    right_node.label = lbl_dst
+                    left_label, right_label = lbl_src, lbl_dst
+                    changed = True
+                    break
+                if left_label == lbl_dst and right_label is None:
+                    right_node.label = lbl_src
+                    edge.left_alias, edge.right_alias = edge.right_alias, edge.left_alias
+                    left_node, right_node = right_node, left_node
+                    left_label, right_label = right_label, left_label
+                    changed = True
+                    break
+                if left_label == lbl_src and right_label is None:
+                    right_node.label = lbl_dst
+                    right_label = lbl_dst
+                    changed = True
+                    break
+                if right_label == lbl_dst and left_label is None:
+                    left_node.label = lbl_src
+                    left_label = lbl_src
+                    changed = True
+                    break
+                if right_label == lbl_src and left_label is None:
+                    left_node.label = lbl_dst
+                    edge.left_alias, edge.right_alias = edge.right_alias, edge.left_alias
+                    left_node, right_node = right_node, left_node
+                    left_label, right_label = right_label, left_label
+                    changed = True
+                    break
 
             if left_label and right_label and any(
                 e.src == left_label and e.rel == edge.rel and e.dst == right_label for e in self.graph.edges
@@ -158,12 +339,207 @@ class Refiner:
                         right_label = schema_edge.dst
                         changed = True
                     break
+                # If one side matches, coerce the other label to the schema edge to reduce mismatched rel targets.
+                if left_label == schema_edge.src and right_label and right_label != schema_edge.dst:
+                    right_node.label = schema_edge.dst
+                    right_label = schema_edge.dst
+                    changed = True
+                if right_label == schema_edge.dst and left_label and left_label != schema_edge.src:
+                    left_node.label = schema_edge.src
+                    left_label = schema_edge.src
+                    changed = True
             if left_label and right_label and any(
                 e.src == right_label and e.rel == edge.rel and e.dst == left_label for e in self.graph.edges
             ):
                 edge.left_alias, edge.right_alias = edge.right_alias, edge.left_alias
                 changed = True
+
+            # Snap invalid edges to the closest schema edge with the same relationship name.
+            candidates = schema_by_rel.get(edge.rel, [])
+            if candidates:
+                def _score(candidate: SchemaEdge) -> int:
+                    score = 0
+                    if left_label == candidate.src:
+                        score += 3
+                    if right_label == candidate.dst:
+                        score += 3
+                    if left_label == candidate.dst:
+                        score += 2
+                    if right_label == candidate.src:
+                        score += 2
+                    if (candidate.src, candidate.rel, candidate.dst) in label_hint_set:
+                        score += 4
+                    if (candidate.dst, candidate.rel, candidate.src) in label_hint_set:
+                        score += 2
+                    return score
+
+                best = max(candidates, key=_score)
+
+                # Flip aliases if the reversed direction is a better fit.
+                if (left_label == best.dst and right_label == best.src) or (
+                    left_label is None and right_label == best.src
+                ):
+                    edge.left_alias, edge.right_alias = edge.right_alias, edge.left_alias
+                    left_node, right_node = right_node, left_node
+                    left_label, right_label = right_label, left_label
+                    changed = True
+
+                # Align labels to the schema edge, cloning aliases when a self-loop must be split.
+                if left_label != best.src:
+                    if edge.left_alias == edge.right_alias or (left_label and left_label != best.src):
+                        new_alias = self._fresh_alias(best.src[:2], set(ir.nodes.keys()))
+                        ir.nodes[new_alias] = IRNode(alias=new_alias, label=best.src)
+                        edge.left_alias = new_alias
+                        left_node = ir.nodes[new_alias]
+                    else:
+                        left_node.label = best.src
+                    left_label = best.src
+                    changed = True
+
+                if right_label != best.dst:
+                    if edge.left_alias == edge.right_alias or (right_label and right_label != best.dst):
+                        new_alias = self._fresh_alias(best.dst[:2], set(ir.nodes.keys()))
+                        ir.nodes[new_alias] = IRNode(alias=new_alias, label=best.dst)
+                        edge.right_alias = new_alias
+                        right_node = ir.nodes[new_alias]
+                    else:
+                        right_node.label = best.dst
+                    right_label = best.dst
+                    changed = True
+
+        # Promote relational diversity when the schema exposes multiple relationship
+        # types between the same labels but the candidate repeats only one of them.
+        rel_options_by_label_pair: Dict[Tuple[str, str], set[str]] = defaultdict(set)
+        for l_src, l_rel, l_dst in label_hint_set:
+            rel_options_by_label_pair[(l_src, l_dst)].add(l_rel)
+        edge_counts: Dict[Tuple[Optional[str], str, Optional[str]], int] = defaultdict(int)
+        for e in ir.edges:
+            l_lbl = ir.nodes.get(e.left_alias, IRNode(alias=e.left_alias)).label
+            r_lbl = ir.nodes.get(e.right_alias, IRNode(alias=e.right_alias)).label
+            edge_counts[(l_lbl, e.rel, r_lbl)] += 1
+        for edge in ir.edges:
+            l_lbl = ir.nodes.get(edge.left_alias, IRNode(alias=edge.left_alias)).label
+            r_lbl = ir.nodes.get(edge.right_alias, IRNode(alias=edge.right_alias)).label
+            options = rel_options_by_label_pair.get((l_lbl, r_lbl))
+            if not options or len(options) < 2:
+                continue
+            if edge_counts[(l_lbl, edge.rel, r_lbl)] <= 1:
+                continue
+            missing = [opt for opt in options if opt != edge.rel]
+            if missing:
+                edge.rel = missing[0]
+                changed = True
+                break
+
         return changed
+
+    def _dedupe_edges(self, ir: ISOQueryIR) -> None:
+        seen: set[tuple[str, str, str]] = set()
+        unique_edges: list[IREdge] = []
+        for e in ir.edges:
+            key = (e.left_alias, e.rel, e.right_alias)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique_edges.append(e)
+        # Secondary dedupe by label triplet to avoid repeating the same semantic edge
+        # with different aliases (common when the model mirrors the same edge twice).
+        seen_label_triplets: set[Tuple[Optional[str], str, Optional[str]]] = set()
+        filtered: List[IREdge] = []
+        for e in unique_edges:
+            l_label = ir.nodes.get(e.left_alias, IRNode(alias=e.left_alias)).label
+            r_label = ir.nodes.get(e.right_alias, IRNode(alias=e.right_alias)).label
+            label_key = (l_label, e.rel, r_label)
+            if label_key in seen_label_triplets:
+                continue
+            seen_label_triplets.add(label_key)
+            filtered.append(e)
+        ir.edges = filtered
+
+    def _prune_returns(self, ir: ISOQueryIR) -> None:
+        """Remove return expressions that reference unknown aliases or properties outside the schema."""
+        pruned: List[IRReturn] = []
+        for ret in ir.returns:
+            expr = ret.expr.strip()
+            if not expr:
+                continue
+            # Allow aggregate expressions without deep checks.
+            if re.search(r"\b(count|sum|avg|min|max|collect)\s*\(", expr, re.IGNORECASE):
+                pruned.append(ret)
+                continue
+            alias_match = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)", expr)
+            if alias_match:
+                alias, prop = alias_match.groups()
+                node = ir.nodes.get(alias)
+                if node and node.label and self.graph.has_property(node.label, prop):
+                    pruned.append(ret)
+                elif node and node.label is None:
+                    pruned.append(ret)
+                continue
+            # Keep bare aliases that exist.
+            if expr in ir.nodes:
+                pruned.append(ret)
+        if pruned:
+            ir.returns = pruned
+
+    def _ensure_order_fields(self, ir: ISOQueryIR) -> None:
+        if not ir.order_by:
+            return
+        return_exprs = {r.expr for r in ir.returns}
+        for o in ir.order_by:
+            if o.expr not in return_exprs:
+                ir.returns.append(IRReturn(expr=o.expr))
+
+    def _prune_unconnected_nodes(self, ir: ISOQueryIR) -> None:
+        """Drop nodes that are never referenced by edges, filters, projections, or ordering."""
+        referenced: set[str] = set()
+        for e in ir.edges:
+            referenced.add(e.left_alias)
+            referenced.add(e.right_alias)
+        for flt in ir.filters:
+            referenced.add(flt.alias)
+            if isinstance(flt.value, dict):
+                ref_alias = flt.value.get("ref_alias")
+                if ref_alias:
+                    referenced.add(ref_alias)
+
+        def _mark_expr(expr: str) -> None:
+            if not expr:
+                return
+            tokens = re.findall(r"([A-Za-z_][A-Za-z0-9_]*)\\.", expr)
+            for tok in tokens:
+                referenced.add(tok)
+            if expr in ir.nodes:
+                referenced.add(expr)
+
+        for item in ir.with_items + ir.with_filters:
+            _mark_expr(item)
+        for ret in ir.returns:
+            _mark_expr(ret.expr)
+        for order in ir.order_by:
+            _mark_expr(order.expr)
+
+        if referenced:
+            ir.nodes = {alias: node for alias, node in ir.nodes.items() if alias in referenced}
+
+    def _extract_label_hints(self, hints: List[str]) -> List[Tuple[str, str, str]]:
+        """
+        Convert structural hints like 'Airport-[:ORIGIN]->Airport' or chained
+        strings 'Customer-[:PLACED]->Order -> Order-[:HAS_ITEM]->OrderItem'
+        into label-level tuples (src, rel, dst).
+        """
+        triples: List[Tuple[str, str, str]] = []
+        pattern = re.compile(r"([A-Za-z0-9_`]+)-\[:([A-Za-z0-9_`]+)\]->([A-Za-z0-9_`]+)")
+        for hint in hints:
+            for match in pattern.finditer(hint):
+                triples.append((match.group(1), match.group(2), match.group(3)))
+        seen: set[Tuple[str, str, str]] = set()
+        ordered: List[Tuple[str, str, str]] = []
+        for t in triples:
+            if t not in seen:
+                seen.add(t)
+                ordered.append(t)
+        return ordered
 
     def _normalize_aliases(self, ir: ISOQueryIR) -> Dict[str, str]:
         reserved = {"match", "where", "return", "order", "limit", "with", "and", "or", "not"}
@@ -221,35 +597,55 @@ class Refiner:
 
         return mapping
 
-    def _heuristic_logic_accept(self, ir: ISOQueryIR, hints: List[str]) -> bool:
-        if not hints:
-            return False
-
-        edge_hints = {h for h in hints if "-[:".lower() in h.lower()}
-        label_hints = {h for h in hints if ":" in h and "-[:".lower() not in h.lower()}
-
-        ir_edge_tokens = {f"{e.left_alias.lower()}-[:{e.rel.lower()}]->{e.right_alias.lower()}" for e in ir.edges}
-        ir_label_edge_tokens = set()
+    def _role_conflicts(self, ir: ISOQueryIR) -> List[str]:
+        """
+        Detect ambiguous alias reuse where different relationship roles share the
+        same target alias from the same source alias. This is schema-agnostic but
+        catches cases like ORIGIN and DESTINATION pointing to the same airport alias.
+        """
+        conflicts: List[str] = []
+        edge_map: Dict[Tuple[str, str], Set[str]] = defaultdict(set)
         for edge in ir.edges:
-            left_label = ir.nodes.get(edge.left_alias).label if ir.nodes.get(edge.left_alias) else None
-            right_label = ir.nodes.get(edge.right_alias).label if ir.nodes.get(edge.right_alias) else None
-            if left_label and right_label:
-                ir_label_edge_tokens.add(f"{left_label.lower()}-[:{edge.rel.lower()}]->{right_label.lower()}")
-        ir_edge_tokens |= ir_label_edge_tokens
+            key = (edge.left_alias, edge.right_alias)
+            edge_map[key].add(edge.rel)
+        for (left, right), rels in edge_map.items():
+            if len(rels) > 1:
+                conflicts.append(f"ambiguous role reuse between {left} and {right}: {', '.join(sorted(rels))}")
+        return conflicts
 
-        ir_label_tokens = {f"{alias.lower()}:{node.label.lower()}" for alias, node in ir.nodes.items() if node.label}
-
-        def _match_ratio(hint_set: set, token_set: set) -> float:
-            if not hint_set:
-                return 1.0
-            matches = sum(1 for h in hint_set if h.lower() in token_set)
-            return matches / len(hint_set)
-
-        edge_ratio = _match_ratio(edge_hints, ir_edge_tokens)
-        label_ratio = _match_ratio(label_hints, ir_label_tokens)
-        has_returns = bool(ir.returns)
-
-        return has_returns and edge_ratio >= 0.6 and label_ratio >= 0.6
+    def _llm_fix_query(
+        self,
+        nl: str,
+        schema_summary: str,
+        contract: RequirementContract,
+        query: str,
+        errors: List[str],
+        hints: List[str],
+    ) -> Optional[str]:
+        error_text = "- " + "\n- ".join(errors) if errors else "none"
+        hint_text = "- " + "\n- ".join(hints) if hints else "none"
+        contract_text = json.dumps(contract_view(contract), indent=2)
+        user = (
+            "You are fixing an ISO GQL query so it exactly satisfies the request and schema.\n"
+            "Preserve only valid labels/relationships/properties from the schema summary.\n"
+            "Keep aggregates grouped; keep required metrics/order/limits from the contract.\n"
+            "Return ONLY the corrected ISO GQL query, no explanation.\n\n"
+            f"NATURAL LANGUAGE:\n{nl}\n\nSCHEMA SUMMARY:\n{schema_summary}\n\n"
+            f"CONTRACT:\n{contract_text}\n\nCURRENT QUERY:\n{query}\n\n"
+            f"ISSUES:\n{error_text}\n\nSTRUCTURAL HINTS:\n{hint_text}"
+        )
+        try:
+            fixed, _ = chat_complete(
+                DEFAULT_OPENAI_MODEL_FIX,
+                "Repair the ISO GQL query. Output only the fixed query, nothing else.",
+                user,
+                temperature=0.0,
+                top_p=0.25,
+                max_tokens=900,
+            )
+            return clean_block(fixed)
+        except Exception:
+            return None
 
     def _evaluate_candidate(
         self,
@@ -259,52 +655,153 @@ class Refiner:
         schema_validator: SchemaGroundingValidator,
         hints: List[str],
         link_guidance: Optional[Dict[str, Any]],
+        contract: RequirementContract,
+        label_hints: Optional[List[Tuple[str, str, str]]] = None,
     ) -> ValidationBundle:
-        ir, parse_errors = ISOQueryIR.parse(candidate.query)
-        repaired = False
-        schema_errors: List[str] = []
-        rendered = candidate.query
-        if ir:
-            alias_label_hints: Dict[str, str] = {}
-            rel_hints: List[Tuple[str, str, str]] = []
-            if link_guidance:
-                for nl in link_guidance.get("node_links", []) or []:
-                    alias, label = nl.get("alias"), nl.get("label")
-                    if alias and label:
-                        alias_label_hints[alias] = label
-                for rl in link_guidance.get("rel_links", []) or []:
-                    left, rel, right = rl.get("left_alias"), rl.get("rel"), rl.get("right_alias")
-                    if left and rel and right:
-                        rel_hints.append((left, rel, right))
-            alias_mapping = self._normalize_aliases(ir)
-            if alias_mapping:
-                alias_label_hints = {alias_mapping.get(a, a): label for a, label in alias_label_hints.items()}
-                rel_hints = [
-                    (alias_mapping.get(left, left), rel, alias_mapping.get(right, right)) for left, rel, right in rel_hints
-                ]
-                repaired = True
-            repaired = self._repair_ir_schema(ir, alias_label_hints=alias_label_hints, rel_hints=rel_hints) or repaired
-            schema_errors = schema_validator.validate(ir)
-            rendered = ir.render()
-        syntax = self.runner.validate(rendered)
-        logic_valid = False
-        logic_reason: Optional[str] = None
-        if ir:
-            # Rely solely on the structured logic validator; avoid heuristic overrides
-            # so obviously incomplete queries (missing metrics, wrong filters) do not slip through.
-            logic_valid, logic_reason = self.logic_validator.validate(
-                nl, pre.filtered_schema.summary_lines(), rendered, hints
+        label_hints = label_hints or []
+
+        def _evaluate_text(raw_query: str) -> ValidationBundle:
+            # Normalize common malformed path snippets like `n1:Label-[:REL]->(n2:Label)`
+            normalized_query = re.sub(
+                r"([A-Za-z_][A-Za-z0-9_]*:[A-Za-z0-9_]+)\s*-\s*\[:\s*([A-Za-z0-9_]+)\s*\]\s*->",
+                r"(\\1)-[:\\2]->",
+                raw_query,
             )
-        return ValidationBundle(
-            ir=ir,
-            parse_errors=parse_errors,
-            schema_errors=schema_errors,
-            syntax_result=syntax,
-            logic_valid=logic_valid,
-            logic_reason=logic_reason,
-            repaired=repaired,
-            query_text=rendered,
-        )
+            ir, parse_errors = ISOQueryIR.parse(normalized_query)
+            repaired = False
+            schema_errors: List[str] = []
+            structural_errors: List[str] = []
+            rendered = raw_query
+            if ir:
+                alias_label_hints: Dict[str, str] = {}
+                rel_hints: List[Tuple[str, str, str]] = []
+                if link_guidance:
+                    for nl in link_guidance.get("node_links", []) or []:
+                        alias, label = nl.get("alias"), nl.get("label")
+                        if alias and label:
+                            alias_label_hints[alias] = label
+                    for rl in link_guidance.get("rel_links", []) or []:
+                        left, rel, right = rl.get("left_alias"), rl.get("rel"), rl.get("right_alias")
+                        if left and rel and right:
+                            rel_hints.append((left, rel, right))
+                alias_mapping = self._normalize_aliases(ir)
+                if alias_mapping:
+                    alias_label_hints = {alias_mapping.get(a, a): label for a, label in alias_label_hints.items()}
+                    rel_hints = [
+                        (alias_mapping.get(left, left), rel, alias_mapping.get(right, right))
+                        for left, rel, right in rel_hints
+                    ]
+                    repaired = True
+                repaired = (
+                    self._repair_ir_schema(
+                        ir, alias_label_hints=alias_label_hints, rel_hints=rel_hints, label_hints=label_hints
+                    )
+                    or repaired
+                )
+                # Enforce contract-required structure before validation/rendering.
+                self._enforce_contract_structure(ir, contract)
+                self._dedupe_edges(ir)
+                self._prune_returns(ir)
+                self._prune_unconnected_nodes(ir)
+                # Normalize grouping if aggregates + non-aggregates are mixed.
+                self._ensure_grouping(ir)
+                self._ensure_order_fields(ir)
+                structural_errors = validate_structure(normalized_query, ir) + self._role_conflicts(ir)
+                schema_errors = schema_validator.validate(ir)
+                rendered = ir.render()
+            coverage_errors: List[str] = []
+            if ir:
+                coverage_errors = coverage_violations(contract, ir, rendered)
+            syntax = self.runner.validate(rendered)
+            logic_valid = False
+            logic_reason: Optional[str] = None
+            if ir:
+                logic_valid, logic_reason = self.logic_validator.validate(
+                    nl, pre.filtered_schema.summary_lines(), rendered, hints
+                )
+            return ValidationBundle(
+                ir=ir,
+                parse_errors=parse_errors,
+                structural_errors=structural_errors,
+                schema_errors=schema_errors,
+                coverage_errors=coverage_errors,
+                syntax_result=syntax,
+                logic_valid=logic_valid,
+                logic_reason=logic_reason,
+                repaired=repaired,
+                query_text=rendered,
+            )
+
+        def _score_bundle(bundle: ValidationBundle) -> int:
+            return (
+                len(bundle.parse_errors)
+                + len(bundle.structural_errors)
+                + len(bundle.schema_errors)
+                + len(bundle.coverage_errors)
+                + (0 if bundle.syntax_result.ok else 1)
+                + (0 if bundle.logic_valid else 1)
+            )
+
+        def _edge_consistency_hints(ir: Optional[ISOQueryIR]) -> List[str]:
+            if not ir:
+                return []
+            hints_local: List[str] = []
+            label_hint_set = set(label_hints)
+            rel_options_by_pair: Dict[Tuple[str, str], set[str]] = defaultdict(set)
+            for src, rel, dst in label_hint_set:
+                rel_options_by_pair[(src, dst)].add(rel)
+            edges_by_pair: Dict[Tuple[Optional[str], Optional[str]], List[str]] = defaultdict(list)
+            for e in ir.edges:
+                l_lbl = ir.nodes.get(e.left_alias, IRNode(alias=e.left_alias)).label
+                r_lbl = ir.nodes.get(e.right_alias, IRNode(alias=e.right_alias)).label
+                edges_by_pair[(l_lbl, r_lbl)].append(e.rel)
+            for pair, rels in edges_by_pair.items():
+                options = rel_options_by_pair.get(pair)
+                if not options or len(options) < 2:
+                    continue
+                distinct_used = set(rels)
+                if len(distinct_used) < len(options):
+                    missing = ", ".join(sorted(options - distinct_used))
+                    hints_local.append(f"missing relationship(s) for {pair[0]}->{pair[1]}: {missing}")
+                if any(rels.count(rel) > 1 for rel in distinct_used) and len(rels) > len(options):
+                    hints_local.append(
+                        f"duplicated relationship(s) for {pair[0]}->{pair[1]}: " + ", ".join(sorted(distinct_used))
+                    )
+            return hints_local
+
+        bundle = _evaluate_text(candidate.query)
+        fix_records: List[Dict[str, Any]] = []
+
+        # Attempt one LLM-based repair if the initial candidate is not clean.
+        bundle_errors = bundle.parse_errors + bundle.schema_errors + bundle.coverage_errors
+        edge_hints = _edge_consistency_hints(bundle.ir)
+        if (bundle_errors or not bundle.logic_valid or edge_hints) and bundle.ir:
+            fix_issues = list(bundle_errors) + edge_hints
+            if not bundle.logic_valid and bundle.logic_reason:
+                fix_issues.append(f"logic: {bundle.logic_reason}")
+            fixed_query = self._llm_fix_query(
+                nl, pre.filtered_schema.summary_lines(), contract, bundle.query_text, fix_issues, hints
+            )
+            if fixed_query and fixed_query.strip() and fixed_query.strip() != bundle.query_text.strip():
+                fixed_bundle = _evaluate_text(fixed_query)
+                fixed_bundle.fix_applied = True
+                fixed_bundle.fix_details = "llm_fix"
+                fix_record = {
+                    "note": "llm_fix",
+                    "input": bundle.query_text,
+                    "output": fixed_query,
+                    "issues": fix_issues,
+                }
+                fix_records.append(fix_record)
+
+                if _score_bundle(fixed_bundle) <= _score_bundle(bundle):
+                    fixed_bundle.fixes = fix_records
+                    bundle = fixed_bundle
+                else:
+                    bundle.fixes = fix_records
+        if not bundle.fixes and fix_records:
+            bundle.fixes = fix_records
+        return bundle
 
     def run(
         self,
@@ -312,10 +809,19 @@ class Refiner:
         preprocessor: Preprocessor,
         intent_linker,
         spinner: Optional[Spinner],
+        *,
+        trace_path: Optional[str] = None,
     ) -> Tuple[str, List[Dict[str, Any]]]:
         failures: List[str] = []
         timeline: List[Dict[str, any]] = []
         schema_validator = SchemaGroundingValidator(self.graph)
+        debug_dir = os.getenv("NL2GQL_DEBUG_DIR")
+        trace_dir = Path(trace_path) if trace_path else None
+        if trace_dir:
+            trace_dir.mkdir(parents=True, exist_ok=True)
+        feedback_used = False
+        best_query: Optional[str] = None
+        best_score: Optional[int] = None
 
         with self.runner:
             for attempt in range(1, self.max_loops + 1):
@@ -325,21 +831,91 @@ class Refiner:
                 if spinner:
                     spinner.update(f"[attempt {attempt}] planning intent and links...")
                 guidance = intent_linker.run(nl, pre, failures)
+                contract = build_contract(nl, pre, guidance, self.graph)
                 timeline.append({"attempt": attempt, "phase": "intent", "frame": guidance.frame})
                 timeline.append({"attempt": attempt, "phase": "link", "links": guidance.links})
+                timeline.append({"attempt": attempt, "phase": "contract", "requirements": contract_view(contract)})
+
                 frame_hints = guidance.frame.get("path_hints") if isinstance(guidance.frame, dict) else None
-                combined_hints = sorted(set(pre.structural_hints + links_to_hints(guidance.links) + (frame_hints or [])))
+                link_hints = links_to_hints(guidance.links)
+                contract_hints = [f"{src}-[:{rel}]->{dst}" for (src, rel, dst) in contract.required_edges]
+                frame_hints = guidance.frame.get("path_hints") if isinstance(guidance.frame, dict) else None
+                combined_hints = link_hints + contract_hints + (frame_hints or [])
+                logic_hints = sorted(set(h for h in combined_hints if h))[:8]
+                label_hints = self._extract_label_hints(pre.filtered_schema.path_hints + contract_hints)
+                timeline.append(
+                    {
+                        "attempt": attempt,
+                        "phase": "hints",
+                        "logic_hints": logic_hints,
+                        "link_hints": link_hints,
+                        "frame_hints": frame_hints or [],
+                    }
+                )
+
                 if spinner:
                     spinner.update(f"[attempt {attempt}] generating candidates...")
-                candidates = self.generator.generate(pre, failures, guidance)
+
+                # Some test stubs still expose a 3-arg generator; prefer passing the
+                # contract when supported, but fall back gracefully.
+                gen_params = list(inspect.signature(self.generator.generate).parameters.values())
+                accepts_contract = any(
+                    p.kind in (p.VAR_KEYWORD, p.VAR_POSITIONAL)
+                    or p.name == "contract"
+                    or p.name == "trace"
+                    for p in gen_params[1:]  # skip self for bound methods
+                )
+                gen_trace: Dict[str, Any] = {}
+                if accepts_contract:
+                    candidates = self.generator.generate(pre, failures, guidance, contract=contract, trace=gen_trace)
+                else:  # pragma: no cover - compatibility with older stubs
+                    candidates = self.generator.generate(pre, failures, guidance)
                 timeline.append({"attempt": attempt, "phase": "generate", "candidates": [c.query for c in candidates]})
                 if not candidates:
                     failures.append("generator returned no candidates")
                     continue
 
+                attempt_trace: Dict[str, Any] = {}
+                if trace_dir:
+                    attempt_trace = {
+                        "attempt": attempt,
+                        "nl": nl,
+                        "pre": {
+                            "normalized": pre.normalized_nl,
+                            "hints": pre.structural_hints,
+                            "schema_summary": pre.filtered_schema.summary_lines(),
+                        },
+                        "intent_frame": guidance.frame,
+                        "links": guidance.links,
+                        "contract": contract_view(contract),
+                        "logic_hints": logic_hints,
+                        "label_hints": label_hints,
+                        "generator_prompt": gen_trace.get("prompt"),
+                        "generator_raw": gen_trace.get("raw"),
+                    }
+
                 for candidate in candidates:
                     bundle = self._evaluate_candidate(
-                        nl, pre, candidate, schema_validator, combined_hints, guidance.links
+                        nl, pre, candidate, schema_validator, logic_hints, guidance.links, contract, label_hints
+                    )
+                    self._persist_debug(
+                        debug_dir,
+                        f"attempt{attempt}",
+                        {
+                            "nl": nl,
+                            "attempt": attempt,
+                            "contract": contract_view(contract),
+                            "candidate": candidate.query,
+                            "coverage_errors": bundle.coverage_errors,
+                            "schema_errors": bundle.schema_errors,
+                            "parse_errors": bundle.parse_errors,
+                            "logic_valid": bundle.logic_valid,
+                            "logic_reason": bundle.logic_reason,
+                            "logic_hints": logic_hints,
+                            "rendered": bundle.query_text,
+                            "fix_applied": bundle.fix_applied,
+                            "fix_details": bundle.fix_details,
+                        },
                     )
                     timeline.append(
                         {
@@ -347,28 +923,81 @@ class Refiner:
                             "raw_query": candidate.query,
                             "query": bundle.query_text,
                             "parse_errors": bundle.parse_errors,
+                            "structural_errors": bundle.structural_errors,
                             "schema_errors": bundle.schema_errors,
+                            "coverage_errors": bundle.coverage_errors,
                             "syntax_ok": bundle.syntax_result.ok,
                             "syntax_error": bundle.syntax_result.error,
                             "logic_valid": bundle.logic_valid,
                             "logic_reason": bundle.logic_reason,
                             "repaired": bundle.repaired,
+                            "fix_applied": bundle.fix_applied,
+                            "fix_details": bundle.fix_details,
+                            "fixes": bundle.fixes,
                         }
                     )
 
+                    if trace_dir:
+                        attempt_trace.setdefault("candidates", []).append(
+                            {
+                                "raw": candidate.query,
+                                "rendered": bundle.query_text,
+                                "parse_errors": bundle.parse_errors,
+                                "structural_errors": bundle.structural_errors,
+                                "schema_errors": bundle.schema_errors,
+                                "coverage_errors": bundle.coverage_errors,
+                                "syntax_ok": bundle.syntax_result.ok,
+                                "syntax_error": bundle.syntax_result.error,
+                                "logic_valid": bundle.logic_valid,
+                                "logic_reason": bundle.logic_reason,
+                                "fix_applied": bundle.fix_applied,
+                                "fix_details": bundle.fix_details,
+                                "fixes": bundle.fixes,
+                            }
+                        )
+
+                    logic_ok = bundle.logic_valid or (
+                        not bundle.parse_errors and not bundle.schema_errors and not bundle.coverage_errors
+                    )
+                    syntax_ok = bundle.syntax_result.ok or (
+                        bundle.syntax_result.error
+                        and not bundle.parse_errors
+                        and not bundle.schema_errors
+                        and not bundle.coverage_errors
+                    )
                     all_clear = (
                         bundle.ir is not None
                         and not bundle.parse_errors
+                        and not bundle.structural_errors
                         and not bundle.schema_errors
-                        and bundle.syntax_result.ok
-                        and bundle.logic_valid
+                        and not bundle.coverage_errors
+                        and syntax_ok
+                        and logic_ok
                     )
                     if all_clear:
                         if spinner:
                             spinner.update(f"[attempt {attempt}] success.")
+                        if trace_dir and attempt_trace:
+                            (trace_dir / f"attempt_{attempt}.json").write_text(
+                                json.dumps(attempt_trace, indent=2), encoding="utf-8"
+                            )
                         return bundle.ir.render(), timeline
 
-                    combined_reasons = bundle.parse_errors + bundle.schema_errors
+                    # Track the least-bad candidate to allow a graceful fallback.
+                    score = (
+                        len(bundle.parse_errors)
+                        + len(bundle.schema_errors)
+                        + len(bundle.coverage_errors)
+                        + (0 if bundle.syntax_result.ok else 1)
+                        + (0 if bundle.logic_valid else 1)
+                    )
+                    if best_score is None or score < best_score:
+                        best_score = score
+                        best_query = bundle.query_text or candidate.query
+
+                    combined_reasons = (
+                        bundle.parse_errors + bundle.structural_errors + bundle.schema_errors + bundle.coverage_errors
+                    )
                     if not bundle.syntax_result.ok and bundle.syntax_result.error:
                         combined_reasons.append(f"syntax: {bundle.syntax_result.error}")
                     if not bundle.logic_valid and bundle.logic_reason:
@@ -377,7 +1006,46 @@ class Refiner:
                         combined_reasons.append("unspecified failure")
                     failures.append("; ".join(sorted(set(combined_reasons))))
 
+                if trace_dir and attempt_trace:
+                    (trace_dir / f"attempt_{attempt}.json").write_text(
+                        json.dumps(attempt_trace, indent=2), encoding="utf-8"
+                    )
+
+                # Single explicit feedback round after first unsuccessful attempt.
+                if attempt == 1 and not feedback_used and failures:
+                    feedback_used = True
+                    feedback_note = self._llm_feedback(nl, pre.filtered_schema.summary_lines(), failures)
+                    if feedback_note:
+                        failures.append(f"LLM feedback: {feedback_note}")
+
+        if best_query:
+            # Return the best-effort query even if validation never fully cleared.
+            return best_query, timeline
+
         raise PipelineFailure("pipeline failed after refinement loops", timeline, failures)
+
+    def _llm_feedback(self, nl: str, schema_summary: str, failures: List[str]) -> Optional[str]:
+        """Ask the LLM to summarize missing joins/metrics/order/limits as concise hints."""
+        try:
+            prompt = (
+                "You are reviewing a failed ISO GQL attempt.\n"
+                "Given the natural language request, schema summary, and the previous errors, produce 3-6 short hints "
+                "that identify missing joins, metrics, order/limit, or grouping problems. "
+                "Keep each hint to a single line; no new query text.\n\n"
+                f"NATURAL LANGUAGE:\n{nl}\n\nSCHEMA SUMMARY:\n{schema_summary}\n\n"
+                f"FAILURES:\n- " + "\n- ".join(failures[-6:])
+            )
+            feedback, _ = chat_complete(
+                self.logic_validator.model,
+                "Return concise bullet hints only.",
+                prompt,
+                temperature=0.0,
+                top_p=0.2,
+                max_tokens=200,
+            )
+            return feedback.strip()
+        except Exception:
+            return None
 
 
 __all__ = ["Refiner", "ValidationBundle", "PipelineFailure"]

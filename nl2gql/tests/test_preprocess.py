@@ -17,3 +17,4 @@ def test_preprocessor_builds_filtered_schema_and_hints():
     assert result.structural_hints, "expected structural hints to be populated"
 
 
+
