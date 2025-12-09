@@ -33,12 +33,12 @@ public class BasicUsage {
             System.out.println("\n=== Example completed successfully ===");
 
         } catch (GraphLiteException e) {
-            System.err.println("\n❌ GraphLite Error: " + e.getMessage());
+            System.err.println("\n[ERROR] GraphLite Error: " + e.getMessage());
             System.err.println("Error code: " + e.getErrorCode());
             System.exit(1);
 
         } catch (Exception e) {
-            System.err.println("\n❌ Unexpected error: " + e.getMessage());
+            System.err.println("\n[ERROR] Unexpected error: " + e.getMessage());
             e.printStackTrace();
             System.exit(1);
 
@@ -66,12 +66,12 @@ public class BasicUsage {
         // 1. Open database
         System.out.println("1. Opening database...");
         try (GraphLite db = GraphLite.open(dbPath)) {
-            System.out.println("   ✓ GraphLite version: " + GraphLite.version() + "\n");
+            System.out.println("   [OK] GraphLite version: " + GraphLite.version() + "\n");
 
             // 2. Create session
             System.out.println("2. Creating session...");
             String session = db.createSession("admin");
-            System.out.println("   ✓ Session created: " + session.substring(0, 20) + "...\n");
+            System.out.println("   [OK] Session created: " + session.substring(0, 20) + "...\n");
 
             // 3. Create schema and graph
             System.out.println("3. Setting up schema and graph...");
@@ -79,14 +79,14 @@ public class BasicUsage {
             db.execute(session, "SESSION SET SCHEMA /example");
             db.execute(session, "CREATE GRAPH IF NOT EXISTS social");
             db.execute(session, "SESSION SET GRAPH social");
-            System.out.println("   ✓ Schema and graph created\n");
+            System.out.println("   [OK] Schema and graph created\n");
 
             // 4. Insert data
             System.out.println("4. Inserting data...");
             db.execute(session, "INSERT (:Person {name: 'Alice', age: 30})");
             db.execute(session, "INSERT (:Person {name: 'Bob', age: 25})");
             db.execute(session, "INSERT (:Person {name: 'Charlie', age: 35})");
-            System.out.println("   ✓ Inserted 3 persons\n");
+            System.out.println("   [OK] Inserted 3 persons\n");
 
             // 5. Query data
             System.out.println("5. Querying data...");
@@ -128,7 +128,7 @@ public class BasicUsage {
             // 9. Close session
             System.out.println("9. Closing session...");
             db.closeSession(session);
-            System.out.println("   ✓ Session closed\n");
+            System.out.println("   [OK] Session closed\n");
 
         } // Database automatically closed (try-with-resources)
         System.out.println("10. Database closed");
