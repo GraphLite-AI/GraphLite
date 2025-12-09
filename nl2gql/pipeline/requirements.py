@@ -143,35 +143,55 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
         return ["IR missing"]
 
     label_by_alias: Dict[str, str] = {a: n.label for a, n in ir.nodes.items() if n.label}
-
-    def _canonical(expr: str) -> str:
-        """Normalize an expression for comparison (lowercase, resolve aliases → labels)."""
-        expr = expr.replace("`", "").strip().lower()
-
-        def _swap_alias(match: re.Match) -> str:
-            alias = match.group("alias")
-            prop = match.group("prop")
-            label = label_by_alias.get(alias, alias)
-            return f"{label.lower()}.{prop.lower()}"
-
-        expr = re.sub(r"(?P<alias>[a-z_][a-z0-9_]*)\.(?P<prop>[a-z0-9_]+)", _swap_alias, expr)
-        expr = re.sub(r"\s+", " ", expr)
-        return expr
-
     alias_def_pattern = re.compile(r"(.+?)\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)$", re.IGNORECASE)
 
-    def _alias_map() -> Dict[str, str]:
-        """Map alias -> canonical source expression from WITH/RETURN."""
+    def _alias_sources() -> Dict[str, str]:
+        """Deterministic map: alias -> defining expression text (lowered, no backticks)."""
         out: Dict[str, str] = {}
         for item in ir.with_items:
             match = alias_def_pattern.match(item.strip())
             if match:
                 src, alias = match.group(1).strip(), match.group(2).strip()
-                out[alias.lower()] = _canonical(src)
+                out[alias.lower()] = src
         for r in ir.returns:
             if r.alias:
-                out[r.alias.lower()] = _canonical(r.expr)
+                out[r.alias.lower()] = r.expr
         return out
+
+    def _normalize(expr: str, alias_sources: Dict[str, str]) -> str:
+        """Expand aliases once, then normalize (lower, collapse ws, alias→label)."""
+        expr = expr.replace("`", "").strip()
+        # Expand whole-expression aliases transitively (defensive depth cap).
+        for _ in range(5):
+            src = alias_sources.get(expr.lower())
+            if not src:
+                break
+            expr = src.strip()
+        expr = expr.lower()
+        expr = re.sub(r"\bdistinct\s+", "", expr)
+        def _swap_alias_prop(match: re.Match) -> str:
+            alias = match.group("alias")
+            prop = match.group("prop")
+            label = label_by_alias.get(alias, alias).lower()
+            return f"{label}.{prop}"
+
+        expr = re.sub(r"(?P<alias>[a-z_][a-z0-9_]*)\.(?P<prop>[a-z0-9_]+)", _swap_alias_prop, expr)
+
+        def _swap_agg_alias(match: re.Match) -> str:
+            func = match.group("func").lower()
+            if func == "average":
+                func = "avg"
+            alias = match.group("alias")
+            label = label_by_alias.get(alias, alias).lower()
+            return f"{func}({label})"
+
+        expr = re.sub(
+            r"(?P<func>count|sum|avg|average|min|max|collect)\(\s*(?P<alias>[a-z_][a-z0-9_]*)\s*\)",
+            _swap_agg_alias,
+            expr,
+        )
+        expr = re.sub(r"\s+", " ", expr).strip()
+        return expr
 
     # Node / label coverage
     for label in contract.required_labels:
@@ -292,22 +312,12 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
     if contract.required_order and not ir.order_by:
         errors.append("order_by required but ORDER BY missing")
     if contract.required_order and ir.order_by:
-        alias_to_expr = _alias_map()
-        order_exprs = {o.expr.lower(): _canonical(o.expr) for o in ir.order_by}
-
-        def _covers(expected_expr: str) -> bool:
-            canonical_expected = _canonical(expected_expr)
-            if canonical_expected in order_exprs.values():
-                return True
-            for raw, _canonical_order in order_exprs.items():
-                mapped = alias_to_expr.get(raw)
-                if mapped and mapped == canonical_expected:
-                    return True
-            return False
+        alias_sources = _alias_sources()
+        normalized_order = {_normalize(o.expr, alias_sources) for o in ir.order_by}
 
         for expected in contract.required_order:
             exp_expr = expected.split()[0]
-            if not _covers(exp_expr):
+            if _normalize(exp_expr, alias_sources) not in normalized_order:
                 errors.append(f"missing required order key {exp_expr.lower()}")
 
     # Heuristic type sanity: flag aggregates over temporal-looking fields.
