@@ -146,5 +146,55 @@ class RefinerIntegrationTests(unittest.TestCase):
         self.assertIn("RETURN", final_query)
 
 
+class RefinerGroupingTests(unittest.TestCase):
+    def test_grouping_rewrites_without_alias_of_alias(self):
+        graph = SchemaGraph.from_text(SCHEMA_TEXT)
+
+        dummy_runner = types.SimpleNamespace(validate=lambda _query: SyntaxResult(ok=True, rows=[]))
+        dummy_logic = types.SimpleNamespace(validate=lambda *_args, **_kwargs: (True, None))
+        refiner = Refiner(graph, generator=types.SimpleNamespace(), logic_validator=dummy_logic, runner=dummy_runner)
+
+        ir = ISOQueryIR(
+            nodes={
+                "p": IRNode(alias="p", label="Person"),
+                "c": IRNode(alias="c", label="Company"),
+                "ct": IRNode(alias="ct", label="City"),
+            },
+            edges=[
+                IREdge(left_alias="p", rel="WORKS_AT", right_alias="c"),
+                IREdge(left_alias="c", rel="LOCATED_IN", right_alias="ct"),
+            ],
+            filters=[
+                IRFilter(alias="p", prop="age", op=">", value=30),
+                IRFilter(alias="p", prop="salary", op=">", value=120000),
+                IRFilter(alias="ct", prop="name", op="=", value="San Francisco"),
+            ],
+            with_items=["c", "count(p.id) AS headcount", "average(p.salary) AS avg_salary"],
+            returns=[
+                IRReturn(expr="c.name", alias="company_name"),
+                IRReturn(expr="c.id", alias="company_id"),
+                IRReturn(expr="count(p.id)", alias="headcount"),
+                IRReturn(expr="average(p.salary)", alias="avg_salary"),
+            ],
+            order_by=[IROrder(expr="headcount", direction="DESC"), IROrder(expr="avg_salary", direction="DESC")],
+            limit=10,
+        )
+
+        refiner._ensure_grouping(ir)
+
+        self.assertEqual(
+            ir.with_items,
+            [
+                "c",
+                "count(p.id) AS headcount",
+                "average(p.salary) AS avg_salary",
+                "c.name AS company_name",
+                "c.id AS company_id",
+            ],
+        )
+        self.assertEqual([r.expr for r in ir.returns], ["company_name", "company_id", "headcount", "avg_salary"])
+        self.assertEqual([o.expr for o in ir.order_by], ["headcount", "avg_salary"])
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

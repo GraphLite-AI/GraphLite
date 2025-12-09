@@ -23,8 +23,12 @@ class RequirementContract:
     required_bidirectional_values: Set[Tuple[str, str]] = field(default_factory=set)
     # Normalized filter tokens the NL explicitly asked for (keywords, entities).
     required_filter_terms: Set[str] = field(default_factory=set)
+    # Preferred (soft) filter tokens inferred from intent; OK to drop if needed.
+    preferred_filter_terms: Set[str] = field(default_factory=set)
     # Numeric literals the NL uses in constraints (e.g., thresholds, limits).
     required_numeric_literals: Set[str] = field(default_factory=set)
+    # Preferred numeric literals inferred from intent; OK to drop if needed.
+    preferred_numeric_literals: Set[str] = field(default_factory=set)
     # Numeric comparisons extracted from filters: (literal, comparator token/op).
     required_numeric_comparisons: Set[Tuple[str, str]] = field(default_factory=set)
 
@@ -33,13 +37,21 @@ def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementCon
     """Derive structural and metric expectations from intent+linking output (schema-aware)."""
     contract = RequirementContract()
 
+    # Token sets for grounding: only tokens present in NL or schema become "hard" constraints.
+    lowered_nl = pre.normalized_nl.lower() if hasattr(pre, "normalized_nl") else nl.lower()
+    nl_tokens = set(re.findall(r"[a-z0-9_]+", lowered_nl))
+    schema_tokens: Set[str] = set()
+    for lbl, node in graph.nodes.items():
+        schema_tokens.add(lbl.lower())
+        schema_tokens.update(prop.lower() for prop in node.properties)
+    schema_tokens.update(edge.rel.lower() for edge in graph.edges)
+
     links = guidance.links or {}
     node_links = links.get("node_links") or []
     rel_links = links.get("rel_links") or []
     prop_links = links.get("property_links") or []
 
     # Heuristic detection of "zero/no X" asks in NL to require explicit zero-count handling.
-    lowered_nl = pre.normalized_nl.lower() if hasattr(pre, "normalized_nl") else nl.lower()
     for match in re.finditer(r"\b(no|zero|without)\s+([a-z0-9_]+)\b", lowered_nl):
         term = match.group(2).rstrip("s")  # normalize simple plurals like "comments"
         if term:
@@ -93,12 +105,21 @@ def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementCon
         # Tokens: keep moderately long keywords to reduce false positives.
         for token in re.findall(r"[a-z0-9_]+", text):
             if token.isdigit():
-                contract.required_numeric_literals.add(token)
+                if token in nl_tokens:
+                    contract.required_numeric_literals.add(token)
+                else:
+                    contract.preferred_numeric_literals.add(token)
             elif len(token) >= 4:
-                contract.required_filter_terms.add(token)
+                if token in nl_tokens or token in schema_tokens:
+                    contract.required_filter_terms.add(token)
+                else:
+                    contract.preferred_filter_terms.add(token)
         # Numeric literals that may include decimals.
         for num in re.findall(r"\b\d+(?:\.\d+)?\b", text):
-            contract.required_numeric_literals.add(num)
+            if num in nl_tokens:
+                contract.required_numeric_literals.add(num)
+            else:
+                contract.preferred_numeric_literals.add(num)
         # Symbolic comparisons (>, >=, <, <=, =).
         for op, num in re.findall(r"(>=|<=|>|<|=)\s*(\d+(?:\.\d+)?)", text):
             contract.required_numeric_comparisons.add((num, op))
@@ -359,7 +380,9 @@ def contract_view(contract: RequirementContract) -> Dict[str, object]:
         "required_zero_terms": sorted(contract.required_zero_terms),
         "required_bidirectional_values": sorted([list(v) for v in contract.required_bidirectional_values]),
         "required_filter_terms": sorted(contract.required_filter_terms),
+        "preferred_filter_terms": sorted(contract.preferred_filter_terms),
         "required_numeric_literals": sorted(contract.required_numeric_literals),
+        "preferred_numeric_literals": sorted(contract.preferred_numeric_literals),
         "required_numeric_comparisons": sorted([list(c) for c in contract.required_numeric_comparisons]),
     }
 

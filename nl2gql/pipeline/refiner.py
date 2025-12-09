@@ -5,7 +5,7 @@ import os
 import time
 import re
 import inspect
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Set
 
@@ -153,51 +153,63 @@ class Refiner:
 
     def _ensure_grouping(self, ir: ISOQueryIR) -> None:
         """
-        If aggregates are present alongside non-aggregated expressions, push expressions
-        into WITH with explicit aliases and return only aliases to avoid invalid mixes.
+        If aggregates are present alongside non-aggregated expressions, ensure WITH/RETURN
+        are consistent:
+        - preserve grouping keys explicitly in WITH
+        - emit single-pass aliases (no alias-of-alias)
+        - rewrite ORDER BY to the chosen aliases
         """
-        agg_pattern = re.compile(r"\b(count|sum|avg|min|max|collect)\s*\(", re.IGNORECASE)
+        agg_pattern = re.compile(r"\b(count|sum|avg|average|min|max|collect)\s*\(", re.IGNORECASE)
         has_agg = any(agg_pattern.search(r.expr) for r in ir.returns) or any(
             agg_pattern.search(w) for w in ir.with_items
         )
         if not has_agg:
             return
 
-        # Identify non-aggregated return expressions.
         non_agg_returns: List[IRReturn] = [r for r in ir.returns if not agg_pattern.search(r.expr)]
         if not non_agg_returns:
             return
 
-        # If returns already align with existing WITH aliases, avoid duplicating them.
-        existing_with_targets: set[str] = set()
+        with_map: "OrderedDict[str, str]" = OrderedDict()
         for item in ir.with_items:
+            if not item:
+                continue
             parts = re.split(r"\s+AS\s+", item, flags=re.IGNORECASE)
-            if len(parts) == 2:
-                existing_with_targets.add(parts[1].strip())
-            else:
-                existing_with_targets.add(item.strip())
-        if ir.with_items and all(r.expr in existing_with_targets for r in ir.returns):
-            return
+            expr = parts[0].strip()
+            alias = parts[1].strip() if len(parts) == 2 else expr
+            if alias not in with_map:
+                with_map[alias] = expr
 
-        # Build explicit WITH items combining existing with_items and returns.
-        new_with_items: List[str] = []
-        new_with_items.extend(ir.with_items)
+        def ensure_alias(expr: str, preferred: Optional[str] = None) -> str:
+            # Reuse existing alias if it already represents this expression.
+            for alias, target in with_map.items():
+                if expr == alias or expr == target:
+                    return alias
+            candidate = preferred
+            if candidate and candidate in with_map and with_map[candidate] != expr:
+                candidate = None
+            alias = candidate or self._fresh_alias(expr.replace(".", "_")[:8] or "expr", set(with_map.keys()))
+            with_map.setdefault(alias, expr)
+            return alias
 
         alias_map: Dict[str, str] = {}
         for ret in ir.returns:
-            alias = ret.alias or self._fresh_alias(ret.expr.replace(".", "_")[:8] or "expr", set(alias_map.values()))
+            alias = ensure_alias(ret.expr, preferred=ret.alias)
             alias_map[ret.expr] = alias
-            new_with_items.append(f"{ret.expr} AS {alias}")
 
-        ir.with_items = new_with_items
-        ir.returns = [IRReturn(expr=alias) for alias in alias_map.values()]
+        def _with_item(alias: str, expr: str) -> str:
+            return expr if alias == expr else f"{expr} AS {alias}"
 
-        # Rewrite order_by to use aliases when possible.
-        updated_order: List[IROrder] = []
-        for o in ir.order_by:
-            mapped = alias_map.get(o.expr, o.expr)
-            updated_order.append(IROrder(expr=mapped, direction=o.direction))
-        ir.order_by = updated_order
+        ir.with_items = [_with_item(alias, expr) for alias, expr in with_map.items()]
+        ir.returns = [IRReturn(expr=alias_map.get(r.expr, r.expr)) for r in ir.returns]
+
+        def _resolve(expr: str) -> str:
+            for alias, target in with_map.items():
+                if expr == alias or expr == target:
+                    return alias
+            return alias_map.get(expr, expr)
+
+        ir.order_by = [IROrder(expr=_resolve(o.expr), direction=o.direction) for o in ir.order_by]
 
     def _persist_debug(self, debug_dir: Optional[str], task_label: str, payload: Dict[str, Any]) -> None:
         if not debug_dir:
