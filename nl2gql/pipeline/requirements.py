@@ -144,6 +144,35 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
 
     label_by_alias: Dict[str, str] = {a: n.label for a, n in ir.nodes.items() if n.label}
 
+    def _canonical(expr: str) -> str:
+        """Normalize an expression for comparison (lowercase, resolve aliases → labels)."""
+        expr = expr.replace("`", "").strip().lower()
+
+        def _swap_alias(match: re.Match) -> str:
+            alias = match.group("alias")
+            prop = match.group("prop")
+            label = label_by_alias.get(alias, alias)
+            return f"{label.lower()}.{prop.lower()}"
+
+        expr = re.sub(r"(?P<alias>[a-z_][a-z0-9_]*)\.(?P<prop>[a-z0-9_]+)", _swap_alias, expr)
+        expr = re.sub(r"\s+", " ", expr)
+        return expr
+
+    alias_def_pattern = re.compile(r"(.+?)\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)$", re.IGNORECASE)
+
+    def _alias_map() -> Dict[str, str]:
+        """Map alias -> canonical source expression from WITH/RETURN."""
+        out: Dict[str, str] = {}
+        for item in ir.with_items:
+            match = alias_def_pattern.match(item.strip())
+            if match:
+                src, alias = match.group(1).strip(), match.group(2).strip()
+                out[alias.lower()] = _canonical(src)
+        for r in ir.returns:
+            if r.alias:
+                out[r.alias.lower()] = _canonical(r.expr)
+        return out
+
     # Node / label coverage
     for label in contract.required_labels:
         if label not in label_by_alias.values():
@@ -263,11 +292,23 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
     if contract.required_order and not ir.order_by:
         errors.append("order_by required but ORDER BY missing")
     if contract.required_order and ir.order_by:
-        order_exprs = {o.expr.lower() for o in ir.order_by}
+        alias_to_expr = _alias_map()
+        order_exprs = {o.expr.lower(): _canonical(o.expr) for o in ir.order_by}
+
+        def _covers(expected_expr: str) -> bool:
+            canonical_expected = _canonical(expected_expr)
+            if canonical_expected in order_exprs.values():
+                return True
+            for raw, _canonical_order in order_exprs.items():
+                mapped = alias_to_expr.get(raw)
+                if mapped and mapped == canonical_expected:
+                    return True
+            return False
+
         for expected in contract.required_order:
-            exp_expr = expected.split()[0].lower()
-            if exp_expr not in order_exprs:
-                errors.append(f"missing required order key {exp_expr}")
+            exp_expr = expected.split()[0]
+            if not _covers(exp_expr):
+                errors.append(f"missing required order key {exp_expr.lower()}")
 
     # Heuristic type sanity: flag aggregates over temporal-looking fields.
     temporal_suffixes = ("_at", "date", "time")
