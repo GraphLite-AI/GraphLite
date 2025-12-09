@@ -128,8 +128,12 @@ def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementCon
 
 
 def _has_aggregate(tokens: Iterable[str]) -> bool:
-    agg_funcs = ("count(", "sum(", "avg(", "min(", "max(", "collect(")
-    return any(any(func in t.lower() for func in agg_funcs) for t in tokens)
+    agg_funcs = ("count(", "sum(", "avg(", "average(", "min(", "max(", "collect(")
+    return any(
+        ("distinct" in t.lower())
+        or any(func in t.lower() for func in agg_funcs)
+        for t in tokens
+    )
 
 
 def _has_ratio(tokens: Iterable[str]) -> bool:
