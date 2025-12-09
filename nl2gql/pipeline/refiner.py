@@ -822,6 +822,7 @@ class Refiner:
         feedback_used = False
         best_query: Optional[str] = None
         best_score: Optional[int] = None
+        cached_guidance: Optional[IntentLinkGuidance] = None
 
         with self.runner:
             for attempt in range(1, self.max_loops + 1):
@@ -829,8 +830,14 @@ class Refiner:
                     spinner.update(f"[attempt {attempt}] preprocessing...")
                 pre = preprocessor.run(nl, failures)
                 if spinner:
-                    spinner.update(f"[attempt {attempt}] planning intent and links...")
-                guidance = intent_linker.run(nl, pre, failures)
+                    spinner.update(
+                        f"[attempt {attempt}] planning intent and links..."
+                        if cached_guidance is None
+                        else f"[attempt {attempt}] reusing intent/links..."
+                    )
+                guidance = cached_guidance or intent_linker.run(nl, pre, failures)
+                if cached_guidance is None:
+                    cached_guidance = guidance
                 contract = build_contract(nl, pre, guidance, self.graph)
                 timeline.append({"attempt": attempt, "phase": "intent", "frame": guidance.frame})
                 timeline.append({"attempt": attempt, "phase": "link", "links": guidance.links})
