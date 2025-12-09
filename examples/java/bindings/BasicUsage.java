@@ -75,17 +75,17 @@ public class BasicUsage {
 
             // 3. Create schema and graph
             System.out.println("3. Setting up schema and graph...");
-            db.execute(session, "CREATE SCHEMA IF NOT EXISTS example");
-            db.execute(session, "USE SCHEMA example");
+            db.execute(session, "CREATE SCHEMA IF NOT EXISTS /example");
+            db.execute(session, "SESSION SET SCHEMA /example");
             db.execute(session, "CREATE GRAPH IF NOT EXISTS social");
-            db.execute(session, "USE GRAPH social");
+            db.execute(session, "SESSION SET GRAPH social");
             System.out.println("   ✓ Schema and graph created\n");
 
             // 4. Insert data
             System.out.println("4. Inserting data...");
-            db.execute(session, "CREATE (p:Person {name: 'Alice', age: 30})");
-            db.execute(session, "CREATE (p:Person {name: 'Bob', age: 25})");
-            db.execute(session, "CREATE (p:Person {name: 'Charlie', age: 35})");
+            db.execute(session, "INSERT (:Person {name: 'Alice', age: 30})");
+            db.execute(session, "INSERT (:Person {name: 'Bob', age: 25})");
+            db.execute(session, "INSERT (:Person {name: 'Charlie', age: 35})");
             System.out.println("   ✓ Inserted 3 persons\n");
 
             // 5. Query data
