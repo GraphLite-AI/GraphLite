@@ -377,3 +377,150 @@ pub fn create_plan_cache_key(
         hints,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::plan::logical::LogicalNode;
+    use crate::plan::physical::PhysicalNode;
+
+    #[test]
+    fn should_return_nothing_for_a_nonexistent_plan_cache_key() {
+        let max_memory_bytes = 1024;
+        let cache = PlanCache::new(1, max_memory_bytes, Duration::from_millis(100));
+        let result = cache.get(&any_plan_cache_key());
+
+        assert_eq!(result.is_none(), true);
+    }
+
+    #[test]
+    fn should_return_cache_result() {
+        let max_memory_bytes = 1024;
+        let cache = PlanCache::new(1, max_memory_bytes, Duration::from_millis(100));
+
+        let cache_key = PlanCacheKey {
+            query_structure_hash: 10,
+            schema_hash: 10,
+            optimization_level: "Basic".to_string(),
+            hints: vec![],
+        };
+        cache.insert(
+            cache_key.clone(),
+            LogicalPlan::new(LogicalNode::SingleRow),
+            PhysicalPlan::new(PhysicalNode::SingleRow {
+                estimated_rows: 100,
+                estimated_cost: 10.0,
+            }),
+            None,
+            Duration::from_millis(1),
+        );
+
+        let result = cache.get(&cache_key);
+        assert_eq!(result.is_some(), true);
+
+        let cache_entry = result.unwrap();
+        assert_eq!(10.0, cache_entry.estimated_cost);
+        assert_eq!(100, cache_entry.estimated_rows);
+    }
+
+    #[test]
+    fn should_update_the_memory_used_on_adding_entry() {
+        let max_memory_bytes = 1024;
+        let cache = PlanCache::new(1, max_memory_bytes, Duration::from_millis(100));
+
+        let cache_key = PlanCacheKey {
+            query_structure_hash: 10,
+            schema_hash: 10,
+            optimization_level: "Basic".to_string(),
+            hints: vec![],
+        };
+        cache.insert(
+            cache_key.clone(),
+            LogicalPlan::new(LogicalNode::SingleRow),
+            PhysicalPlan::new(PhysicalNode::SingleRow {
+                estimated_rows: 100,
+                estimated_cost: 10.0,
+            }),
+            None,
+            Duration::from_millis(1),
+        );
+
+        let memory_guard = cache.current_memory.read().unwrap();
+        assert!(*memory_guard > 0);
+    }
+
+    #[test]
+    fn should_update_cache_stats_on_insert() {
+        let max_memory_bytes = 1024;
+        let cache = PlanCache::new(1, max_memory_bytes, Duration::from_millis(100));
+
+        let cache_key = PlanCacheKey {
+            query_structure_hash: 10,
+            schema_hash: 10,
+            optimization_level: "Basic".to_string(),
+            hints: vec![],
+        };
+        cache.insert(
+            cache_key.clone(),
+            LogicalPlan::new(LogicalNode::SingleRow),
+            PhysicalPlan::new(PhysicalNode::SingleRow {
+                estimated_rows: 100,
+                estimated_cost: 10.0,
+            }),
+            None,
+            Duration::from_millis(1),
+        );
+
+        let stats_guard = cache.stats.read().unwrap();
+        assert_eq!(1, stats_guard.current_entries);
+    }
+
+    #[test]
+    fn should_update_cache_stats_on_cache_hit() {
+        let max_memory_bytes = 1024;
+        let cache = PlanCache::new(1, max_memory_bytes, Duration::from_millis(100));
+
+        let cache_key = PlanCacheKey {
+            query_structure_hash: 10,
+            schema_hash: 10,
+            optimization_level: "Basic".to_string(),
+            hints: vec![],
+        };
+        cache.insert(
+            cache_key.clone(),
+            LogicalPlan::new(LogicalNode::SingleRow),
+            PhysicalPlan::new(PhysicalNode::SingleRow {
+                estimated_rows: 100,
+                estimated_cost: 10.0,
+            }),
+            None,
+            Duration::from_millis(1),
+        );
+
+        let _ = cache.get(&cache_key);
+
+        let stats_guard = cache.stats.read().unwrap();
+        assert_eq!(1, stats_guard.hits);
+    }
+
+    #[test]
+    fn should_update_cache_stats_on_cache_miss() {
+        let max_memory_bytes = 1024;
+        let cache = PlanCache::new(1, max_memory_bytes, Duration::from_millis(100));
+
+        let _ = cache.get(&any_plan_cache_key());
+
+        let stats_guard = cache.stats.read().unwrap();
+        assert_eq!(1, stats_guard.misses);
+    }
+
+
+    fn any_plan_cache_key() -> PlanCacheKey {
+        PlanCacheKey {
+            query_structure_hash: 0,
+            schema_hash: 0,
+            optimization_level: "Basic".to_string(),
+            hints: vec![],
+        }
+    }
+}

@@ -726,9 +726,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn should_return_nothing_for_a_nonexistent_subquery_type() {
+    fn should_return_nothing_for_a_nonexistent_subquery_cache_key() {
         let max_memory_bytes = 1024;
-        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(1));
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(100));
         let result = cache.get(&any_subquery_cache_key());
 
         assert_eq!(result.is_none(), true);
@@ -737,7 +737,7 @@ mod tests {
     #[test]
     fn should_return_cache_result() {
         let max_memory_bytes = 1024;
-        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(1));
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(100));
 
         let cache_key = SubqueryCacheKey {
             subquery_hash: 10,
@@ -759,7 +759,7 @@ mod tests {
     #[test]
     fn should_update_the_memory_used_on_adding_entry() {
         let max_memory_bytes = 1024;
-        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(1));
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(100));
 
         let cache_key = SubqueryCacheKey {
             subquery_hash: 10,
@@ -776,9 +776,9 @@ mod tests {
     }
 
     #[test]
-    fn should_update_cache_stats_insert() {
+    fn should_update_cache_stats_on_insert() {
         let max_memory_bytes = 1024;
-        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(1));
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(100));
 
         let cache_key = SubqueryCacheKey {
             subquery_hash: 10,
@@ -797,7 +797,7 @@ mod tests {
     #[test]
     fn should_update_cache_stats_on_cache_hit() {
         let max_memory_bytes = 1024;
-        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(1));
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(100));
 
         let cache_key = SubqueryCacheKey {
             subquery_hash: 10,
@@ -818,7 +818,7 @@ mod tests {
     #[test]
     fn should_update_cache_stats_on_cache_miss() {
         let max_memory_bytes = 1024;
-        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(1));
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(100));
 
         let _ = cache.get(&any_subquery_cache_key());
 
