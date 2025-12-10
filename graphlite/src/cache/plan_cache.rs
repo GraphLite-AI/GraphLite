@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
 use super::{CacheEntryMetadata, CacheKey, CacheLevel, CacheValue};
@@ -109,22 +109,22 @@ impl PlanCacheStats {
 
 /// Plan cache implementation
 pub struct PlanCache {
-    entries: Arc<RwLock<HashMap<PlanCacheKey, PlanCacheEntry>>>,
+    entries: RwLock<HashMap<PlanCacheKey, PlanCacheEntry>>,
     max_entries: usize,
     max_memory_bytes: usize,
-    current_memory: Arc<RwLock<usize>>,
-    stats: Arc<RwLock<PlanCacheStats>>,
+    current_memory: RwLock<usize>,
+    stats: RwLock<PlanCacheStats>,
     default_ttl: Duration,
 }
 
 impl PlanCache {
     pub fn new(max_entries: usize, max_memory_bytes: usize, default_ttl: Duration) -> Self {
         Self {
-            entries: Arc::new(RwLock::new(HashMap::new())),
+            entries: RwLock::new(HashMap::new()),
             max_entries,
             max_memory_bytes,
-            current_memory: Arc::new(RwLock::new(0)),
-            stats: Arc::new(RwLock::new(PlanCacheStats::default())),
+            current_memory: RwLock::new(0),
+            stats: RwLock::new(PlanCacheStats::default()),
             default_ttl,
         }
     }
@@ -513,7 +513,6 @@ mod tests {
         let stats_guard = cache.stats.read().unwrap();
         assert_eq!(1, stats_guard.misses);
     }
-
 
     fn any_plan_cache_key() -> PlanCacheKey {
         PlanCacheKey {
