@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
 use super::{CacheEntryMetadata, CacheKey, CacheLevel, CacheValue};
@@ -364,29 +364,29 @@ impl SubqueryCacheStats {
 
 /// Subquery result cache implementation
 pub struct SubqueryCache {
-    entries: Arc<RwLock<HashMap<SubqueryCacheKey, SubqueryCacheEntry>>>,
+    entries: RwLock<HashMap<SubqueryCacheKey, SubqueryCacheEntry>>,
     max_entries: usize,
     max_memory_bytes: usize,
-    current_memory: Arc<RwLock<usize>>,
-    stats: Arc<RwLock<SubqueryCacheStats>>,
+    current_memory: RwLock<usize>,
+    stats: RwLock<SubqueryCacheStats>,
     ttl: Duration,
 
     // Specialized indices for fast lookups
-    boolean_index: Arc<RwLock<HashMap<u64, Vec<SubqueryCacheKey>>>>, // subquery_hash -> keys
-    scalar_index: Arc<RwLock<HashMap<u64, Vec<SubqueryCacheKey>>>>,  // subquery_hash -> keys
+    boolean_index: RwLock<HashMap<u64, Vec<SubqueryCacheKey>>>, // subquery_hash -> keys
+    scalar_index: RwLock<HashMap<u64, Vec<SubqueryCacheKey>>>,  // subquery_hash -> keys
 }
 
 impl SubqueryCache {
     pub fn new(max_entries: usize, max_memory_bytes: usize, ttl: Duration) -> Self {
         Self {
-            entries: Arc::new(RwLock::new(HashMap::new())),
+            entries: RwLock::new(HashMap::new()),
             max_entries,
             max_memory_bytes,
-            current_memory: Arc::new(RwLock::new(0)),
-            stats: Arc::new(RwLock::new(SubqueryCacheStats::default())),
+            current_memory: RwLock::new(0),
+            stats: RwLock::new(SubqueryCacheStats::default()),
             ttl,
-            boolean_index: Arc::new(RwLock::new(HashMap::new())),
-            scalar_index: Arc::new(RwLock::new(HashMap::new())),
+            boolean_index: RwLock::new(HashMap::new()),
+            scalar_index: RwLock::new(HashMap::new()),
         }
     }
 
