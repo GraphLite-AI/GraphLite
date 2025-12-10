@@ -58,11 +58,18 @@ Your Application
 ```
 """
 
-from .error import GraphLiteError
+from .error import (
+    GraphLiteError,
+    ConnectionError,
+    SessionError,
+    QueryError,
+    TransactionError,
+    SerializationError,
+)
 from .connection import GraphLite, Session
 from .transaction import Transaction
 from .query import QueryBuilder
-# from .result import TypedResult
+from .result import TypedResult
 
 __version__ = "0.1.0"
 
@@ -73,4 +80,9 @@ __all__ = [
     "QueryBuilder",
     "TypedResult",
     "GraphLiteError",
+    "ConnectionError",
+    "SessionError",
+    "QueryError",
+    "TransactionError",
+    "SerializationError",
 ]

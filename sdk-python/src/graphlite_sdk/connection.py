@@ -6,12 +6,15 @@ This module provides the main entry points for working with GraphLite databases.
 import sys
 from pathlib import Path
 
-# Add bindings/python to path so we can import the low-level bindings
-bindings_path = Path(__file__).parent.parent.parent / "bindings" / "python"
-if str(bindings_path) not in sys.path:
+# Add bindings/python to path FIRST (before any imports) to avoid namespace package conflicts
+# connection.py is at: sdk-python/src/graphlite_sdk/connection.py
+# bindings are at: bindings/python/
+# So we need to go: parent (graphlite_sdk) -> parent (src) -> parent (sdk-python) -> parent (GraphLite) -> bindings/python
+bindings_path = Path(__file__).parent.parent.parent.parent / "bindings" / "python"
+if bindings_path.exists() and str(bindings_path) not in sys.path:
     sys.path.insert(0, str(bindings_path))
 
-# Low-level GraphLite binding (like QueryCoordinator in Rust)
+# Now import from bindings (which should be in the path now)
 from graphlite import GraphLite as _GraphLiteBinding, QueryResult
 from .error import ConnectionError, SessionError, QueryError
 
