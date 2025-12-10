@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
 use super::{CacheEntryMetadata, CacheKey, CacheLevel, CacheValue, EvictionPolicy};
@@ -146,21 +146,21 @@ impl<K: Clone + Eq + Hash> LRUTracker<K> {
 /// Multi-level result cache
 pub struct ResultCache {
     // L1 Cache: Hot frequently accessed results
-    l1_cache: Arc<RwLock<HashMap<QueryCacheKey, QueryResultEntry>>>,
-    l1_lru: Arc<RwLock<LRUTracker<QueryCacheKey>>>,
+    l1_cache: RwLock<HashMap<QueryCacheKey, QueryResultEntry>>,
+    l1_lru: RwLock<LRUTracker<QueryCacheKey>>,
     l1_max_entries: usize,
     l1_max_memory: usize,
-    l1_current_memory: Arc<RwLock<usize>>,
+    l1_current_memory: RwLock<usize>,
 
     // L2 Cache: Warm occasionally accessed results
-    l2_cache: Arc<RwLock<HashMap<QueryCacheKey, QueryResultEntry>>>,
-    l2_lru: Arc<RwLock<LRUTracker<QueryCacheKey>>>,
+    l2_cache: RwLock<HashMap<QueryCacheKey, QueryResultEntry>>,
+    l2_lru: RwLock<LRUTracker<QueryCacheKey>>,
     l2_max_entries: usize,
     l2_max_memory: usize,
-    l2_current_memory: Arc<RwLock<usize>>,
+    l2_current_memory: RwLock<usize>,
 
     // Cache statistics
-    stats: Arc<RwLock<CacheStats>>,
+    stats: RwLock<CacheStats>,
     _eviction_policy: EvictionPolicy,
 }
 
@@ -203,19 +203,19 @@ impl ResultCache {
         _eviction_policy: EvictionPolicy,
     ) -> Self {
         Self {
-            l1_cache: Arc::new(RwLock::new(HashMap::new())),
-            l1_lru: Arc::new(RwLock::new(LRUTracker::new())),
+            l1_cache: RwLock::new(HashMap::new()),
+            l1_lru: RwLock::new(LRUTracker::new()),
             l1_max_entries,
             l1_max_memory,
-            l1_current_memory: Arc::new(RwLock::new(0)),
+            l1_current_memory: RwLock::new(0),
 
-            l2_cache: Arc::new(RwLock::new(HashMap::new())),
-            l2_lru: Arc::new(RwLock::new(LRUTracker::new())),
+            l2_cache: RwLock::new(HashMap::new()),
+            l2_lru: RwLock::new(LRUTracker::new()),
             l2_max_entries,
             l2_max_memory,
-            l2_current_memory: Arc::new(RwLock::new(0)),
+            l2_current_memory: RwLock::new(0),
 
-            stats: Arc::new(RwLock::new(CacheStats::default())),
+            stats: RwLock::new(CacheStats::default()),
             _eviction_policy,
         }
     }
