@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use crate::ast::{SetItem, SetStatement};
 use crate::exec::write_stmt::data_stmt::DataStatementExecutor;
