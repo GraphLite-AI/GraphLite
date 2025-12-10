@@ -369,7 +369,7 @@ pub struct SubqueryCache {
     max_memory_bytes: usize,
     current_memory: Arc<RwLock<usize>>,
     stats: Arc<RwLock<SubqueryCacheStats>>,
-    default_ttl: Duration,
+    ttl: Duration,
 
     // Specialized indices for fast lookups
     boolean_index: Arc<RwLock<HashMap<u64, Vec<SubqueryCacheKey>>>>, // subquery_hash -> keys
@@ -377,14 +377,14 @@ pub struct SubqueryCache {
 }
 
 impl SubqueryCache {
-    pub fn new(max_entries: usize, max_memory_bytes: usize, default_ttl: Duration) -> Self {
+    pub fn new(max_entries: usize, max_memory_bytes: usize, ttl: Duration) -> Self {
         Self {
             entries: Arc::new(RwLock::new(HashMap::new())),
             max_entries,
             max_memory_bytes,
             current_memory: Arc::new(RwLock::new(0)),
             stats: Arc::new(RwLock::new(SubqueryCacheStats::default())),
-            default_ttl,
+            ttl,
             boolean_index: Arc::new(RwLock::new(HashMap::new())),
             scalar_index: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -457,7 +457,7 @@ impl SubqueryCache {
             execution_time,
             outer_variable_count: key.outer_variables.len(),
             metadata: CacheEntryMetadata::new(0, CacheLevel::L1)
-                .with_ttl(self.default_ttl)
+                .with_ttl(self.ttl)
                 .with_tags(key.tags()),
             hit_count: 0,
             last_hit: Instant::now(),
@@ -719,4 +719,120 @@ pub struct SubqueryCacheHit {
     pub result: SubqueryResult,
     pub saved_execution_time: Duration,
     pub hit_timestamp: Instant,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_return_nothing_for_a_nonexistent_subquery_type() {
+        let max_memory_bytes = 1024;
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(1));
+        let result = cache.get(&any_subquery_cache_key());
+
+        assert_eq!(result.is_none(), true);
+    }
+
+    #[test]
+    fn should_return_cache_result() {
+        let max_memory_bytes = 1024;
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(1));
+
+        let cache_key = SubqueryCacheKey {
+            subquery_hash: 10,
+            outer_variables: vec![],
+            graph_version: 1,
+            schema_version: 1,
+            subquery_type: SubqueryType::Scalar,
+        };
+        let result = SubqueryResult::Scalar(Some(Value::Boolean(true)));
+        cache.insert(cache_key.clone(), result, Duration::from_secs(0), 0.50);
+
+        let result = cache.get(&cache_key);
+        assert_eq!(result.is_some(), true);
+
+        let value = result.unwrap().as_boolean();
+        assert_eq!(Some(true), value);
+    }
+
+    #[test]
+    fn should_update_the_memory_used_on_adding_entry() {
+        let max_memory_bytes = 1024;
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(1));
+
+        let cache_key = SubqueryCacheKey {
+            subquery_hash: 10,
+            outer_variables: vec![],
+            graph_version: 1,
+            schema_version: 1,
+            subquery_type: SubqueryType::Scalar,
+        };
+        let result = SubqueryResult::Scalar(Some(Value::Boolean(true)));
+        cache.insert(cache_key.clone(), result, Duration::from_secs(0), 0.50);
+
+        let memory_guard = cache.current_memory.read().unwrap();
+        assert!(*memory_guard > 0);
+    }
+
+    #[test]
+    fn should_update_cache_stats_insert() {
+        let max_memory_bytes = 1024;
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(1));
+
+        let cache_key = SubqueryCacheKey {
+            subquery_hash: 10,
+            outer_variables: vec![],
+            graph_version: 1,
+            schema_version: 1,
+            subquery_type: SubqueryType::Scalar,
+        };
+        let result = SubqueryResult::Scalar(Some(Value::Boolean(true)));
+        cache.insert(cache_key.clone(), result, Duration::from_secs(0), 0.50);
+
+        let stats_guard = cache.stats.read().unwrap();
+        assert_eq!(1, stats_guard.current_entries);
+    }
+
+    #[test]
+    fn should_update_cache_stats_on_cache_hit() {
+        let max_memory_bytes = 1024;
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(1));
+
+        let cache_key = SubqueryCacheKey {
+            subquery_hash: 10,
+            outer_variables: vec![],
+            graph_version: 1,
+            schema_version: 1,
+            subquery_type: SubqueryType::Scalar,
+        };
+        let result = SubqueryResult::Scalar(Some(Value::Boolean(true)));
+        cache.insert(cache_key.clone(), result, Duration::from_secs(0), 0.50);
+
+        let _ = cache.get(&cache_key);
+
+        let stats_guard = cache.stats.read().unwrap();
+        assert_eq!(1, stats_guard.hits);
+    }
+
+    #[test]
+    fn should_update_cache_stats_on_cache_miss() {
+        let max_memory_bytes = 1024;
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(1));
+
+        let _ = cache.get(&any_subquery_cache_key());
+
+        let stats_guard = cache.stats.read().unwrap();
+        assert_eq!(1, stats_guard.misses);
+    }
+
+    fn any_subquery_cache_key() -> SubqueryCacheKey {
+        SubqueryCacheKey {
+            subquery_hash: 0,
+            outer_variables: vec![],
+            graph_version: 0,
+            schema_version: 0,
+            subquery_type: SubqueryType::Exists,
+        }
+    }
 }
