@@ -295,8 +295,6 @@ impl ResultCache {
                         // Remove expired entry
                         l2_cache.remove(key);
                     }
-                } else {
-                    return None;
                 }
             }
         }
@@ -686,6 +684,23 @@ mod tests {
 
         let stats_guard = cache.stats.read().unwrap();
         assert_eq!(1, stats_guard.l1_hits);
+    }
+
+    #[test]
+    fn should_update_cache_stats_on_cache_miss() {
+        let max_memory_bytes = 1024;
+        let cache = ResultCache::new(
+            1,
+            max_memory_bytes,
+            2,
+            max_memory_bytes,
+            EvictionPolicy::Lru,
+        );
+
+        let _ = cache.get(&any_query_cache_key());
+
+        let stats_guard = cache.stats.read().unwrap();
+        assert_eq!(1, stats_guard.misses);
     }
 
     fn non_empty_query_result() -> QueryResult {
