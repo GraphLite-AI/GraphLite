@@ -13,6 +13,13 @@ GraphLite provides powerful **fuzzy search** for typo-tolerant matching and **hy
 First, let's create a schema with nodes that have both text and vector properties:
 
 ```gql
+-- Set up database
+CREATE SCHEMA papers_schema;
+SESSION SET SCHEMA papers_schema;
+
+CREATE GRAPH papers_graph;
+SESSION SET GRAPH papers_graph;
+
 -- Create Paper nodes with abstract text and embedding vector
 CREATE VERTEX Paper(
     id INT PRIMARY KEY,
@@ -109,7 +116,7 @@ ORDER BY fuzzy_score DESC;
 
 #### Output
 
-```
+```bash
 | title                                          | fuzzy_score |
 |------------------------------------------------|-------------|
 | Graph Neural Networks for Molecular Property...| 8.75        |
@@ -283,3 +290,149 @@ ORDER BY final_score DESC
 LIMIT 15;
 ```
 
+## Best Practices for Fuzzy and Hybrid Search
+
+### DO
+
+#### 1. Use appropriate fuzzy distance
+
+```gql
+-- Short words: smaller distance
+WHERE text_search(name, 'Jhon', {fuzzy_distance: 1}) > 0
+
+-- Long words/queries: larger distance
+WHERE text_search(abstract, 'artifical inteligence', {fuzzy_distance: 3}) > 0
+```
+
+#### 2. Combine fuzzy with other operators for precision
+
+```gql
+WHERE text_search(content, '"mashine lurning"~5', {
+    fuzzy: true,
+    require_all_terms: true
+}) > 2.0
+```
+
+#### 3. Tune hybrid weights based on your domain
+
+```gql
+-- Technical papers: weight text higher
+(text_score * 0.7 + vector_score * 0.3)
+
+-- Semantic similarity: weight vector higher
+(text_score * 0.4 + vector_score * 0.6)
+```
+
+#### 4. Use thresholds to improve performance
+
+```gql
+WHERE text_score > 2.0 AND vector_score > 0.6  -- Early filtering
+```
+
+### DON'T
+
+#### 1. Don't use large fuzzy_distance on long text
+
+```gql
+-- Inefficient:
+WHERE text_search(book_content, 'query', {fuzzy_distance: 5}) > 0
+
+-- Better: use proximity search instead
+WHERE text_search(book_content, '"query terms"~10') > 0
+```
+
+#### 2. Don't forget to create both indexes for hybrid search
+
+```gql
+-- Missing vector index makes hybrid search slow
+CREATE TEXT INDEX idx_text ON Document (content);
+-- Also need:
+CREATE VECTOR INDEX idx_vector ON Document (embedding);
+```
+
+#### 3. Don't use fuzzy search when exact match is needed
+
+```gql
+-- For IDs or codes, use exact match:
+WHERE doc.id = 'ABC123'  -- Not fuzzy_search
+```
+
+## Troubleshooting Fuzzy and Hybrid Search
+
+### Problem: Fuzzy search returns too many irrelevant results
+
+Solution: Increase score threshold and adjust fuzzy distance
+
+```gql
+-- Low precision
+WHERE text_search(content, 'query', {fuzzy: true}) > 0
+
+-- Higher precision
+WHERE text_search(content, 'query', {
+    fuzzy: true,
+    fuzzy_distance: 1,      -- Stricter matching
+    require_all_terms: true -- All terms must match
+}) > 3.0                    -- Higher score threshold
+```
+
+### Problem: Hybrid search is slow
+
+Solution: Add early filtering and check indexes
+
+```gql
+-- Slow
+WHERE text_search(content, $query, {fuzzy: true}) > 0
+  AND vector_similarity(embedding, $query_embedding) > 0
+
+-- Faster with thresholds
+WHERE text_search(content, $query, {fuzzy: true}) > 2.0  -- Filter first
+  AND vector_similarity(embedding, $query_embedding) > 0.7
+
+-- Verify indexes exist
+CALL db.indexes() WHERE type IN ('TEXT', 'VECTOR');
+```
+
+### Problem: Vector similarity doesn't improve results
+
+Solution: Adjust hybrid weights and ensure embeddings are trained on relevant data
+
+```gql
+-- Experiment with different weights
+LET hybrid_score = (text_score * $text_weight + vector_score * $vector_weight)
+
+-- Start with equal weights, then adjust based on validation
+-- For technical text: $text_weight = 0.7, $vector_weight = 0.3
+-- For semantic search: $text_weight = 0.3, $vector_weight = 0.7
+```
+
+## Advanced Configuration
+
+### Custom Analyzer for Fuzzy Search
+
+```gql
+CREATE TEXT INDEX papers_abstract_idx ON Paper (abstract)
+OPTIONS (
+    analyzer='custom',
+    tokenizer='standard',
+    filters=['lowercase', 'ascii_folding', 'porter_stem'],  -- ASCII folding helps with fuzzy
+    max_token_length=30
+);
+
+-- ASCII folding normalizes special characters:
+-- "café" → "cafe", "naïve" → "naive"
+-- This improves fuzzy matching for words with diacritics
+```
+
+### Vector Index Configuration
+
+```gql
+CREATE VECTOR INDEX papers_embedding_idx ON Paper (embedding)
+TYPE DISKANN
+OPTIONS (
+    dimension=384,
+    metric='cosine',      -- or 'euclidean', 'inner_product'
+    construction_threads=4,
+    search_threads=2,
+    alpha=1.2            -- Trade-off between accuracy and speed
+);
+```
