@@ -551,3 +551,160 @@ pub fn create_query_cache_key(
         user_context,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_return_nothing_for_a_nonexistent_result_key() {
+        let max_memory_bytes = 1024;
+        let cache = ResultCache::new(
+            1,
+            max_memory_bytes,
+            2,
+            max_memory_bytes,
+            EvictionPolicy::Lru,
+        );
+
+        let result = cache.get(&any_query_cache_key());
+        assert_eq!(result.is_none(), true);
+    }
+
+    #[test]
+    fn should_return_cache_result() {
+        let max_memory_bytes = 1024;
+        let cache = ResultCache::new(
+            1,
+            max_memory_bytes,
+            2,
+            max_memory_bytes,
+            EvictionPolicy::Lru,
+        );
+
+        let cache_key = QueryCacheKey {
+            query_hash: 10,
+            parameters: vec![],
+            graph_version: 1,
+            user_context: None,
+        };
+        cache.insert(
+            cache_key.clone(),
+            non_empty_query_result(),
+            Duration::from_millis(100),
+            1,
+        );
+
+        let result = cache.get(&cache_key);
+        assert_eq!(result.is_some(), true);
+
+        let cache_entry = result.unwrap();
+        assert_eq!(CacheLevel::L1, cache_entry.hit_level);
+    }
+
+    #[test]
+    fn should_update_the_memory_used_on_adding_entry() {
+        let max_memory_bytes = 1024;
+        let cache = ResultCache::new(
+            1,
+            max_memory_bytes,
+            2,
+            max_memory_bytes,
+            EvictionPolicy::Lru,
+        );
+
+        let cache_key = QueryCacheKey {
+            query_hash: 10,
+            parameters: vec![],
+            graph_version: 1,
+            user_context: None,
+        };
+        cache.insert(
+            cache_key.clone(),
+            non_empty_query_result(),
+            Duration::from_millis(100),
+            1,
+        );
+
+        let memory_guard = cache.l1_current_memory.read().unwrap();
+        assert!(*memory_guard > 0);
+    }
+
+    #[test]
+    fn should_update_cache_stats_on_insert() {
+        let max_memory_bytes = 1024;
+        let cache = ResultCache::new(
+            1,
+            max_memory_bytes,
+            2,
+            max_memory_bytes,
+            EvictionPolicy::Lru,
+        );
+
+        let cache_key = QueryCacheKey {
+            query_hash: 10,
+            parameters: vec![],
+            graph_version: 1,
+            user_context: None,
+        };
+        cache.insert(
+            cache_key.clone(),
+            non_empty_query_result(),
+            Duration::from_millis(100),
+            1,
+        );
+
+        let stats_guard = cache.stats.read().unwrap();
+        assert_eq!(1, stats_guard.insertions);
+    }
+
+    #[test]
+    fn should_update_cache_stats_on_cache_hit() {
+        let max_memory_bytes = 1024;
+        let cache = ResultCache::new(
+            1,
+            max_memory_bytes,
+            2,
+            max_memory_bytes,
+            EvictionPolicy::Lru,
+        );
+
+        let cache_key = QueryCacheKey {
+            query_hash: 10,
+            parameters: vec![],
+            graph_version: 1,
+            user_context: None,
+        };
+        cache.insert(
+            cache_key.clone(),
+            non_empty_query_result(),
+            Duration::from_millis(100),
+            1,
+        );
+
+        let _ = cache.get(&cache_key);
+
+        let stats_guard = cache.stats.read().unwrap();
+        assert_eq!(1, stats_guard.l1_hits);
+    }
+
+    fn non_empty_query_result() -> QueryResult {
+        QueryResult {
+            rows: vec![Row::default()],
+            variables: vec![],
+            execution_time_ms: 10,
+            rows_affected: 1,
+            session_result: None,
+            warnings: vec![],
+        }
+    }
+
+    fn any_query_cache_key() -> QueryCacheKey {
+        QueryCacheKey {
+            query_hash: 0,
+            parameters: vec![],
+            graph_version: 0,
+            user_context: None,
+        }
+    }
+}
