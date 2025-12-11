@@ -42,17 +42,75 @@ public class QueryResult {
         if (rowsArray != null) {
             for (int i = 0; i < rowsArray.length(); i++) {
                 JSONObject rowObj = rowsArray.getJSONObject(i);
-                Map<String, Object> row = new HashMap<>();
+                JSONObject valuesObj = rowObj.optJSONObject("values");
 
-                for (String key : rowObj.keySet()) {
-                    row.put(key, rowObj.get(key));
+                if (valuesObj == null) {
+                    continue;
                 }
 
+                Map<String, Object> row = new HashMap<>();
+                for (String key : valuesObj.keySet()) {
+                    Object value = unwrapValue(valuesObj.get(key));
+                    row.put(key, value);
+                }
                 rowList.add(Collections.unmodifiableMap(row));
             }
         }
 
         return Collections.unmodifiableList(rowList);
+    }
+
+    /**
+     * Unwrap type-tagged values from Rust serde JSON format
+     * Handles: {"String": "value"}, {"Number": 123}, {"Boolean": true}, etc.
+     *
+     * @param obj The object to unwrap
+     * @return The unwrapped value
+     */
+    private Object unwrapValue(Object obj) {
+        if (!(obj instanceof JSONObject)) {
+            return obj;
+        }
+
+        JSONObject jsonObj = (JSONObject) obj;
+
+        // Handle type-tagged enum variants from Rust's Value enum
+        if (jsonObj.has("String")) {
+            return jsonObj.get("String");
+        } else if (jsonObj.has("Number")) {
+            return jsonObj.get("Number");
+        } else if (jsonObj.has("Boolean")) {
+            return jsonObj.get("Boolean");
+        } else if (jsonObj.has("Null")) {
+            return null;
+        } else if (jsonObj.has("Array") || jsonObj.has("List")) {
+            JSONArray arr = jsonObj.optJSONArray("Array");
+            if (arr == null) {
+                arr = jsonObj.optJSONArray("List");
+            }
+            if (arr != null) {
+                List<Object> list = new ArrayList<>();
+                for (int i = 0; i < arr.length(); i++) {
+                    list.add(unwrapValue(arr.get(i)));
+                }
+                return list;
+            }
+        } else if (jsonObj.has("DateTime")) {
+            // Return DateTime as string for simplicity
+            return jsonObj.get("DateTime");
+        } else if (jsonObj.has("Vector")) {
+            JSONArray arr = jsonObj.optJSONArray("Vector");
+            if (arr != null) {
+                List<Object> list = new ArrayList<>();
+                for (int i = 0; i < arr.length(); i++) {
+                    list.add(arr.get(i));
+                }
+                return list;
+            }
+        }
+
+        // Return as-is for complex types (Node, Edge, Path, etc.)
+        return jsonObj;
     }
 
     /**
