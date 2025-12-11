@@ -32,7 +32,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Step 2: Create a session
     println!("2. Creating session...");
-    let session_id = coordinator.create_simple_session("researcher")
+    let session_id = coordinator
+        .create_simple_session("researcher")
         .map_err(|e| format!("Failed to create session: {}", e))?;
     println!("   ✓ Session created: {}\n", session_id);
 
@@ -79,7 +80,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 function: 'Amyloid beta production',
                 gene_location: '11q23.3'
             })"#,
-        &session_id
+        &session_id,
     )?;
 
     println!("   ✓ 4 target proteins inserted\n");
@@ -129,7 +130,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 drug_type: 'MDM2-p53 inhibitor',
                 development_stage: 'Clinical Trial Phase 2'
             })"#,
-        &session_id
+        &session_id,
     )?;
 
     println!("   ✓ 5 compounds inserted\n");
@@ -174,7 +175,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 method: 'MTT',
                 date: '2024-04-01'
             })"#,
-        &session_id
+        &session_id,
     )?;
 
     println!("   ✓ 5 assays inserted\n");
@@ -189,7 +190,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                concentration_range: '0.1-1000 nM',
                replicate_count: 3
            }]->(a)"#,
-        &session_id
+        &session_id,
     )?;
 
     coordinator.process_query(
@@ -199,7 +200,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                concentration_range: '1-10000 nM',
                replicate_count: 4
            }]->(a)"#,
-        &session_id
+        &session_id,
     )?;
 
     coordinator.process_query(
@@ -209,7 +210,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                concentration_range: '0.5-500 nM',
                replicate_count: 3
            }]->(a)"#,
-        &session_id
+        &session_id,
     )?;
 
     coordinator.process_query(
@@ -219,7 +220,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                concentration_range: '1-1000 nM',
                replicate_count: 5
            }]->(a)"#,
-        &session_id
+        &session_id,
     )?;
 
     println!("   ✓ Compound-assay relationships created\n");
@@ -233,7 +234,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                readout: 'Kinase inhibition',
                units: 'percent inhibition'
            }]->(p)"#,
-        &session_id
+        &session_id,
     )?;
 
     coordinator.process_query(
@@ -242,7 +243,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                readout: 'Binding affinity',
                units: 'KD (nM)'
            }]->(p)"#,
-        &session_id
+        &session_id,
     )?;
 
     coordinator.process_query(
@@ -251,7 +252,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                readout: 'Enzymatic activity',
                units: 'percent inhibition'
            }]->(p)"#,
-        &session_id
+        &session_id,
     )?;
 
     coordinator.process_query(
@@ -260,7 +261,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                readout: 'PPI disruption',
                units: 'IC50 (nM)'
            }]->(p)"#,
-        &session_id
+        &session_id,
     )?;
 
     println!("   ✓ Assay-protein relationships created\n");
@@ -277,7 +278,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                selectivity_index: 25.6,
                measurement_date: '2024-01-15'
            }]->(p)"#,
-        &session_id
+        &session_id,
     )?;
 
     coordinator.process_query(
@@ -289,7 +290,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                selectivity_index: 15.2,
                measurement_date: '2024-02-20'
            }]->(p)"#,
-        &session_id
+        &session_id,
     )?;
 
     coordinator.process_query(
@@ -301,7 +302,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                selectivity_index: 45.1,
                measurement_date: '2024-03-10'
            }]->(p)"#,
-        &session_id
+        &session_id,
     )?;
 
     coordinator.process_query(
@@ -313,7 +314,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                selectivity_index: 120.5,
                measurement_date: '2024-03-25'
            }]->(p)"#,
-        &session_id
+        &session_id,
     )?;
 
     println!("   ✓ Inhibition relationships with IC50 data created\n");
@@ -336,7 +337,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 ec_number: '2.7.10.1',
                 function: 'Phosphorylation'
             })"#,
-        &session_id
+        &session_id,
     )?;
 
     // Insert biochemical reactions
@@ -354,7 +355,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 reaction_type: 'Demethylation',
                 pathway: 'Drug Metabolism'
             })"#,
-        &session_id
+        &session_id,
     )?;
 
     // Insert metabolites
@@ -376,7 +377,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 drug_type: 'Active metabolite',
                 development_stage: 'Metabolite'
             })"#,
-        &session_id
+        &session_id,
     )?;
 
     // Create biosynthetic pathway relationships
@@ -389,7 +390,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                temperature: 37.0,
                pH: 7.4
            }]->(r)"#,
-        &session_id
+        &session_id,
     )?;
 
     coordinator.process_query(
@@ -401,7 +402,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                temperature: 37.0,
                pH: 7.4
            }]->(r)"#,
-        &session_id
+        &session_id,
     )?;
 
     coordinator.process_query(
@@ -411,7 +412,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                reaction_time_hours: 2.5,
                rate_constant: 0.045
            }]->(c)"#,
-        &session_id
+        &session_id,
     )?;
 
     coordinator.process_query(
@@ -421,7 +422,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                reaction_time_hours: 3.0,
                rate_constant: 0.032
            }]->(c)"#,
-        &session_id
+        &session_id,
     )?;
 
     println!("   ✓ Biosynthetic pathway data added\n");
@@ -436,7 +437,7 @@ fn main() -> Result<(), Box<dyn Error>> {
            WHERE i.IC50 < 100
            RETURN c.name, c.id, i.IC50, i.IC50_unit, i.Ki
            ORDER BY i.IC50"#,
-        &session_id
+        &session_id,
     )?;
 
     println!("   Results:");
@@ -469,7 +470,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                   i.IC50 AS IC50_nM,
                   c.development_stage AS Stage
            ORDER BY i.IC50"#,
-        &session_id
+        &session_id,
     )?;
 
     println!("   Results:");
@@ -487,7 +488,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                   r.name AS Reaction,
                   c.name AS Product,
                   c.drug_type AS ProductType"#,
-        &session_id
+        &session_id,
     )?;
 
     println!("   Results:");
@@ -503,7 +504,7 @@ fn main() -> Result<(), Box<dyn Error>> {
            RETURN p.name AS Protein,
                   p.disease AS Disease,
                   COUNT(c) AS CompoundCount"#,
-        &session_id
+        &session_id,
     )?;
 
     println!("   Results:");
@@ -522,7 +523,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                   p.name AS Target,
                   i.IC50 AS Potency_nM,
                   i.selectivity_index AS Selectivity"#,
-        &session_id
+        &session_id,
     )?;
 
     println!("   Results:");
@@ -538,7 +539,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     println!("=== Drug Discovery Example Complete ===");
     println!("\nKey Insights:");
-    println!("  • Modeled {} node types: Protein, Compound, Assay, Enzyme, Reaction", 5);
+    println!(
+        "  • Modeled {} node types: Protein, Compound, Assay, Enzyme, Reaction",
+        5
+    );
     println!("  • Created relationship types: TESTED_IN, MEASURES_ACTIVITY_ON, INHIBITS, CATALYZES, PRODUCES");
     println!("  • Demonstrated graph traversals for drug discovery workflows");
     println!("  • Showed IC50-based compound filtering and ranking");
