@@ -309,7 +309,15 @@ Emit JSON:
         )
         if trace is not None:
             trace["prompt"] = user
-        raw, usage = chat_complete(self.model, self.SYSTEM, user, temperature=0.0, top_p=0.2, max_tokens=1200)
+        raw, usage = chat_complete(
+            self.model,
+            self.SYSTEM,
+            user,
+            temperature=0.0,
+            top_p=0.2,
+            max_tokens=1200,
+            force_json=True,
+        )
         if trace is not None:
             trace["raw"] = raw
         data = safe_json_loads(raw) or {}

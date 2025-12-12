@@ -69,7 +69,7 @@ def draft_intent_frame(nl: str, schema_text: str, model: str, feedback: List[str
     if feedback:
         user += "\n\nprevious_failures:\n- " + "\n- ".join(feedback[-5:])
 
-    text, usage = chat_complete(model, SYSTEM_INTENT, user, temperature=0.0, top_p=0.2)
+    text, usage = chat_complete(model, SYSTEM_INTENT, user, temperature=0.0, top_p=0.2, force_json=True)
     frame = safe_json_loads(text) or {}
     return frame, usage
 
@@ -91,7 +91,7 @@ def link_schema(
     if feedback:
         user += "\n\navoid_errors:\n- " + "\n- ".join(feedback[-3:])
 
-    text, usage = chat_complete(model, SYSTEM_LINK, user, temperature=0.0, top_p=0.2)
+    text, usage = chat_complete(model, SYSTEM_LINK, user, temperature=0.0, top_p=0.2, force_json=True)
     links = safe_json_loads(text) or {}
     return links, usage
 

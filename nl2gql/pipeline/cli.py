@@ -64,6 +64,13 @@ def print_timeline(nl_query: str, validation_log: List[Dict[str, any]], max_atte
             elif phase == "generate":
                 print("  • Candidates")
                 print(_fmt_block(json.dumps(entry.get("candidates"), indent=2)))
+            elif phase == "final":
+                print("  • Final selection")
+                summary = {
+                    "status": entry.get("status"),
+                    "query": entry.get("query"),
+                }
+                print(_fmt_block(json.dumps(summary, indent=2)))
             else:
                 print("  • Candidate evaluation")
                 details = {k: v for k, v in entry.items() if k not in {"attempt"}}
@@ -166,15 +173,21 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("error: --nl is required when not running the sample suite", file=sys.stderr)
         return 1
 
+    gen_model = args.gen_model or DEFAULT_OPENAI_MODEL_GEN
+    fix_model = args.fix_model or DEFAULT_OPENAI_MODEL_FIX
+
     spinner = Spinner(enabled=args.spinner if args.spinner is not None else sys.stdout.isatty())
     reset_usage_log()
+    if args.verbose:
+        model_msg = f"Models → generator: {gen_model}, fixer: {fix_model}"
+        print(style(model_msg, "teal", color_enabled))
     spinner.start("Starting pipeline...")
     start = time.perf_counter()
     try:
         pipeline = NL2GQLPipeline(
             schema_context,
-            gen_model=args.gen_model or DEFAULT_OPENAI_MODEL_GEN,
-            fix_model=args.fix_model or DEFAULT_OPENAI_MODEL_FIX,
+            gen_model=gen_model,
+            fix_model=fix_model,
             db_path=args.db_path or DEFAULT_DB_PATH,
             max_refinements=args.max_attempts,
         )

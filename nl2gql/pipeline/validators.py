@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from typing import Dict, List, Optional, Tuple
 
@@ -74,15 +75,37 @@ class LogicValidator:
         # Keep logic gating strict but reduce randomness by using a single
         # low-temperature evaluation with a tighter nucleus sample.
         temps = [0.0]
-        verdict, _ = chat_complete(self.model, self.SYSTEM, user, temperature=temps[0], top_p=0.3, max_tokens=160)
-        verdict_upper = verdict.strip().upper()
+        verdict, _ = chat_complete(
+            self.model,
+            self.SYSTEM,
+            user,
+            temperature=temps[0],
+            top_p=0.3,
+            max_tokens=160,
+            force_json=True,
+        )
+        verdict_clean = verdict.strip()
+        # Handle JSON replies like {"result":"VALID","reason": "..."}.
+        try:
+            data = json.loads(verdict_clean)
+            if isinstance(data, dict):
+                status = str(data.get("result") or data.get("status") or data.get("verdict") or "").strip().upper()
+                reason_text = str(data.get("reason") or data.get("message") or "").strip()
+                if status.startswith("VALID"):
+                    return True, None
+                if status.startswith("INVALID"):
+                    return False, reason_text or verdict_clean or "logic validator unsure"
+        except Exception:
+            pass
+
+        verdict_upper = verdict_clean.upper()
         if verdict_upper.startswith("VALID"):
             return True, None
         if verdict_upper.startswith("INVALID:"):
-            reason = verdict.strip()[len("INVALID:") :].strip() or "unspecified reason"
+            reason = verdict_clean[len("INVALID:") :].strip() or "unspecified reason"
             return False, reason
         # Treat non-standard replies as uncertain but do not fabricate extra reasons.
-        return False, verdict.strip() or "logic validator unsure"
+        return False, verdict_clean or "logic validator unsure"
 
 
 __all__ = ["SchemaGroundingValidator", "LogicValidator"]

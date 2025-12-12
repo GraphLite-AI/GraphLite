@@ -18,7 +18,7 @@ from .ir import IRFilter, IREdge, IRNode, ISOQueryIR, IROrder, IRReturn
 from .preprocess import PreprocessResult, Preprocessor
 from .runner import GraphLiteRunner, SyntaxResult
 from .schema_graph import SchemaGraph, SchemaEdge
-from .requirements import RequirementContract, build_contract, contract_view, coverage_violations
+from .requirements import RequirementContract, RoleConstraint, build_contract, contract_view, coverage_violations
 from .ui import Spinner
 from .validators import LogicValidator, SchemaGroundingValidator
 from .structural_validator import validate_structure
@@ -78,14 +78,98 @@ class Refiner:
         """Add missing nodes/edges/properties required by the contract in a schema-agnostic way."""
         existing_aliases = set(ir.nodes.keys())
 
+        # Track role-tagged expectations to keep aliases distinct when requested.
+        role_aliases: Dict[str, str] = {}
+        role_distinct: Dict[str, Set[str]] = defaultdict(set)
+        roles_by_label: Dict[str, List[str]] = defaultdict(list)
+        for role, rc in (contract.role_constraints or {}).items():
+            if not rc:
+                continue
+            if rc.label:
+                if role not in roles_by_label[rc.label]:
+                    roles_by_label[rc.label].append(role)
+            for other in rc.distinct_from:
+                if other:
+                    role_distinct[role].add(other)
+                    role_distinct[other].add(role)
+
         # Build label -> aliases map for reuse.
         label_to_aliases: Dict[str, List[str]] = defaultdict(list)
         for alias, node in ir.nodes.items():
             if node.label:
                 label_to_aliases[node.label].append(alias)
 
-        def get_alias_for_label(label: str, avoid: Optional[set] = None) -> str:
+        def ensure_role_alias(role: str, rc: RoleConstraint) -> str:
+            if role in role_aliases:
+                alias_existing = role_aliases[role]
+                node = ir.nodes.get(alias_existing)
+                if node and rc.label and node.label is None:
+                    node.label = rc.label
+                return alias_existing
+
+            avoid_aliases = {role_aliases[o] for o in role_distinct.get(role, set()) if o in role_aliases}
+            preferred_label = rc.label
+            preferred_alias = role
+            alias_candidate: Optional[str] = None
+
+            if preferred_alias in ir.nodes and preferred_alias not in avoid_aliases:
+                node = ir.nodes[preferred_alias]
+                if preferred_label and node.label is None:
+                    node.label = preferred_label
+                if not preferred_label or node.label is None or node.label == preferred_label:
+                    alias_candidate = preferred_alias
+
+            if alias_candidate is None and preferred_label:
+                for cand in label_to_aliases.get(preferred_label, []):
+                    if cand not in avoid_aliases:
+                        alias_candidate = cand
+                        break
+
+            if alias_candidate is None:
+                base_seed = preferred_label[:2] if preferred_label else re.sub(r"[^a-z0-9_]", "", preferred_alias.lower())[:2]
+                base = base_seed or "n"
+                alias_candidate = self._fresh_alias(base, existing_aliases | avoid_aliases)
+                ir.nodes[alias_candidate] = IRNode(alias=alias_candidate, label=preferred_label)
+                existing_aliases.add(alias_candidate)
+                if preferred_label:
+                    label_to_aliases[preferred_label].append(alias_candidate)
+
+            role_aliases[role] = alias_candidate
+            return alias_candidate
+
+        role_cursor: Dict[str, int] = defaultdict(int)
+
+        def get_alias_for_label(label: str, avoid: Optional[set] = None, role_hint: Optional[str] = None) -> str:
             avoid = avoid or set()
+            if role_hint and role_hint in (contract.role_constraints or {}):
+                rc = contract.role_constraints[role_hint]
+                if rc.label is None:
+                    rc.label = label
+                    if role_hint not in roles_by_label[label]:
+                        roles_by_label[label].append(role_hint)
+                alias_for_role = ensure_role_alias(role_hint, rc)
+                if alias_for_role in avoid:
+                    alias_for_role = self._fresh_alias(label[:2], existing_aliases | avoid)
+                    existing_aliases.add(alias_for_role)
+                    ir.nodes[alias_for_role] = IRNode(alias=alias_for_role, label=label)
+                    role_aliases[role_hint] = alias_for_role
+                    label_to_aliases[label].append(alias_for_role)
+                return alias_for_role
+
+            role_list = roles_by_label.get(label, [])
+            if role_list:
+                start_idx = role_cursor[label] % len(role_list)
+                for offset in range(len(role_list)):
+                    role = role_list[(start_idx + offset) % len(role_list)]
+                    rc = contract.role_constraints.get(role)
+                    if not rc:
+                        continue
+                    alias_for_role = ensure_role_alias(role, rc)
+                    if alias_for_role in avoid:
+                        continue
+                    role_cursor[label] = (start_idx + offset + 1) % len(role_list)
+                    return alias_for_role
+
             for cand in label_to_aliases.get(label, []):
                 if cand not in avoid:
                     return cand
@@ -95,6 +179,12 @@ class Refiner:
             label_to_aliases[label].append(alias)
             return alias
 
+        # Pre-allocate aliases for roles so downstream nodes/edges reuse them.
+        for role, rc in (contract.role_constraints or {}).items():
+            if not rc.label:
+                continue
+            ensure_role_alias(role, rc)
+
         # Ensure required edges exist.
         for src_label, rel, dst_label in contract.required_edges:
             src_alias = get_alias_for_label(src_label)
@@ -103,6 +193,35 @@ class Refiner:
                 e.left_alias == src_alias and e.right_alias == dst_alias and e.rel == rel for e in ir.edges
             ):
                 ir.edges.append(IREdge(left_alias=src_alias, rel=rel, right_alias=dst_alias))
+
+        # Enforce distinct role aliases via inequality filters.
+        if role_distinct:
+            existing_filter_keys = {(f.alias, f.prop, f.op, str(f.value)) for f in ir.filters}
+            distinct_pairs: set[frozenset[str]] = set()
+            for role, others in role_distinct.items():
+                rc = (contract.role_constraints or {}).get(role)
+                if rc and role not in role_aliases and rc.label:
+                    ensure_role_alias(role, rc)
+                alias_a = role_aliases.get(role)
+                if not alias_a:
+                    continue
+                for other in others:
+                    rc_other = (contract.role_constraints or {}).get(other)
+                    if rc_other and other not in role_aliases and rc_other.label:
+                        ensure_role_alias(other, rc_other)
+                    alias_b = role_aliases.get(other)
+                    if not alias_b or alias_a == alias_b:
+                        continue
+                    pair_key = frozenset({alias_a, alias_b})
+                    if pair_key in distinct_pairs:
+                        continue
+                    distinct_pairs.add(pair_key)
+                    flt_value = {"ref_alias": alias_b, "ref_property": "id"}
+                    key = (alias_a, "id", "<>", str(flt_value))
+                    if key in existing_filter_keys:
+                        continue
+                    ir.filters.append(IRFilter(alias=alias_a, prop="id", op="<>", value=flt_value))
+                    existing_filter_keys.add(key)
 
         # Ensure required properties appear somewhere (at least in RETURN) to keep them visible.
         agg_pattern = re.compile(r"\b(count|sum|avg|min|max|collect)\s*\(", re.IGNORECASE)
@@ -891,6 +1010,27 @@ class Refiner:
                     candidates = self.generator.generate(pre, failures, guidance)
                 timeline.append({"attempt": attempt, "phase": "generate", "candidates": [c.query for c in candidates]})
                 if not candidates:
+                    if trace_dir and gen_trace:
+                        attempt_trace = {
+                            "attempt": attempt,
+                            "nl": nl,
+                            "pre": {
+                                "normalized": pre.normalized_nl,
+                                "hints": pre.structural_hints,
+                                "schema_summary": pre.filtered_schema.summary_lines(),
+                            },
+                            "intent_frame": guidance.frame,
+                            "links": guidance.links,
+                            "contract": contract_view(contract),
+                            "logic_hints": logic_hints,
+                            "label_hints": label_hints,
+                            "generator_prompt": gen_trace.get("prompt"),
+                            "generator_raw": gen_trace.get("raw"),
+                            "candidates": [],
+                        }
+                        (trace_dir / f"attempt_{attempt}_empty.json").write_text(
+                            json.dumps(attempt_trace, indent=2), encoding="utf-8"
+                        )
                     failures.append("generator returned no candidates")
                     continue
 
@@ -994,6 +1134,14 @@ class Refiner:
                     if all_clear:
                         if spinner:
                             spinner.update(f"[attempt {attempt}] success.")
+                        timeline.append(
+                            {
+                                "attempt": attempt,
+                                "phase": "final",
+                                "status": "success",
+                                "query": bundle.ir.render(),
+                            }
+                        )
                         if trace_dir and attempt_trace:
                             (trace_dir / f"attempt_{attempt}.json").write_text(
                                 json.dumps(attempt_trace, indent=2), encoding="utf-8"

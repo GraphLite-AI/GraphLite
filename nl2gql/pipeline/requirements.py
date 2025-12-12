@@ -8,6 +8,12 @@ from .schema_graph import SchemaGraph
 
 
 @dataclass
+class RoleConstraint:
+    label: Optional[str] = None
+    distinct_from: List[str] = field(default_factory=list)
+
+
+@dataclass
 class RequirementContract:
     required_labels: Set[str] = field(default_factory=set)
     required_edges: Set[Tuple[str, str, str]] = field(default_factory=set)  # (src_label, rel, dst_label)
@@ -31,6 +37,8 @@ class RequirementContract:
     preferred_numeric_literals: Set[str] = field(default_factory=set)
     # Numeric comparisons extracted from filters: (literal, comparator token/op).
     required_numeric_comparisons: Set[Tuple[str, str]] = field(default_factory=set)
+    # Semantic roles (tagged) that should map to dedicated aliases with optional distinctness.
+    role_constraints: Dict[str, RoleConstraint] = field(default_factory=dict)
 
 
 def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementContract:
@@ -50,6 +58,20 @@ def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementCon
     node_links = links.get("node_links") or []
     rel_links = links.get("rel_links") or []
     prop_links = links.get("property_links") or []
+    canonical_aliases = links.get("canonical_aliases") or {}
+
+    role_constraints: Dict[str, RoleConstraint] = {}
+    roles_by_label: Dict[str, List[str]] = {}
+
+    def _register_role(role_name: str, label: Optional[str]) -> None:
+        if not role_name:
+            return
+        rc = role_constraints.setdefault(role_name, RoleConstraint())
+        if label and not rc.label:
+            rc.label = label
+        if label:
+            if role_name not in roles_by_label.get(label, []):
+                roles_by_label.setdefault(label, []).append(role_name)
 
     # Heuristic detection of "zero/no X" asks in NL to require explicit zero-count handling.
     for match in re.finditer(r"\b(no|zero|without)\s+([a-z0-9_]+)\b", lowered_nl):
@@ -72,6 +94,12 @@ def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementCon
         if alias and label and graph.has_node(label):
             alias_to_label[alias] = label
             contract.required_labels.add(label)
+            _register_role(alias, label)
+        elif alias and label:
+            # Keep a role tag even if label not validated yet; it can be filled by closest match later.
+            _register_role(alias, label if graph.has_node(label) else None)
+        elif alias and alias in canonical_aliases:
+            _register_role(alias, canonical_aliases.get(alias))
 
     for rl in rel_links:
         left, rel, right = rl.get("left_alias"), rl.get("rel"), rl.get("right_alias")
@@ -87,6 +115,25 @@ def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementCon
         label = alias_to_label.get(alias)
         if label and prop and graph.has_property(label, prop):
             contract.required_properties.add((label, prop))
+
+    # Detect NL hints that imply distinct roles for the same label (e.g., "different city").
+    distinct_tokens = ("different", "other", "another", "separate", "elsewhere")
+    distinct_labels: Set[str] = set()
+    for label in graph.nodes:
+        lbl = label.lower()
+        for tok in distinct_tokens:
+            if re.search(rf"\b{tok}\s+{re.escape(lbl)}s?\b", lowered_nl):
+                distinct_labels.add(label)
+                break
+    # If NL implies distinctness for a label but we only have a single role, create an alternate role.
+    role_seq: Dict[str, int] = {label: len(roles) for label, roles in roles_by_label.items()}
+    for label in distinct_labels:
+        existing = roles_by_label.get(label, [])
+        if len(existing) >= 2:
+            continue
+        role_seq[label] = role_seq.get(label, 0) + 1
+        alt_role = f"{label.lower()}_distinct_{role_seq[label]}"
+        _register_role(alt_role, label)
 
     frame = guidance.frame or {}
     metrics = frame.get("metrics") or []
@@ -132,6 +179,26 @@ def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementCon
             contract.required_numeric_comparisons.add((num, "less than"))
         for num in re.findall(r"(?:at most|no more than|max(?:imum)? of)\s+(\d+(?:\.\d+)?)", text):
             contract.required_numeric_comparisons.add((num, "at most"))
+
+    # Populate role constraints and distinctness expectations.
+    for label, roles in roles_by_label.items():
+        if len(roles) < 2:
+            continue
+        for i, role_a in enumerate(roles):
+            rc_a = role_constraints.get(role_a)
+            if not rc_a:
+                continue
+            for role_b in roles[i + 1 :]:
+                rc_b = role_constraints.get(role_b)
+                if not rc_b:
+                    continue
+                # Default to distinct aliases when multiple roles share a label; NL cues reinforce this.
+                if role_b not in rc_a.distinct_from:
+                    rc_a.distinct_from.append(role_b)
+                if role_a not in rc_b.distinct_from:
+                    rc_b.distinct_from.append(role_a)
+
+    contract.role_constraints = role_constraints
 
     # Distinct role expectations: if multiple relationships connect the same labels
     # but with different rel names, encourage separate aliases downstream.
@@ -364,7 +431,7 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
     return sorted(set(errors))
 
 
-__all__ = ["RequirementContract", "build_contract", "coverage_violations", "contract_view"]
+__all__ = ["RequirementContract", "RoleConstraint", "build_contract", "coverage_violations", "contract_view"]
 
 
 def contract_view(contract: RequirementContract) -> Dict[str, object]:
@@ -384,6 +451,13 @@ def contract_view(contract: RequirementContract) -> Dict[str, object]:
         "required_numeric_literals": sorted(contract.required_numeric_literals),
         "preferred_numeric_literals": sorted(contract.preferred_numeric_literals),
         "required_numeric_comparisons": sorted([list(c) for c in contract.required_numeric_comparisons]),
+        "role_constraints": {
+            role: {
+                "label": rc.label,
+                "distinct_from": sorted(set(rc.distinct_from)),
+            }
+            for role, rc in sorted(contract.role_constraints.items())
+        },
     }
 
 
