@@ -18,6 +18,7 @@ from nl2gql.pipeline import (
     SchemaGraph,
     SyntaxResult,
 )
+from nl2gql.pipeline.requirements import RequirementContract, coverage_violations
 
 SCHEMA_TEXT = (Path(__file__).resolve().parents[1] / "sample_schema.txt").read_text(encoding="utf-8")
 
@@ -194,6 +195,72 @@ class RefinerGroupingTests(unittest.TestCase):
         )
         self.assertEqual([r.expr for r in ir.returns], ["company_name", "company_id", "headcount", "avg_salary"])
         self.assertEqual([o.expr for o in ir.order_by], ["headcount", "avg_salary"])
+
+
+class CoverageNormalizationTests(unittest.TestCase):
+    def test_alias_order_matches_required_aggregate(self):
+        graph = SchemaGraph.from_text(SCHEMA_TEXT)
+        ir = ISOQueryIR(
+            nodes={
+                "p": IRNode(alias="p", label="Person"),
+                "c": IRNode(alias="c", label="Company"),
+                "ct": IRNode(alias="ct", label="City"),
+            },
+            edges=[
+                IREdge(left_alias="p", rel="WORKS_AT", right_alias="c"),
+                IREdge(left_alias="c", rel="LOCATED_IN", right_alias="ct"),
+            ],
+            with_items=[
+                "count(p.id) AS headcount",
+                "average(p.salary) AS avg_salary",
+            ],
+            returns=[
+                IRReturn(expr="c.name", alias="company_name"),
+                IRReturn(expr="c.id", alias="company_id"),
+                IRReturn(expr="headcount"),
+                IRReturn(expr="avg_salary"),
+            ],
+            order_by=[
+                IROrder(expr="headcount", direction="DESC"),
+                IROrder(expr="avg_salary", direction="DESC"),
+            ],
+            limit=10,
+        )
+
+        contract = RequirementContract(
+            required_order=["headcount DESC", "average(Person.salary) DESC"]
+        )
+        errors = coverage_violations(contract, ir, ir.render())
+        self.assertNotIn("missing required order key average(person.salary)", errors)
+        self.assertEqual(errors, [])
+
+    def test_alias_order_matches_unknown_function(self):
+        """Ensure arbitrary function aliases resolve for order coverage."""
+        graph = SchemaGraph.from_text(SCHEMA_TEXT)
+        ir = ISOQueryIR(
+            nodes={
+                "p": IRNode(alias="p", label="Person"),
+                "c": IRNode(alias="c", label="Company"),
+            },
+            edges=[
+                IREdge(left_alias="p", rel="WORKS_AT", right_alias="c"),
+            ],
+            with_items=[
+                "WeIrDFuNc(p.salary) AS funky_salary",
+            ],
+            returns=[
+                IRReturn(expr="c.name", alias="company_name"),
+                IRReturn(expr="funky_salary"),
+            ],
+            order_by=[
+                IROrder(expr="funky_salary", direction="DESC"),
+            ],
+            limit=10,
+        )
+
+        contract = RequirementContract(required_order=["WeIrDFuNc(Person.salary) DESC"])
+        errors = coverage_violations(contract, ir, ir.render())
+        self.assertEqual(errors, [])
 
 
 if __name__ == "__main__":  # pragma: no cover

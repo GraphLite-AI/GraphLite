@@ -41,6 +41,34 @@ class RequirementContract:
     role_constraints: Dict[str, RoleConstraint] = field(default_factory=dict)
 
 
+def _canonicalize_function_name(name: str) -> str:
+    """Map function names to a canonical lowercase form."""
+    name = name.lower()
+    synonyms = {
+        "average": "avg",
+        "mean": "avg",
+    }
+    return synonyms.get(name, name)
+
+
+def _canonicalize_expr(expr: str) -> str:
+    """
+    Canonicalize an expression for contract storage:
+    - strip backticks
+    - lowercase function names with synonym mapping
+    - collapse whitespace
+    """
+    expr = expr.replace("`", "").strip()
+
+    def _normalize_func(match: re.Match) -> str:
+        func = _canonicalize_function_name(match.group("func"))
+        return f"{func}("
+
+    expr = re.sub(r"(?P<func>[A-Za-z_][A-Za-z0-9_]*)\s*\(", _normalize_func, expr)
+    expr = re.sub(r"\s+", " ", expr).strip()
+    return expr
+
+
 def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementContract:
     """Derive structural and metric expectations from intent+linking output (schema-aware)."""
     contract = RequirementContract()
@@ -140,8 +168,8 @@ def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementCon
     order_by = frame.get("order_by") or []
     limit = frame.get("limit")
 
-    contract.required_metrics = [str(m).strip() for m in metrics if str(m).strip()]
-    contract.required_order = [str(o).strip() for o in order_by if str(o).strip()]
+    contract.required_metrics = [_canonicalize_expr(str(m).strip()) for m in metrics if str(m).strip()]
+    contract.required_order = [_canonicalize_expr(str(o).strip()) for o in order_by if str(o).strip()]
     if isinstance(limit, int) and limit > 0:
         contract.limit = limit
 
@@ -250,6 +278,14 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
                 out[r.alias.lower()] = r.expr
         return out
 
+    def _canonicalize_funcs(expr: str) -> str:
+        """Normalize function names to lowercase with synonym mapping."""
+        def _normalize_func(match: re.Match) -> str:
+            func = _canonicalize_function_name(match.group("func"))
+            return f"{func}("
+
+        return re.sub(r"(?P<func>[A-Za-z_][A-Za-z0-9_]*)\s*\(", _normalize_func, expr)
+
     def _normalize(expr: str, alias_sources: Dict[str, str]) -> str:
         """Expand aliases once, then normalize (lower, collapse ws, alias→label)."""
         expr = expr.replace("`", "").strip()
@@ -269,19 +305,18 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
 
         expr = re.sub(r"(?P<alias>[a-z_][a-z0-9_]*)\.(?P<prop>[a-z0-9_]+)", _swap_alias_prop, expr)
 
-        def _swap_agg_alias(match: re.Match) -> str:
-            func = match.group("func").lower()
-            if func == "average":
-                func = "avg"
+        def _swap_func_alias(match: re.Match) -> str:
+            func = _canonicalize_function_name(match.group("func"))
             alias = match.group("alias")
             label = label_by_alias.get(alias, alias).lower()
             return f"{func}({label})"
 
         expr = re.sub(
-            r"(?P<func>count|sum|avg|average|min|max|collect)\(\s*(?P<alias>[a-z_][a-z0-9_]*)\s*\)",
-            _swap_agg_alias,
+            r"(?P<func>[A-Za-z_][A-Za-z0-9_]*)\(\s*(?P<alias>[a-z_][a-z0-9_]*)\s*\)",
+            _swap_func_alias,
             expr,
         )
+        expr = _canonicalize_funcs(expr)
         expr = re.sub(r"\s+", " ", expr).strip()
         return expr
 
