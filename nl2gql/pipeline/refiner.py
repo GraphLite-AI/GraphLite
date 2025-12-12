@@ -1053,7 +1053,12 @@ class Refiner:
                         "generator_raw": gen_trace.get("raw"),
                     }
 
-                for candidate in candidates:
+                if spinner:
+                    spinner.update(f"[attempt {attempt}] evaluating {len(candidates)} candidate(s)...")
+
+                for idx_candidate, candidate in enumerate(candidates, start=1):
+                    if spinner:
+                        spinner.update(f"[attempt {attempt}] evaluating candidate {idx_candidate}/{len(candidates)}...")
                     bundle = self._evaluate_candidate(
                         nl, pre, candidate, schema_validator, logic_hints, guidance.links, contract, label_hints
                     )
