@@ -1,28 +1,27 @@
 from __future__ import annotations
 
-import json
-import os
-import time
-import re
 import inspect
-from collections import defaultdict, OrderedDict
+import json
+import re
+import time
+from collections import OrderedDict, defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Set
-
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Tuple
 
+from .config import DEFAULT_OPENAI_MODEL_FIX
 from .generator import CandidateQuery, QueryGenerator
-from .openai_client import chat_complete, clean_block
 from .intent_linker import IntentLinkGuidance, links_to_hints
-from .ir import IRFilter, IREdge, IRNode, ISOQueryIR, IROrder, IRReturn
+from .ir import IRFilter, IREdge, IRNode, IROrder, IRReturn, ISOQueryIR
+from .openai_client import chat_complete, clean_block
 from .preprocess import PreprocessResult, Preprocessor
-from .runner import GraphLiteRunner, SyntaxResult
-from .schema_graph import SchemaGraph, SchemaEdge
 from .requirements import RequirementContract, RoleConstraint, build_contract, contract_view, coverage_violations
+from .run_logger import RunLogger
+from .runner import GraphLiteRunner, SyntaxResult
+from .schema_graph import SchemaEdge, SchemaGraph
+from .structural_validator import validate_structure
 from .ui import Spinner
 from .validators import LogicValidator, SchemaGroundingValidator
-from .structural_validator import validate_structure
-from .config import DEFAULT_OPENAI_MODEL_FIX
 
 
 @dataclass
@@ -330,18 +329,10 @@ class Refiner:
 
         ir.order_by = [IROrder(expr=_resolve(o.expr), direction=o.direction) for o in ir.order_by]
 
-    def _persist_debug(self, debug_dir: Optional[str], task_label: str, payload: Dict[str, Any]) -> None:
-        if not debug_dir:
+    def _persist_debug(self, run_logger: Optional[RunLogger], task_label: str, payload: Dict[str, Any]) -> None:
+        if not run_logger:
             return
-        try:
-            Path(debug_dir).mkdir(parents=True, exist_ok=True)
-            stamp = int(time.time() * 1000)
-            safe_label = re.sub(r"[^a-zA-Z0-9_.-]", "_", task_label)[:80]
-            path = Path(debug_dir) / f"{stamp}_{safe_label}.json"
-            path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        except Exception:
-            # Never fail pipeline due to logging issues.
-            pass
+        run_logger.log_debug({"task": task_label, **payload})
 
     def _repair_ir_schema(
         self,
@@ -942,12 +933,12 @@ class Refiner:
         spinner: Optional[Spinner],
         *,
         trace_path: Optional[str] = None,
+        run_logger: Optional[RunLogger] = None,
     ) -> Tuple[str, List[Dict[str, Any]]]:
         failures: List[str] = []
         timeline: List[Dict[str, any]] = []
         schema_validator = SchemaGroundingValidator(self.graph)
-        debug_dir = os.getenv("NL2GQL_DEBUG_DIR")
-        trace_dir = Path(trace_path) if trace_path else None
+        trace_dir = Path(trace_path) if trace_path else (run_logger.trace_dir if run_logger else None)
         if trace_dir:
             trace_dir.mkdir(parents=True, exist_ok=True)
         feedback_used = False
@@ -1028,9 +1019,12 @@ class Refiner:
                             "generator_raw": gen_trace.get("raw"),
                             "candidates": [],
                         }
-                        (trace_dir / f"attempt_{attempt}_empty.json").write_text(
-                            json.dumps(attempt_trace, indent=2), encoding="utf-8"
-                        )
+                        if run_logger:
+                            run_logger.log_attempt_trace(attempt, attempt_trace, empty=True)
+                        else:
+                            (trace_dir / f"attempt_{attempt}_empty.json").write_text(
+                                json.dumps(attempt_trace, indent=2), encoding="utf-8"
+                            )
                     failures.append("generator returned no candidates")
                     continue
 
@@ -1063,7 +1057,7 @@ class Refiner:
                         nl, pre, candidate, schema_validator, logic_hints, guidance.links, contract, label_hints
                     )
                     self._persist_debug(
-                        debug_dir,
+                        run_logger,
                         f"attempt{attempt}",
                         {
                             "nl": nl,
@@ -1147,7 +1141,10 @@ class Refiner:
                                 "query": bundle.ir.render(),
                             }
                         )
-                        if trace_dir and attempt_trace:
+                    if trace_dir and attempt_trace:
+                        if run_logger:
+                            run_logger.log_attempt_trace(attempt, attempt_trace)
+                        else:
                             (trace_dir / f"attempt_{attempt}.json").write_text(
                                 json.dumps(attempt_trace, indent=2), encoding="utf-8"
                             )
@@ -1185,9 +1182,12 @@ class Refiner:
                     failures.append("; ".join(sorted(set(combined_reasons))))
 
                 if trace_dir and attempt_trace:
-                    (trace_dir / f"attempt_{attempt}.json").write_text(
-                        json.dumps(attempt_trace, indent=2), encoding="utf-8"
-                    )
+                    if run_logger:
+                        run_logger.log_attempt_trace(attempt, attempt_trace)
+                    else:
+                        (trace_dir / f"attempt_{attempt}.json").write_text(
+                            json.dumps(attempt_trace, indent=2), encoding="utf-8"
+                        )
 
                 # Single explicit feedback round after first unsuccessful attempt.
                 if attempt == 1 and not feedback_used and failures:

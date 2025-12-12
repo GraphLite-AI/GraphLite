@@ -4,7 +4,6 @@ import argparse
 import json
 import sys
 import time
-from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -12,6 +11,7 @@ from .config import DEFAULT_DB_PATH, DEFAULT_OPENAI_MODEL_FIX, DEFAULT_OPENAI_MO
 from .openai_client import reset_usage_log, usage_totals
 from .pipeline import NL2GQLPipeline
 from .refiner import PipelineFailure
+from .run_logger import format_timeline
 from .sample_suite import run_sample_suite
 from .ui import Spinner, style
 
@@ -21,61 +21,19 @@ def _fmt_block(text: str, indent: int = 6) -> str:
     return "\n".join(pad + line for line in text.splitlines())
 
 
-def _print_trace_hint(trace_dir: Optional[str], color_enabled: bool) -> None:
-    """Surface where JSON traces were written for debugging."""
-    if not trace_dir:
+def _print_log_hint(log_dir: Optional[str], color_enabled: bool) -> None:
+    """Surface where structured run logs were written for debugging."""
+    if not log_dir:
         return
     try:
-        resolved = Path(trace_dir).expanduser().resolve()
+        resolved = Path(log_dir).expanduser().resolve()
     except Exception:
-        resolved = Path(trace_dir)
-    print(f"{style('[trace]', 'cyan', color_enabled)} per-attempt JSON traces: {resolved}")
+        resolved = Path(log_dir)
+    print(f"{style('[logs]', 'cyan', color_enabled)} detailed run logs: {resolved}")
 
 
 def print_timeline(nl_query: str, validation_log: List[Dict[str, any]], max_attempts: int) -> None:
-    print("\n" + "=" * 80)
-    print("PIPELINE EXECUTION SUMMARY")
-    print("=" * 80)
-    print(f"Query: {nl_query}")
-    print(f"Max Attempts: {max_attempts}")
-
-    grouped: Dict[int, List[Dict[str, any]]] = defaultdict(list)
-    for entry in validation_log:
-        grouped[entry.get("attempt", 0)].append(entry)
-
-    print("\nTimeline (per attempt):")
-    for attempt in sorted(grouped):
-        print("-" * 80)
-        print(f"Attempt {attempt}")
-        for entry in grouped[attempt]:
-            phase = entry.get("phase")
-            if phase == "intent":
-                print("  • Intent frame")
-                print(_fmt_block(json.dumps(entry.get("frame"), indent=2)))
-            elif phase == "link":
-                print("  • Schema links")
-                print(_fmt_block(json.dumps(entry.get("links"), indent=2)))
-            elif phase == "contract":
-                print("  • Contract requirements")
-                print(_fmt_block(json.dumps(entry.get("requirements"), indent=2)))
-            elif phase == "hints":
-                print("  • Logic hints")
-                print(_fmt_block(json.dumps(entry.get("logic_hints"), indent=2)))
-            elif phase == "generate":
-                print("  • Candidates")
-                print(_fmt_block(json.dumps(entry.get("candidates"), indent=2)))
-            elif phase == "final":
-                print("  • Final selection")
-                summary = {
-                    "status": entry.get("status"),
-                    "query": entry.get("query"),
-                }
-                print(_fmt_block(json.dumps(summary, indent=2)))
-            else:
-                print("  • Candidate evaluation")
-                details = {k: v for k, v in entry.items() if k not in {"attempt"}}
-                print(_fmt_block(json.dumps(details, indent=2)))
-    print("=" * 80)
+    print(format_timeline(nl_query, validation_log, max_attempts))
 
 
 def read_text(path: str) -> str:
@@ -99,7 +57,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--spinner", dest="spinner", action="store_true", help="Show live spinner updates when running single queries")
     parser.add_argument("--no-spinner", dest="spinner", action="store_false")
     parser.set_defaults(spinner=None)
-    parser.add_argument("--trace-json", help="Directory to write per-attempt JSON traces (prompts/links/contracts/results)")
+    parser.add_argument(
+        "--trace-json",
+        help="Directory to store structured run logs (defaults to ./nl2gql-logs)",
+    )
 
     args = parser.parse_args(argv)
     color_enabled = sys.stdout.isatty()
@@ -192,28 +153,35 @@ def main(argv: Optional[List[str]] = None) -> int:
             max_refinements=args.max_attempts,
         )
         query, timeline = pipeline.run(args.nl, spinner=spinner, trace_path=args.trace_json)
+        usage = usage_totals()
+        if pipeline.last_run_logger:
+            pipeline.last_run_logger.log_usage(usage)
         spinner.stop("✓ Query generated.", color="green")
         if args.verbose:
             print_timeline(args.nl, timeline, args.max_attempts)
-            usage = usage_totals()
             print(
                 f"\nToken usage → prompt: {usage['prompt_tokens']}, "
                 f"completion: {usage['completion_tokens']}, total: {usage['total_tokens']}"
             )
             elapsed_ms = int((time.perf_counter() - start) * 1000)
             print(f"Elapsed: {elapsed_ms} ms")
+            log_dir = pipeline.last_run_logger.run_dir if pipeline.last_run_logger else args.trace_json
+            _print_log_hint(str(log_dir) if log_dir else None, color_enabled)
+            print()
+            print()
         print(query)
-        _print_trace_hint(args.trace_json, color_enabled)
         return 0
     except PipelineFailure as exc:
         spinner.stop("✗ Pipeline failed.", color="red")
+        usage = usage_totals()
+        if pipeline.last_run_logger:
+            pipeline.last_run_logger.log_usage(usage)
         if args.verbose:
             print_timeline(args.nl, exc.timeline, args.max_attempts)
             if exc.failures:
                 print("Failures:")
                 for f in exc.failures:
                     print(f"  - {f}")
-            usage = usage_totals()
             print(
                 f"\nToken usage → prompt: {usage['prompt_tokens']}, "
                 f"completion: {usage['completion_tokens']}, total: {usage['total_tokens']}"
@@ -221,19 +189,25 @@ def main(argv: Optional[List[str]] = None) -> int:
             elapsed_ms = int((time.perf_counter() - start) * 1000)
             print(f"Elapsed: {elapsed_ms} ms")
         print(f"Failed to generate query: {exc}", file=sys.stderr)
-        _print_trace_hint(args.trace_json, color_enabled)
+        if args.verbose:
+            log_dir = pipeline.last_run_logger.run_dir if pipeline.last_run_logger else args.trace_json
+            _print_log_hint(str(log_dir) if log_dir else None, color_enabled)
         return 1
     except Exception as exc:
         spinner.stop("✗ Pipeline failed.", color="red")
+        usage = usage_totals()
+        if pipeline.last_run_logger:
+            pipeline.last_run_logger.log_usage(usage)
         if args.verbose:
-            usage = usage_totals()
             print(
                 f"\nToken usage → prompt: {usage['prompt_tokens']}, "
                 f"completion: {usage['completion_tokens']}, total: {usage['total_tokens']}"
             )
             elapsed_ms = int((time.perf_counter() - start) * 1000)
             print(f"Elapsed: {elapsed_ms} ms")
-        _print_trace_hint(args.trace_json, color_enabled)
+        if args.verbose:
+            log_dir = pipeline.last_run_logger.run_dir if pipeline.last_run_logger else args.trace_json
+            _print_log_hint(str(log_dir) if log_dir else None, color_enabled)
         print(f"Failed to generate query: {exc}", file=sys.stderr)
         return 1
 

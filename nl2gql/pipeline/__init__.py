@@ -7,6 +7,7 @@ from .generator import CandidateQuery
 from .validators import SchemaGroundingValidator, LogicValidator
 from .runner import GraphLiteRunner, SyntaxResult
 from .refiner import Refiner, PipelineFailure
+from .run_logger import RunLogger
 
 __all__ = [
     "NL2GQLPipeline",
@@ -28,6 +29,7 @@ __all__ = [
     "SyntaxResult",
     "Refiner",
     "PipelineFailure",
+    "RunLogger",
 ]
 
 

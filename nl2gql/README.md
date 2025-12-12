@@ -64,7 +64,7 @@ Prints pass/fail per query plus optional usage totals when `--verbose` is set.
 - `--gen-model` / `--fix-model` (OpenAI models)
 - `--db-path` (GraphLite DB for syntax checks)
 - `--verbose` (per-attempt timeline + usage)
-- `--trace-json <dir>` (write per-attempt JSON traces)
+- `--trace-json <dir>` (override log directory; defaults to `./nl2gql-logs`)
 - `--spinner/--no-spinner` (live status)
 - `--sample-suite`, `--suite-file`, `--suite-workers`
 
@@ -78,5 +78,5 @@ Prints pass/fail per query plus optional usage totals when `--verbose` is set.
 
 - Missing GraphLite bindings → rebuild/install (`cargo build -p graphlite-ffi --release && pip install -e bindings/python`).
 - Missing API key → set `OPENAI_API_KEY` (optionally via `config.env`).
-- Extra debug: set `NL2GQL_DEBUG_DIR=/tmp/nl2gql_debug` to persist per-attempt diagnostics (separate from `--trace-json`).
-- Rerun with `--verbose` and `--trace-json` to inspect exact prompts/decisions when logic or syntax fails.
+- Every run writes a full timeline + traces to `./nl2gql-logs` (capped at 20 runs). Use `--trace-json <dir>` to override.
+- Rerun with `--verbose` to mirror the timeline that is already written to disk.

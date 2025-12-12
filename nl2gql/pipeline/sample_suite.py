@@ -102,6 +102,8 @@ def run_sample_suite(
         try:
             query, timeline = pipeline.run(task["nl"], spinner=None)
             usage = usage_totals()
+            if pipeline.last_run_logger:
+                pipeline.last_run_logger.log_usage(usage)
             return {
                 "order": task["order"],
                 "suite": task["suite"],
@@ -117,6 +119,8 @@ def run_sample_suite(
             }
         except PipelineFailure as exc:
             usage = usage_totals()
+            if pipeline.last_run_logger:
+                pipeline.last_run_logger.log_usage(usage)
             return {
                 "order": task["order"],
                 "suite": task["suite"],
@@ -133,6 +137,8 @@ def run_sample_suite(
             }
         except Exception as exc:
             usage = usage_totals()
+            if pipeline.last_run_logger:
+                pipeline.last_run_logger.log_usage(usage)
             return {
                 "order": task["order"],
                 "suite": task["suite"],
