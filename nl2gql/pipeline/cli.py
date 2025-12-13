@@ -139,9 +139,6 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     spinner = Spinner(enabled=args.spinner if args.spinner is not None else sys.stdout.isatty())
     reset_usage_log()
-    if args.verbose:
-        model_msg = f"Models → generator: {gen_model}, fixer: {fix_model}"
-        print(style(model_msg, "teal", color_enabled))
     spinner.start()
     start = time.perf_counter()
     try:
