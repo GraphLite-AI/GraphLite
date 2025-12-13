@@ -514,7 +514,7 @@ mod fulltext_search_executor_integration {
 
         // Query using FUZZY_MATCH function for exact match (distance 0)
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'Machine Learning Fundamentals', 0) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'Machine Learning Fundamentals', 0) RETURN d.title",
             &session_id,
         );
 
@@ -536,7 +536,7 @@ mod fulltext_search_executor_integration {
 
         // Query with different case (fuzzy matching handles this)
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'python programming', 2) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'python programming', 2) RETURN d.title",
             &session_id,
         );
 
@@ -559,7 +559,7 @@ mod fulltext_search_executor_integration {
 
         // Query with partial word using CONTAINS_FUZZY
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE CONTAINS_FUZZY(d.title, 'Artifi', 2) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_CONTAINS_FUZZY(d.title, 'Artifi', 2) RETURN d.title",
             &session_id,
         );
 
@@ -581,7 +581,7 @@ mod fulltext_search_executor_integration {
 
         // Query for documents containing 'Database' (should find both)
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE CONTAINS_FUZZY(d.title, 'Database', 0) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_CONTAINS_FUZZY(d.title, 'Database', 0) RETURN d.title",
             &session_id,
         );
 
@@ -603,7 +603,7 @@ mod fulltext_search_executor_integration {
 
         // Query with 1 character typo - FUZZY_MATCH should find it
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'Distribted Systems', 1) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'Distribted Systems', 1) RETURN d.title",
             &session_id,
         );
 
@@ -625,7 +625,7 @@ mod fulltext_search_executor_integration {
 
         // Query for substring with CONTAINS_FUZZY
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE CONTAINS_FUZZY(d.title, 'Script', 1) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_CONTAINS_FUZZY(d.title, 'Script', 1) RETURN d.title",
             &session_id,
         );
 
@@ -647,7 +647,7 @@ mod fulltext_search_executor_integration {
 
         // Query for prefix 'Comput' with CONTAINS_FUZZY
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE CONTAINS_FUZZY(d.title, 'Comput', 1) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_CONTAINS_FUZZY(d.title, 'Comput', 1) RETURN d.title",
             &session_id,
         );
 
@@ -669,7 +669,7 @@ mod fulltext_search_executor_integration {
 
         // Query for text with special character using FUZZY_MATCH
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'C++ Programming', 0) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'C++ Programming', 0) RETURN d.title",
             &session_id,
         );
 
@@ -691,7 +691,7 @@ mod fulltext_search_executor_integration {
 
         // Query for numeric text with CONTAINS_FUZZY
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE CONTAINS_FUZZY(d.title, '2.5', 0) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_CONTAINS_FUZZY(d.title, '2.5', 0) RETURN d.title",
             &session_id,
         );
 
@@ -713,7 +713,7 @@ mod fulltext_search_executor_integration {
 
         // Query with SIMILARITY_SCORE for ranking
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) RETURN d.title, SIMILARITY_SCORE(d.title, 'Web Development') as score ORDER BY score DESC",
+            "MATCH (d:Document) RETURN d.title, FT_SIMILARITY_SCORE(d.title, 'Web Development') as score ORDER BY score DESC",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -734,7 +734,7 @@ mod fulltext_search_executor_integration {
 
         // Query with prefix using CONTAINS_FUZZY (allows 1 char difference)
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE CONTAINS_FUZZY(d.title, 'Pre', 1) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_CONTAINS_FUZZY(d.title, 'Pre', 1) RETURN d.title",
             &session_id,
         );
 
@@ -756,7 +756,7 @@ mod fulltext_search_executor_integration {
 
         // Query with suffix using CONTAINS_FUZZY
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE CONTAINS_FUZZY(d.title, 'Learning', 0) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_CONTAINS_FUZZY(d.title, 'Learning', 0) RETURN d.title",
             &session_id,
         );
 
@@ -779,7 +779,7 @@ mod fulltext_search_executor_integration {
 
         // Query with empty string using CONTAINS_FUZZY (should match all)
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE CONTAINS_FUZZY(d.title, '', 0) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_CONTAINS_FUZZY(d.title, '', 0) RETURN d.title",
             &session_id,
         );
 
@@ -805,7 +805,7 @@ mod fulltext_search_executor_integration {
 
         // Query within long text using CONTAINS_FUZZY
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE CONTAINS_FUZZY(d.content, 'Lorem ipsum', 0) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_CONTAINS_FUZZY(d.content, 'Lorem ipsum', 0) RETURN d.title",
             &session_id,
         );
 
@@ -827,7 +827,7 @@ mod fulltext_search_executor_integration {
 
         // Query for content with ASCII characters
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE CONTAINS_FUZZY(d.title, 'Language', 0) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_CONTAINS_FUZZY(d.title, 'Language', 0) RETURN d.title",
             &session_id,
         );
 
@@ -849,7 +849,7 @@ mod fulltext_search_executor_integration {
 
         // Query with fuzzy search and count
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE CONTAINS_FUZZY(d.title, 'SQL', 0) RETURN COUNT(d) as sql_docs",
+            "MATCH (d:Document) WHERE FT_CONTAINS_FUZZY(d.title, 'SQL', 0) RETURN COUNT(d) as sql_docs",
             &session_id,
         );
 
@@ -871,7 +871,7 @@ mod fulltext_search_executor_integration {
 
         // Query with FUZZY_SEARCH function to rank by relevance
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) RETURN d.title, FUZZY_SEARCH(d.title, 'Machine Learning') as relevance ORDER BY relevance DESC",
+            "MATCH (d:Document) RETURN d.title, FT_FUZZY_SEARCH(d.title, 'Machine Learning') as relevance ORDER BY relevance DESC",
             &session_id,
         );
 
@@ -897,7 +897,7 @@ mod fulltext_search_executor_integration {
 
         // Query with edit distance 1 - should match "Pytjon" vs "Python"
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'Pytjon', 1) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'Pytjon', 1) RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -918,7 +918,7 @@ mod fulltext_search_executor_integration {
 
         // Query with edit distance 1 - should match "JavaScript" vs "JavaScript"
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'JavaScrpt', 1) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'JavaScrpt', 1) RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -939,7 +939,7 @@ mod fulltext_search_executor_integration {
 
         // Query with edit distance 1 - "Russt" has 1 insertion vs "Rust"
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'Russt', 1) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'Russt', 1) RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -960,7 +960,7 @@ mod fulltext_search_executor_integration {
 
         // Query with edit distance 2 - "Databse" has 2 errors (missing 'a' and 'e' swapped)
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'Databse', 2) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'Databse', 2) RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -981,7 +981,7 @@ mod fulltext_search_executor_integration {
 
         // Query with edit distance 3 - "Algoritm" vs "Algorithm"
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'Algoritm', 3) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'Algoritm', 3) RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1002,7 +1002,7 @@ mod fulltext_search_executor_integration {
 
         // Query with edit distance 0 - should NOT match "Configuration" vs "Configration"
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'Configration', 0) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'Configration', 0) RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1024,7 +1024,7 @@ mod fulltext_search_executor_integration {
 
         // Query with edit distance 1 - "Developmnt" vs "Development"
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE CONTAINS_FUZZY(d.title, 'Developmnt', 1) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_CONTAINS_FUZZY(d.title, 'Developmnt', 1) RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1045,7 +1045,7 @@ mod fulltext_search_executor_integration {
 
         // Query with edit distance 2 - "Compting" vs "Computing"
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE CONTAINS_FUZZY(d.title, 'Compting', 2) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_CONTAINS_FUZZY(d.title, 'Compting', 2) RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1066,7 +1066,7 @@ mod fulltext_search_executor_integration {
 
         // Query with edit distance 3 - "Mcroservces" vs "Microservices"
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE CONTAINS_FUZZY(d.title, 'Mcroservces', 3) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_CONTAINS_FUZZY(d.title, 'Mcroservces', 3) RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1087,7 +1087,7 @@ mod fulltext_search_executor_integration {
 
         // Query for "Testin" with edit distance 1 - should match "Testing"
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'Testin', 1) RETURN COUNT(d) as matches",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'Testin', 1) RETURN COUNT(d) as matches",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1108,21 +1108,21 @@ mod fulltext_search_executor_integration {
 
         // Test with distance 0 - should NOT match
         let query0 = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'Documntation', 0) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'Documntation', 0) RETURN d.title",
             &session_id,
         );
         assert!(query0.is_ok());
 
         // Test with distance 1 - should match
         let query1 = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'Documntation', 1) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'Documntation', 1) RETURN d.title",
             &session_id,
         );
         assert!(query1.is_ok());
 
         // Test with distance 2 - should match
         let query2 = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'Documntation', 2) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'Documntation', 2) RETURN d.title",
             &session_id,
         );
         assert!(query2.is_ok());
@@ -1143,7 +1143,7 @@ mod fulltext_search_executor_integration {
 
         // Test common typo: "Serer" vs "Server"
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'Serer', 1) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'Serer', 1) RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1164,7 +1164,7 @@ mod fulltext_search_executor_integration {
 
         // Query with minor difference in version number
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'Version 2.5.2', 1) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'Version 2.5.2', 1) RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1185,7 +1185,7 @@ mod fulltext_search_executor_integration {
 
         // Test very short strings with edit distance 1
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'AP', 1) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'AP', 1) RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1206,7 +1206,7 @@ mod fulltext_search_executor_integration {
 
         // Query with some typos in long string
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'The Complete Gide to Full-Stack Web Development with Moden Frameworks', 2) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'The Complete Gide to Full-Stack Web Development with Moden Frameworks', 2) RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1227,14 +1227,14 @@ mod fulltext_search_executor_integration {
 
         // First query with exact substring - edit distance 0
         let query1 = coordinator.process_query(
-            "MATCH (d:Document) WHERE CONTAINS_FUZZY(d.title, 'Container', 0) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_CONTAINS_FUZZY(d.title, 'Container', 0) RETURN d.title",
             &session_id,
         );
         assert!(query1.is_ok());
 
         // Second query with fuzzy substring - edit distance 1
         let query2 = coordinator.process_query(
-            "MATCH (d:Document) WHERE CONTAINS_FUZZY(d.title, 'Contaner', 1) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_CONTAINS_FUZZY(d.title, 'Contaner', 1) RETURN d.title",
             &session_id,
         );
         assert!(query2.is_ok());
@@ -1255,7 +1255,7 @@ mod fulltext_search_executor_integration {
 
         // Query with SIMILARITY_SCORE to see impact of differences
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) RETURN d.title, SIMILARITY_SCORE(d.title, 'Infrmation Technolgy') as score ORDER BY score DESC",
+            "MATCH (d:Document) RETURN d.title, FT_SIMILARITY_SCORE(d.title, 'Infrmation Technolgy') as score ORDER BY score DESC",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1276,7 +1276,7 @@ mod fulltext_search_executor_integration {
 
         // Query with multiple types of edits: "Scalibilty" has substitution and deletion
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE FUZZY_MATCH(d.title, 'Scalibilty', 2) RETURN d.title",
+            "MATCH (d:Document) WHERE FT_FUZZY_MATCH(d.title, 'Scalibilty', 2) RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1301,7 +1301,7 @@ mod fulltext_search_executor_integration {
 
         // Hybrid search combines exact, fuzzy, and similarity matching
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) RETURN d.title, HYBRID_SEARCH(d.title, 'Cloud') as score ORDER BY score DESC",
+            "MATCH (d:Document) RETURN d.title, FT_HYBRID_SEARCH(d.title, 'Cloud') as score ORDER BY score DESC",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1322,7 +1322,7 @@ mod fulltext_search_executor_integration {
 
         // Weighted search with heavy emphasis on exact matches
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) RETURN d.title, WEIGHTED_SEARCH(d.title, 'Machine Learning', 0.7, 0.2, 0.1) as score",
+            "MATCH (d:Document) RETURN d.title, FT_WEIGHTED_SEARCH(d.title, 'Machine Learning', 0.7, 0.2, 0.1) as score",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1343,7 +1343,7 @@ mod fulltext_search_executor_integration {
 
         // Weighted search with heavy emphasis on fuzzy matches
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) RETURN d.title, WEIGHTED_SEARCH(d.title, 'Distributed', 0.2, 0.7, 0.1) as score",
+            "MATCH (d:Document) RETURN d.title, FT_WEIGHTED_SEARCH(d.title, 'Distributed', 0.2, 0.7, 0.1) as score",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1364,14 +1364,14 @@ mod fulltext_search_executor_integration {
 
         // Exact match query
         let exact_query = coordinator.process_query(
-            "MATCH (d:Document) RETURN HYBRID_SEARCH(d.title, 'Kubernetes') as score",
+            "MATCH (d:Document) RETURN FT_HYBRID_SEARCH(d.title, 'Kubernetes') as score",
             &session_id,
         );
         assert!(exact_query.is_ok());
 
         // Fuzzy match query
         let fuzzy_query = coordinator.process_query(
-            "MATCH (d:Document) RETURN HYBRID_SEARCH(d.title, 'Kubernets') as score",
+            "MATCH (d:Document) RETURN FT_HYBRID_SEARCH(d.title, 'Kubernets') as score",
             &session_id,
         );
         assert!(fuzzy_query.is_ok());
@@ -1396,7 +1396,7 @@ mod fulltext_search_executor_integration {
 
         // Match documents containing 'Python'
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE KEYWORD_MATCH(d.title, 'Python') RETURN d.title",
+            "MATCH (d:Document) WHERE FT_KEYWORD_MATCH(d.title, 'Python') RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1417,7 +1417,7 @@ mod fulltext_search_executor_integration {
 
         // Match documents with Python OR JavaScript
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE KEYWORD_MATCH(d.title, 'Python', 'JavaScript') RETURN d.title",
+            "MATCH (d:Document) WHERE FT_KEYWORD_MATCH(d.title, 'Python', 'JavaScript') RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1438,7 +1438,7 @@ mod fulltext_search_executor_integration {
 
         // Match documents with Web OR Database OR API
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE KEYWORD_MATCH(d.title, 'Web', 'Database', 'API') RETURN d.title",
+            "MATCH (d:Document) WHERE FT_KEYWORD_MATCH(d.title, 'Web', 'Database', 'API') RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1459,7 +1459,7 @@ mod fulltext_search_executor_integration {
 
         // Match documents with Python AND Web (only first document)
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE KEYWORD_MATCH_ALL(d.title, 'Python', 'Web') RETURN d.title",
+            "MATCH (d:Document) WHERE FT_KEYWORD_MATCH_ALL(d.title, 'Python', 'Web') RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1480,7 +1480,7 @@ mod fulltext_search_executor_integration {
 
         // Match documents with Machine AND Learning AND Web (only first)
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE KEYWORD_MATCH_ALL(d.title, 'Machine', 'Learning', 'Web') RETURN d.title",
+            "MATCH (d:Document) WHERE FT_KEYWORD_MATCH_ALL(d.title, 'Machine', 'Learning', 'Web') RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1501,7 +1501,7 @@ mod fulltext_search_executor_integration {
 
         // Match with different case
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE KEYWORD_MATCH(d.title, 'graphql', 'api') RETURN d.title",
+            "MATCH (d:Document) WHERE FT_KEYWORD_MATCH(d.title, 'graphql', 'api') RETURN d.title",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1522,7 +1522,7 @@ mod fulltext_search_executor_integration {
 
         // Combine keyword match and hybrid search
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE KEYWORD_MATCH(d.title, 'API', 'GraphQL') RETURN d.title, HYBRID_SEARCH(d.title, 'REST') as similarity",
+            "MATCH (d:Document) WHERE FT_KEYWORD_MATCH(d.title, 'API', 'GraphQL') RETURN d.title, FT_HYBRID_SEARCH(d.title, 'REST') as similarity",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1543,7 +1543,7 @@ mod fulltext_search_executor_integration {
 
         // Rank by weighted search score
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) RETURN d.title, WEIGHTED_SEARCH(d.title, 'Data Science', 0.5, 0.3, 0.2) as relevance ORDER BY relevance DESC",
+            "MATCH (d:Document) RETURN d.title, FT_WEIGHTED_SEARCH(d.title, 'Data Science', 0.5, 0.3, 0.2) as relevance ORDER BY relevance DESC",
             &session_id,
         );
         assert!(query_result.is_ok());
@@ -1564,7 +1564,7 @@ mod fulltext_search_executor_integration {
 
         // Complex query combining multiple techniques
         let query_result = coordinator.process_query(
-            "MATCH (d:Document) WHERE KEYWORD_MATCH(d.title, 'Cloud', 'Container') RETURN d.title, HYBRID_SEARCH(d.title, 'Cloud Platform') as hybrid_score, WEIGHTED_SEARCH(d.title, 'Infrastructure', 0.4, 0.4, 0.2) as weighted_score ORDER BY hybrid_score DESC",
+            "MATCH (d:Document) WHERE FT_KEYWORD_MATCH(d.title, 'Cloud', 'Container') RETURN d.title, FT_HYBRID_SEARCH(d.title, 'Cloud Platform') as hybrid_score, FT_WEIGHTED_SEARCH(d.title, 'Infrastructure', 0.4, 0.4, 0.2) as weighted_score ORDER BY hybrid_score DESC",
             &session_id,
         );
         assert!(query_result.is_ok());

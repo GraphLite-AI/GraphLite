@@ -4,10 +4,14 @@
 //! Text search and fuzzy matching functions
 //!
 //! This module contains text processing and search functions:
-//! - FUZZY_MATCH: Approximate string matching with edit distance
-//! - FUZZY_SEARCH: Search with similarity threshold
-//! - CONTAINS_FUZZY: Fuzzy substring search
-//! - SIMILARITY_SCORE: Levenshtein distance based similarity (0.0-1.0)
+//! - FT_FUZZY_MATCH: Approximate string matching with edit distance
+//! - FT_FUZZY_SEARCH: Search with similarity threshold
+//! - FT_CONTAINS_FUZZY: Fuzzy substring search
+//! - FT_SIMILARITY_SCORE: Levenshtein distance based similarity (0.0-1.0)
+//! - FT_HYBRID_SEARCH: Combined fuzzy + keyword matching
+//! - FT_KEYWORD_MATCH: Exact keyword matching with OR logic
+//! - FT_KEYWORD_MATCH_ALL: Exact keyword matching with AND logic
+//! - FT_WEIGHTED_SEARCH: Custom weighted search
 
 use super::function_trait::{Function, FunctionContext, FunctionError, FunctionResult};
 use crate::storage::Value;
@@ -76,7 +80,7 @@ fn similarity_score(s1: &str, s2: &str) -> f64 {
 // FUZZY_MATCH FUNCTION
 // ==============================================================================
 
-/// FUZZY_MATCH function - returns true if strings are similar within edit distance threshold
+/// FT_FUZZY_MATCH function - returns true if strings are similar within edit distance threshold
 #[derive(Debug)]
 pub struct FuzzyMatchFunction;
 
@@ -88,11 +92,11 @@ impl FuzzyMatchFunction {
 
 impl Function for FuzzyMatchFunction {
     fn name(&self) -> &str {
-        "FUZZY_MATCH"
+        "FT_FUZZY_MATCH"
     }
 
     fn description(&self) -> &str {
-        "Returns true if two strings are similar within edit distance threshold. FUZZY_MATCH(str1, str2, max_distance)"
+        "Returns true if two strings are similar within edit distance threshold. FT_FUZZY_MATCH(str1, str2, max_distance)"
     }
 
     fn argument_count(&self) -> usize {
@@ -144,7 +148,7 @@ impl Function for FuzzyMatchFunction {
 // SIMILARITY_SCORE FUNCTION
 // ==============================================================================
 
-/// SIMILARITY_SCORE function - returns similarity score from 0.0 to 1.0
+/// FT_SIMILARITY_SCORE function - returns similarity score from 0.0 to 1.0
 #[derive(Debug)]
 pub struct SimilarityScoreFunction;
 
@@ -156,11 +160,11 @@ impl SimilarityScoreFunction {
 
 impl Function for SimilarityScoreFunction {
     fn name(&self) -> &str {
-        "SIMILARITY_SCORE"
+        "FT_SIMILARITY_SCORE"
     }
 
     fn description(&self) -> &str {
-        "Returns similarity score (0.0-1.0) between two strings. 1.0 = identical, 0.0 = completely different. SIMILARITY_SCORE(str1, str2)"
+        "Returns similarity score (0.0-1.0) between two strings. 1.0 = identical, 0.0 = completely different. FT_SIMILARITY_SCORE(str1, str2)"
     }
 
     fn argument_count(&self) -> usize {
@@ -261,11 +265,11 @@ impl HybridSearchFunction {
 
 impl Function for HybridSearchFunction {
     fn name(&self) -> &str {
-        "HYBRID_SEARCH"
+        "FT_HYBRID_SEARCH"
     }
 
     fn description(&self) -> &str {
-        "Returns combined score using exact match, fuzzy match, and similarity. HYBRID_SEARCH(text, query) or HYBRID_SEARCH(text, query, exact_weight, fuzzy_weight, similarity_weight)"
+        "Returns combined score using exact match, fuzzy match, and similarity. FT_HYBRID_SEARCH(text, query) or FT_HYBRID_SEARCH(text, query, exact_weight, fuzzy_weight, similarity_weight)"
     }
 
     fn argument_count(&self) -> usize {
@@ -369,11 +373,11 @@ impl KeywordMatchFunction {
 
 impl Function for KeywordMatchFunction {
     fn name(&self) -> &str {
-        "KEYWORD_MATCH"
+        "FT_KEYWORD_MATCH"
     }
 
     fn description(&self) -> &str {
-        "Match text against multiple keywords. Returns true if any keyword matches (OR logic). KEYWORD_MATCH(text, 'keyword1', 'keyword2', ...)"
+        "Match text against multiple keywords. Returns true if any keyword matches (OR logic). FT_KEYWORD_MATCH(text, 'keyword1', 'keyword2', ...)"
     }
 
     fn argument_count(&self) -> usize {
@@ -444,11 +448,11 @@ impl KeywordMatchAllFunction {
 
 impl Function for KeywordMatchAllFunction {
     fn name(&self) -> &str {
-        "KEYWORD_MATCH_ALL"
+        "FT_KEYWORD_MATCH_ALL"
     }
 
     fn description(&self) -> &str {
-        "Match text against multiple keywords. Returns true only if all keywords match (AND logic). KEYWORD_MATCH_ALL(text, 'keyword1', 'keyword2', ...)"
+        "Match text against multiple keywords. Returns true only if all keywords match (AND logic). FT_KEYWORD_MATCH_ALL(text, 'keyword1', 'keyword2', ...)"
     }
 
     fn argument_count(&self) -> usize {
@@ -519,11 +523,11 @@ impl WeightedSearchFunction {
 
 impl Function for WeightedSearchFunction {
     fn name(&self) -> &str {
-        "WEIGHTED_SEARCH"
+        "FT_WEIGHTED_SEARCH"
     }
 
     fn description(&self) -> &str {
-        "Calculate weighted search score with customizable strategy weights. WEIGHTED_SEARCH(text, query, exact_weight, fuzzy_weight, similarity_weight)"
+        "Calculate weighted search score with customizable strategy weights. FT_WEIGHTED_SEARCH(text, query, exact_weight, fuzzy_weight, similarity_weight)"
     }
 
     fn argument_count(&self) -> usize {
@@ -616,11 +620,11 @@ impl ContainsFuzzyFunction {
 
 impl Function for ContainsFuzzyFunction {
     fn name(&self) -> &str {
-        "CONTAINS_FUZZY"
+        "FT_CONTAINS_FUZZY"
     }
 
     fn description(&self) -> &str {
-        "Returns true if text contains query as substring with fuzzy matching. CONTAINS_FUZZY(text, query, max_distance)"
+        "Returns true if text contains query as substring with fuzzy matching. FT_CONTAINS_FUZZY(text, query, max_distance)"
     }
 
     fn argument_count(&self) -> usize {
@@ -705,11 +709,11 @@ impl FuzzySearchFunction {
 
 impl Function for FuzzySearchFunction {
     fn name(&self) -> &str {
-        "FUZZY_SEARCH"
+        "FT_FUZZY_SEARCH"
     }
 
     fn description(&self) -> &str {
-        "Returns similarity score for search query in text. Useful for ranking search results. FUZZY_SEARCH(text, query)"
+        "Returns similarity score for search query in text. Useful for ranking search results. FT_FUZZY_SEARCH(text, query)"
     }
 
     fn argument_count(&self) -> usize {

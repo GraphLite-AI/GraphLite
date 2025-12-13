@@ -38,7 +38,7 @@ mod fulltext_search_integration {
         // Verify query strings are valid
         let queries = vec![
             "TEXT_SEARCH(field, 'query')",
-            "FUZZY_MATCH(field, 'query', 2)",
+            "FT_FUZZY_MATCH(field, 'query', 2)",
             "field CONTAINS 'text'",
             "field MATCHES 'pattern*'",
             "field ~= 'value'",
@@ -55,7 +55,7 @@ mod fulltext_search_integration {
     fn test_functions_all_available() {
         let functions = vec![
             "TEXT_SEARCH",
-            "FUZZY_MATCH",
+            "FT_FUZZY_MATCH",
             "TEXT_MATCH",
             "HIGHLIGHT",
             "TEXT_SCORE",
@@ -254,7 +254,7 @@ mod fulltext_search_integration {
         let examples = vec![
             // Basic search
             ("TEXT_SEARCH", "Basic full-text search"),
-            ("FUZZY_MATCH", "Fuzzy matching with typos"),
+            ("FT_FUZZY_MATCH", "Fuzzy matching with typos"),
             ("TEXT_MATCH", "Boolean/phrase search"),
             ("HIGHLIGHT", "Query term highlighting"),
             ("TEXT_SCORE", "Relevance scoring"),

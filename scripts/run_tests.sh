@@ -90,6 +90,8 @@ run_test_suite() {
         "duplicate_edge_warning_test"
         "duplicate_insert_test"
         "fixture_tests"
+        "fulltext_search_integration"
+        "fulltext_search_executor_integration"
         "function_expression_insert_test"
         "function_tests"
         "identity_based_set_ops_test"

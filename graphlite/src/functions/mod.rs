@@ -259,37 +259,37 @@ impl FunctionRegistry {
 
         // Register text search and fuzzy matching functions
         registry.register(
-            "FUZZY_MATCH",
+            "FT_FUZZY_MATCH",
             Box::new(text_search_functions::FuzzyMatchFunction::new()),
         );
         registry.register(
-            "SIMILARITY_SCORE",
+            "FT_SIMILARITY_SCORE",
             Box::new(text_search_functions::SimilarityScoreFunction::new()),
         );
         registry.register(
-            "CONTAINS_FUZZY",
+            "FT_CONTAINS_FUZZY",
             Box::new(text_search_functions::ContainsFuzzyFunction::new()),
         );
         registry.register(
-            "FUZZY_SEARCH",
+            "FT_FUZZY_SEARCH",
             Box::new(text_search_functions::FuzzySearchFunction::new()),
         );
 
         // Register hybrid search functions
         registry.register(
-            "HYBRID_SEARCH",
+            "FT_HYBRID_SEARCH",
             Box::new(text_search_functions::HybridSearchFunction::new()),
         );
         registry.register(
-            "KEYWORD_MATCH",
+            "FT_KEYWORD_MATCH",
             Box::new(text_search_functions::KeywordMatchFunction::new()),
         );
         registry.register(
-            "KEYWORD_MATCH_ALL",
+            "FT_KEYWORD_MATCH_ALL",
             Box::new(text_search_functions::KeywordMatchAllFunction::new()),
         );
         registry.register(
-            "WEIGHTED_SEARCH",
+            "FT_WEIGHTED_SEARCH",
             Box::new(text_search_functions::WeightedSearchFunction::new()),
         );
 
