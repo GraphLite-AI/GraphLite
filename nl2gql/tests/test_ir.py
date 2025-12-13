@@ -130,3 +130,22 @@ def test_ir_render_group_allows_plain_with_items():
     assert "WITH " not in rendered
     assert "GROUP BY c1.name" in rendered or "GROUP BY company_name" in rendered
     assert rendered.find("RETURN") < rendered.find("GROUP BY")
+
+
+def test_ir_where_supports_string_operators():
+    """Ensure STARTS WITH / ENDS WITH / CONTAINS are parsed and rendered."""
+    query = """MATCH (c:Company)-[:LOCATED_IN]->(ct:City)
+WHERE ct.name STARTS WITH 'S' AND c.name CONTAINS 'Tech' AND ct.state ENDS WITH 'A'
+RETURN c.name"""
+
+    ir, errors = ISOQueryIR.parse(query)
+    assert ir is not None
+    assert errors == []
+    assert len(ir.filters) == 3
+    ops = {flt.op for flt in ir.filters}
+    assert ops == {"STARTS WITH", "CONTAINS", "ENDS WITH"}
+
+    rendered = ir.render()
+    assert "STARTS WITH 'S'" in rendered
+    assert "CONTAINS 'Tech'" in rendered
+    assert "ENDS WITH 'A'" in rendered

@@ -80,6 +80,12 @@ class ISOQueryIR:
         for m in token_pattern.finditer(text):
             raw = m.group(0).upper()
             label = "ORDER BY" if "ORDER" in raw else raw
+            if label == "WITH":
+                # Avoid treating the 'WITH' inside string operators (STARTS WITH / ENDS WITH)
+                prefix = text[: m.start()].rstrip()
+                last_word = prefix.split()[-1].upper() if prefix.split() else ""
+                if last_word in {"STARTS", "ENDS"}:
+                    continue
             tokens.append({"label": label, "start": m.start(), "end": m.end()})
         tokens.sort(key=lambda t: t["start"])
 
@@ -219,6 +225,11 @@ class ISOQueryIR:
                     r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*(=|<>|<=|>=|<|>)\s*(.+)",
                     clause,
                 )
+                string_match = re.match(
+                    r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s+(STARTS\s+WITH|ENDS\s+WITH|CONTAINS)\s+(.+)",
+                    clause,
+                    flags=re.IGNORECASE,
+                )
                 in_match = re.match(
                     r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s+IN\s+\[([^\]]+)\]",
                     clause,
@@ -231,6 +242,19 @@ class ISOQueryIR:
                     r"\(\s*(?P<src>[A-Za-z_][A-Za-z0-9_]*)\s*\)\s*-\s*\[:\s*(?P<rel>[A-Za-z0-9_`]+)\s*\]\s*->\s*\(\s*(?:(?P<dst>[A-Za-z_][A-Za-z0-9_]*)\s*)?(?::\s*(?P<dst_label>[A-Za-z0-9_`]+))?\s*(?:\{(?P<props>[^}]*)\})?\s*\)",
                     clause,
                 )
+                def _parse_condition_value(val_raw: str) -> Any:
+                    val_raw = val_raw.strip()
+                    ref_match = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)", val_raw)
+                    if ref_match:
+                        return {"ref_alias": ref_match.group(1), "ref_property": ref_match.group(2)}
+                    if val_raw.lower() in {"true", "false"}:
+                        return val_raw.lower() == "true"
+                    if re.match(r"^-?\d+(\.\d+)?$", val_raw):
+                        return float(val_raw) if "." in val_raw else int(val_raw)
+                    if val_raw.startswith("'") and val_raw.endswith("'"):
+                        return val_raw.strip("'").replace("\\'", "'")
+                    return val_raw
+
                 if alias_compare:
                     left_alias, op, right_alias = alias_compare.groups()
                     filters.append(
@@ -243,18 +267,19 @@ class ISOQueryIR:
                     )
                 elif cond_match:
                     alias, prop, op, val_raw = cond_match.groups()
-                    val_raw = val_raw.strip()
-                    value: Any = val_raw
-                    ref_match = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)", val_raw)
-                    if ref_match:
-                        value = {"ref_alias": ref_match.group(1), "ref_property": ref_match.group(2)}
-                    elif val_raw.lower() in {"true", "false"}:
-                        value = val_raw.lower() == "true"
-                    elif re.match(r"^-?\d+(\.\d+)?$", val_raw):
-                        value = float(val_raw) if "." in val_raw else int(val_raw)
-                    elif val_raw.startswith("'") and val_raw.endswith("'"):
-                        value = val_raw.strip("'").replace("\\'", "'")
+                    value: Any = _parse_condition_value(val_raw)
                     filters.append(IRFilter(alias=alias, prop=prop, op=op, value=value))
+                elif string_match:
+                    alias, prop, op_raw, val_raw = string_match.groups()
+                    value: Any = _parse_condition_value(val_raw)
+                    filters.append(
+                        IRFilter(
+                            alias=alias,
+                            prop=prop,
+                            op=" ".join(op_raw.upper().split()),
+                            value=value,
+                        )
+                    )
                 elif in_match:
                     alias, prop, list_raw = in_match.groups()
                     values = []
