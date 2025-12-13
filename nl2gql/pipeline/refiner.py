@@ -1264,6 +1264,17 @@ class Refiner:
                                 "query": bundle.ir.render(),
                             }
                         )
+                        # Log trace for successful attempt
+                        if trace_dir and attempt_trace:
+                            if run_logger:
+                                run_logger.log_attempt_trace(attempt, attempt_trace)
+                            else:
+                                (trace_dir / f"attempt_{attempt}.json").write_text(
+                                    json.dumps(attempt_trace, indent=2), encoding="utf-8"
+                                )
+                        return bundle.ir.render(), timeline
+
+                    # Log trace for failed attempt but continue to next attempt
                     if trace_dir and attempt_trace:
                         if run_logger:
                             run_logger.log_attempt_trace(attempt, attempt_trace)
@@ -1271,7 +1282,6 @@ class Refiner:
                             (trace_dir / f"attempt_{attempt}.json").write_text(
                                 json.dumps(attempt_trace, indent=2), encoding="utf-8"
                             )
-                        return bundle.ir.render(), timeline
 
                     # Track the least-bad candidate to allow a graceful fallback.
                     score = (

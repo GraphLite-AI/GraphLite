@@ -204,7 +204,9 @@ class Plan:
             with_line = "WITH " + ", ".join(with_clause_parts)
             lines.append(with_line)
             if self.having:
-                lines.append("WHERE " + " AND ".join(self.having))
+                lines.append("HAVING " + " AND ".join(self.having))
+            if hasattr(self, 'group_by') and self.group_by:
+                lines.append("GROUP BY " + ", ".join(self.group_by))
 
         lines.append("RETURN " + ", ".join(self.returns))
         if self.order_by:
@@ -225,7 +227,7 @@ class QueryGenerator:
         "- Every required label/edge/property from the contract MUST appear in MATCH/WHERE/RETURN/ORDER as appropriate; do not omit them.\n"
         "- Build clear MATCH blocks, THEN use WITH for aggregates/ratios, THEN RETURN/ORDER/LIMIT. Do not mix aggregated and non-aggregated expressions without grouping; always GROUP (or WITH) by every non-aggregated expression you return.\n"
         "- Ensure the plan is COMPLETE: include RETURN (and ORDER/LIMIT when required); never truncate or leave dangling MATCH/WHERE/WITH.\n"
-        "- When counting, use COUNT(DISTINCT alias.id) if uniqueness matters; include HAVING-style filters via WITH + WHERE and ensure grouping aliases are carried in WITH.\n"
+        "- When counting, use COUNT(DISTINCT alias.id) if uniqueness matters; include HAVING-style filters via WITH + HAVING and ensure grouping aliases are carried in WITH.\n"
         "- For ratios/percentages (share/rate), compute numerator and denominator in WITH, derive the ratio, then filter/order on that alias; keep both numerator/denominator visible.\n"
         "- Normalize relative dates as `date() - duration('P<n>D')`.\n"
         "- RETURN ONLY the fields requested (targets + metrics); do NOT include extra ids or intermediate fields; include requested metrics/aggregates explicitly.\n"

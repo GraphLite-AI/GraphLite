@@ -45,6 +45,7 @@ class ISOQueryIR:
     filters: List[IRFilter] = field(default_factory=list)
     with_items: List[str] = field(default_factory=list)
     with_filters: List[str] = field(default_factory=list)
+    group_by: List[str] = field(default_factory=list)
     returns: List[IRReturn] = field(default_factory=list)
     order_by: List[IROrder] = field(default_factory=list)
     limit: Optional[int] = None
@@ -72,7 +73,7 @@ class ISOQueryIR:
             return val_raw
 
         token_pattern = re.compile(
-            r"\bMATCH\b|\bWHERE\b|\bWITH\b|\bRETURN\b|\bHAVING\b|\bORDER\s+BY\b|\bLIMIT\b", flags=re.IGNORECASE
+            r"\bMATCH\b|\bWHERE\b|\bWITH\b|\bRETURN\b|\bHAVING\b|\bGROUP\s+BY\b|\bORDER\s+BY\b|\bLIMIT\b", flags=re.IGNORECASE
         )
         tokens: List[Dict[str, Any]] = []
         for m in token_pattern.finditer(text):
@@ -116,11 +117,14 @@ class ISOQueryIR:
         with_where_block, _ = _block("WHERE", after=with_tok["start"]) if with_tok else ("", None)
         return_block, return_tok = _block("RETURN", after=match_end)
         having_block, having_tok = _block("HAVING", after=return_tok["start"] if return_tok else match_end)
-        order_block, order_tok = _block("ORDER BY", after=having_tok["start"] if having_tok else (return_tok["start"] if return_tok else match_end))
+        group_block, group_tok = _block("GROUP BY", after=having_tok["start"] if having_tok else (return_tok["start"] if return_tok else match_end))
+        order_block, order_tok = _block("ORDER BY", after=group_tok["start"] if group_tok else (having_tok["start"] if having_tok else (return_tok["start"] if return_tok else match_end)))
         limit_block = ""
         limit_after = None
         if order_tok:
             limit_after = order_tok["start"]
+        elif group_tok:
+            limit_after = group_tok["start"]
         elif having_tok:
             limit_after = having_tok["start"]
         elif return_tok:
@@ -337,6 +341,10 @@ class ISOQueryIR:
                     direction = pieces[1] if len(pieces) > 1 else "ASC"
                     order_by.append(IROrder(expr=expr, direction=direction.upper()))
 
+        group_by: List[str] = []
+        if group_block:
+            group_by = [item.strip() for item in group_block.split(",") if item.strip()]
+
         limit: Optional[int] = int(limit_block) if limit_block.isdigit() else None
 
         if return_tok and with_tok and with_tok["start"] > return_tok["start"] and returns:
@@ -350,6 +358,7 @@ class ISOQueryIR:
                 filters=filters,
                 with_items=with_items,
                 with_filters=with_filters,
+                group_by=group_by,
                 returns=returns,
                 order_by=order_by,
                 limit=limit,
@@ -415,6 +424,10 @@ class ISOQueryIR:
         if self.with_filters:
             with_where_clause = "WHERE " + " AND ".join(self.with_filters)
 
+        group_clause = ""
+        if self.group_by:
+            group_clause = "GROUP BY " + ", ".join(self.group_by)
+
         return_clause = "RETURN " + ", ".join([f"{r.expr} AS {r.alias}" if r.alias else r.expr for r in self.returns])
 
         order_clause = ""
@@ -430,6 +443,8 @@ class ISOQueryIR:
             parts.append(with_clause)
         if with_where_clause:
             parts.append(with_where_clause)
+        if group_clause:
+            parts.append(group_clause)
         parts.append(return_clause)
         if order_clause:
             parts.append(order_clause)
