@@ -142,7 +142,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.verbose:
         model_msg = f"Models → generator: {gen_model}, fixer: {fix_model}"
         print(style(model_msg, "teal", color_enabled))
-    spinner.start("Starting pipeline...")
+    spinner.start()
     start = time.perf_counter()
     try:
         pipeline = NL2GQLPipeline(

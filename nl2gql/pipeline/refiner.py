@@ -1026,14 +1026,12 @@ class Refiner:
         with self.runner:
             for attempt in range(1, self.max_loops + 1):
                 if spinner:
-                    spinner.update(f"[attempt {attempt}] preprocessing...")
+                    spinner.set_attempt(attempt)
+                    spinner.set_stage("understand", "preprocessing input...")
                 pre = preprocessor.run(nl, failures)
                 if spinner:
-                    spinner.update(
-                        f"[attempt {attempt}] planning intent and links..."
-                        if cached_guidance is None
-                        else f"[attempt {attempt}] reusing intent/links..."
-                    )
+                    detail = "analyzing intent & linking schema..." if cached_guidance is None else "reusing cached intent/links..."
+                    spinner.set_stage("understand", detail)
                 guidance = cached_guidance or intent_linker.run(nl, pre, failures)
                 if cached_guidance is None:
                     cached_guidance = guidance
@@ -1060,7 +1058,8 @@ class Refiner:
                 )
 
                 if spinner:
-                    spinner.update(f"[attempt {attempt}] generating candidates...")
+                    spinner.set_stage("contract", "requirements built")
+                    spinner.set_stage("generate", "LLM generating candidates...")
 
                 # Some test stubs still expose a 3-arg generator; prefer passing the
                 # contract when supported, but fall back gracefully.
@@ -1125,17 +1124,29 @@ class Refiner:
                     }
 
                 if spinner:
-                    spinner.update(f"[attempt {attempt}] evaluating {len(candidates)} candidate(s)...")
+                    spinner.set_stage("validate", f"checking {len(candidates)} candidate(s)...")
 
                 for idx_candidate, candidate in enumerate(candidates, start=1):
                     if spinner:
-                        spinner.update(f"[attempt {attempt}] evaluating candidate {idx_candidate}/{len(candidates)}...")
+                        spinner.set_stage("validate", f"validating candidate {idx_candidate}/{len(candidates)}...")
                     bundle = self._evaluate_candidate(
                         nl, pre, candidate, schema_validator, logic_hints, guidance.links, contract, label_hints
                     )
                     pre_bundle = getattr(bundle, 'pre_fix_bundle', bundle)
                     post_bundle = getattr(bundle, 'post_fix_bundle', bundle)
                     fixes = getattr(bundle, 'fixes', [])
+                    
+                    # Update spinner with validation results
+                    if spinner:
+                        pre_errors = pre_bundle.schema_errors + pre_bundle.coverage_errors + pre_bundle.parse_errors
+                        for err in pre_errors[:2]:  # Show first 2 errors
+                            spinner.add_error(err[:80] if len(err) > 80 else err)
+                        
+                        if fixes:
+                            spinner.set_stage("repair", "applying fixes...")
+                            for fix in fixes:
+                                fix_note = fix.get("note", "unknown")
+                                spinner.add_fix(fix_note)
 
                     self._persist_debug(
                         run_logger,
@@ -1244,7 +1255,7 @@ class Refiner:
                     )
                     if all_clear:
                         if spinner:
-                            spinner.update(f"[attempt {attempt}] success.")
+                            spinner.set_stage("finalize", "query validated successfully!")
                         timeline.append(
                             {
                                 "attempt": attempt,

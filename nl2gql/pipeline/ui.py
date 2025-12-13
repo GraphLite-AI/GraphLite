@@ -3,157 +3,406 @@ from __future__ import annotations
 import sys
 import threading
 import time
-from typing import Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Tuple
 
-_ANSI_COLORS = {
-    "mauve": "\033[38;5;141m",
-    "peach": "\033[38;5;209m",
-    "sky": "\033[38;5;117m",
-    "teal": "\033[38;5;37m",
-    "blue": "\033[34m",
-    "white": "\033[37m",
-    "green": "\033[32m",
-    "red": "\033[31m",
+# ═══════════════════════════════════════════════════════════════════════════════
+# ANSI Colors - Catppuccin-inspired palette
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_ANSI = {
+    # Core palette
+    "mauve": "\033[38;5;141m",      # Purple - primary accent
+    "peach": "\033[38;5;209m",      # Orange - warnings
+    "sky": "\033[38;5;117m",        # Light blue - info
+    "teal": "\033[38;5;37m",        # Cyan - success secondary
+    "blue": "\033[38;5;75m",        # Blue - links
+    "lavender": "\033[38;5;183m",   # Light purple - subtle
+    "pink": "\033[38;5;218m",       # Pink - highlights
+    "flamingo": "\033[38;5;210m",   # Salmon - warm accent
+    "rosewater": "\033[38;5;224m",  # Light pink - soft
+    "maroon": "\033[38;5;131m",     # Dark red - errors
+    "yellow": "\033[38;5;221m",     # Yellow - caution
+    "sapphire": "\033[38;5;74m",    # Deep blue
+    
+    # Standard
+    "green": "\033[38;5;114m",      # Success green
+    "red": "\033[38;5;203m",        # Error red  
+    "white": "\033[38;5;255m",      # Bright white
+    "gray": "\033[38;5;245m",       # Muted gray
+    "dim": "\033[38;5;240m",        # Very dim
+    
+    # Formatting
     "reset": "\033[0m",
+    "bold": "\033[1m",
     "italic": "\033[3m",
+    "dim_fmt": "\033[2m",
 }
 
 
-def style(text: str, color: str, enabled: bool, *, italic: bool = False) -> str:
+def style(text: str, color: str, enabled: bool, *, italic: bool = False, bold: bool = False, dim: bool = False) -> str:
     if not enabled:
         return text
-    code = _ANSI_COLORS.get("blue" if italic else color, "")
-    italic_code = _ANSI_COLORS["italic"] if italic else ""
-    if not (code or italic_code):
+    parts = []
+    if bold:
+        parts.append(_ANSI["bold"])
+    if italic:
+        parts.append(_ANSI["italic"])
+    if dim:
+        parts.append(_ANSI["dim_fmt"])
+    parts.append(_ANSI.get(color, ""))
+    prefix = "".join(parts)
+    if not prefix:
         return text
-    return f"{italic_code}{code}{text}{_ANSI_COLORS['reset']}"
+    return f"{prefix}{text}{_ANSI['reset']}"
 
+
+def icon(name: str, enabled: bool = True) -> str:
+    """Get a styled icon."""
+    icons = {
+        "check": ("✓", "green"),
+        "cross": ("✗", "red"),
+        "arrow": ("➤", "mauve"),
+        "dot": ("●", "gray"),
+        "hollow": ("○", "dim"),
+        "spin": ("◐", "mauve"),
+        "spark": ("✦", "yellow"),
+        "bolt": ("⚡", "yellow"),
+        "brain": ("🧠", ""),
+        "link": ("🔗", ""),
+        "hammer": ("🔨", ""),
+        "eye": ("👁", ""),
+        "rocket": ("🚀", ""),
+        "gear": ("⚙", ""),
+        "magnify": ("🔍", ""),
+        "fix": ("🔧", ""),
+    }
+    char, color = icons.get(name, ("?", "white"))
+    if color and enabled:
+        return style(char, color, enabled)
+    return char
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Stage Progress Tracker
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@dataclass
+class StageInfo:
+    """Information about a pipeline stage."""
+    name: str
+    label: str
+    icon_pending: str = "○"
+    icon_active: str = "◐"
+    icon_done: str = "✓"
+    icon_error: str = "✗"
+    detail: str = ""
+    
+    
+@dataclass  
+class StageProgress:
+    """Track progress through pipeline stages."""
+    stages: List[StageInfo] = field(default_factory=list)
+    current_idx: int = -1
+    current_detail: str = ""
+    attempt: int = 1
+    errors: List[str] = field(default_factory=list)
+    fixes: List[str] = field(default_factory=list)
+    
+    def __post_init__(self):
+        if not self.stages:
+            self.stages = [
+                StageInfo("understand", "Understanding", detail="parsing intent & schema"),
+                StageInfo("contract", "Contract", detail="building requirements"),
+                StageInfo("generate", "Generation", detail="LLM candidate generation"),
+                StageInfo("validate", "Validation", detail="checking constraints"),
+                StageInfo("repair", "Repair", detail="fixing issues"),
+                StageInfo("finalize", "Final", detail="selecting best result"),
+            ]
+    
+    def set_stage(self, name: str, detail: str = "") -> None:
+        for idx, stage in enumerate(self.stages):
+            if stage.name == name:
+                self.current_idx = idx
+                self.current_detail = detail or stage.detail
+                return
+    
+    def add_error(self, error: str) -> None:
+        if error and error not in self.errors:
+            self.errors.append(error)
+    
+    def add_fix(self, fix: str) -> None:
+        if fix and fix not in self.fixes:
+            self.fixes.append(fix)
+            
+    def clear_errors(self) -> None:
+        self.errors = []
+        self.fixes = []
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Live Spinner with Rich Progress Display
+# ═══════════════════════════════════════════════════════════════════════════════
 
 class Spinner:
-    """Lightweight terminal spinner for live status updates."""
-
-    _STAGES: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
-        ("preprocess", ("preprocess",)),
-        ("intent/links", ("planning intent", "reusing intent", "intent", "link")),
-        ("generate", ("generating candidates", "generate candidates", "generator")),
-        ("validate", ("evaluating", "validation", "scoring", "syntax", "logic")),
-        ("finalize", ("success", "finalizing", "finalize")),
-    )
-
+    """Rich terminal spinner with stage-based progress display."""
+    
+    _SPIN_FRAMES = ["◜", "◠", "◝", "◞", "◡", "◟"]
+    _PULSE_FRAMES = ["░", "▒", "▓", "█", "▓", "▒"]
+    
     def __init__(self, enabled: bool = True, color: str = "mauve") -> None:
         self.enabled = enabled and sys.stdout.isatty()
         self.color = color
+        self.progress = StageProgress()
         self._text = ""
-        self._parts: Optional[Tuple[int, str]] = None
-        self._stage_idx: Optional[int] = None
-        self._has_stage_line = False
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
-        self._last_len = 0
-
+        self._line_count = 0
+        self._first_render = True
+        self._lock = threading.Lock()
+        
     def start(self, initial: str = "") -> None:
         self._text = initial
-        self._parts = self._split_attempt(initial)
-        self._stage_idx = self._detect_stage(self._parts[1] if self._parts else initial)
+        self.progress = StageProgress()
+        self._line_count = 0
+        self._first_render = True
         if not self.enabled:
             return
+        # Clear screen, scrollback buffer, and move cursor to top for fresh start
+        # Use multiple strategies to ensure full clearing
+        sys.stdout.write("\n" * 50)  # Push old content up
+        sys.stdout.write("\033[2J\033[3J\033[H")  # Clear screen + scrollback + home
+        sys.stdout.flush()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
-
+    
     def update(self, text: str) -> None:
-        self._text = text
-        self._parts = self._split_attempt(text)
-        self._stage_idx = self._detect_stage(self._parts[1] if self._parts else text)
-
+        """Update spinner with text and auto-detect stage from text content."""
+        with self._lock:
+            self._text = text
+            self._detect_and_set_stage(text)
+    
+    def set_stage(self, stage: str, detail: str = "") -> None:
+        """Explicitly set the current stage."""
+        with self._lock:
+            self.progress.set_stage(stage, detail)
+    
+    def set_attempt(self, attempt: int) -> None:
+        """Set the current attempt number."""
+        with self._lock:
+            self.progress.attempt = attempt
+            self.progress.clear_errors()
+    
+    def add_error(self, error: str) -> None:
+        """Add an error to display."""
+        with self._lock:
+            self.progress.add_error(error)
+    
+    def add_fix(self, fix: str) -> None:
+        """Add a fix to display."""
+        with self._lock:
+            self.progress.add_fix(fix)
+    
     def stop(self, final: Optional[str] = None, color: Optional[str] = None) -> None:
         if self.enabled:
             self._stop.set()
             if self._thread:
                 self._thread.join(timeout=0.5)
-            if self._has_stage_line:
-                sys.stdout.write("\r\033[K")  # clear spinner line
-                sys.stdout.write("\033[F\033[K")  # move up, clear stage line
-            else:
-                sys.stdout.write("\r" + " " * self._last_len + "\r")
+            # Clear screen, scrollback, and reset cursor completely
+            sys.stdout.write("\n" * 50)  # Push any remaining content up
+            sys.stdout.write("\033[2J\033[3J\033[H")  # Clear everything
             sys.stdout.flush()
         if final:
-            if self.enabled and color:
-                print(style(final, color, True))
-            elif self.enabled:
-                print(style(final, "green", True))
+            c = color or "green"
+            if self.enabled:
+                print(style(final, c, True, bold=True))
             else:
                 print(final)
-
-    @staticmethod
-    def _split_attempt(text: str) -> Optional[Tuple[int, str]]:
-        if text.startswith("[attempt") and "]" in text:
-            end = text.find("]") + 1
-            prefix = text[:end]
-            rest = text[end:].lstrip()
-            try:
-                num_part = prefix.strip("[]").split()[1]
-                num = int(num_part)
-            except Exception:
-                return None
-            return num, rest
-        return None
-
-    def _detect_stage(self, text: str) -> Optional[int]:
+    
+    def _detect_and_set_stage(self, text: str) -> None:
+        """Auto-detect stage from update text."""
         lower = text.lower()
-        for idx, (_, tokens) in enumerate(self._STAGES):
-            if any(token in lower for token in tokens):
-                return idx
-        return None
-
-    def _render_stage_line(self) -> str:
-        if self._stage_idx is None:
-            return ""
-        parts = []
-        for idx, (label, _) in enumerate(self._STAGES):
-            if idx < self._stage_idx:
-                icon, col = "✓", "green"
-            elif idx == self._stage_idx:
-                icon, col = "➤", self.color
+        
+        # Extract attempt number
+        if "[attempt" in lower and "]" in lower:
+            try:
+                start = lower.find("[attempt") + 8
+                end = lower.find("]", start)
+                num = int(lower[start:end].strip())
+                if num != self.progress.attempt:
+                    self.progress.attempt = num
+                    self.progress.clear_errors()
+            except ValueError:
+                pass
+        
+        # Map text patterns to stages
+        stage_map = [
+            (["preprocess", "parsing", "understanding"], "understand"),
+            (["intent", "link", "schema link"], "understand"),
+            (["contract", "requirement", "building req"], "contract"),
+            (["generat", "candidate", "llm"], "generate"),
+            (["evaluat", "validat", "check", "syntax", "logic"], "validate"),
+            (["repair", "fix", "schema repair", "deterministic"], "repair"),
+            (["success", "final", "complete", "done"], "finalize"),
+        ]
+        
+        for patterns, stage in stage_map:
+            if any(p in lower for p in patterns):
+                # Extract detail from text after the stage indicator
+                detail = ""
+                if "]" in text:
+                    detail = text.split("]", 1)[-1].strip()
+                self.progress.set_stage(stage, detail[:50] if detail else "")
+                return
+    
+    def _render(self, frame_idx: int) -> List[str]:
+        """Render the current display state."""
+        lines: List[str] = []
+        spin = self._SPIN_FRAMES[frame_idx % len(self._SPIN_FRAMES)]
+        
+        # Header with attempt info
+        attempt_str = style(f"ATTEMPT {self.progress.attempt}", "mauve", self.enabled, bold=True)
+        header = f"  {spin} {attempt_str}"
+        lines.append(header)
+        
+        # Stage progress visualization
+        lines.append("")
+        for idx, stage in enumerate(self.progress.stages):
+            is_current = idx == self.progress.current_idx
+            is_done = idx < self.progress.current_idx
+            is_future = idx > self.progress.current_idx
+            
+            # Choose icon and color
+            if is_done:
+                ico = style("✓", "green", self.enabled)
+                label_col = "dim"
+            elif is_current:
+                # Animated icon for current stage
+                pulse = self._PULSE_FRAMES[frame_idx % len(self._PULSE_FRAMES)]
+                ico = style(pulse, self.color, self.enabled, bold=True)
+                label_col = "white"
             else:
-                icon, col = "·", "sky"
-            connector = "├"
-            piece = f"{connector} {icon} {label}"
-            parts.append(style(piece, col, self.enabled))
-        return "  ".join(parts)
-
+                ico = style("○", "dim", self.enabled)
+                label_col = "dim"
+            
+            # Build the stage line
+            prefix = "  │" if idx < len(self.progress.stages) - 1 else "  └"
+            label = style(stage.label, label_col, self.enabled, bold=is_current)
+            
+            if is_current and self.progress.current_detail:
+                detail = style(f" · {self.progress.current_detail}", "gray", self.enabled, italic=True)
+            else:
+                detail = ""
+            
+            lines.append(f"{prefix} {ico} {label}{detail}")
+        
+        # Show current errors (if any)
+        if self.progress.errors:
+            lines.append("")
+            err_header = style("  ⚠ Issues detected:", "peach", self.enabled)
+            lines.append(err_header)
+            for err in self.progress.errors[-3:]:  # Show last 3 errors
+                err_short = err[:60] + "..." if len(err) > 60 else err
+                err_line = style(f"    · {err_short}", "dim", self.enabled)
+                lines.append(err_line)
+        
+        # Show fixes being applied
+        if self.progress.fixes:
+            lines.append("")
+            fix_header = style("  🔧 Applying fixes:", "teal", self.enabled)
+            lines.append(fix_header)
+            for fix in self.progress.fixes[-2:]:  # Show last 2 fixes
+                fix_short = fix[:60] + "..." if len(fix) > 60 else fix
+                fix_line = style(f"    · {fix_short}", "gray", self.enabled, italic=True)
+                lines.append(fix_line)
+        
+        # Footer with raw status text
+        if self._text and self.progress.current_idx >= 0:
+            lines.append("")
+            # Extract just the action part from text like "[attempt 1] evaluating..."
+            action = self._text
+            if "]" in action:
+                action = action.split("]", 1)[-1].strip()
+            if action:
+                footer = style(f"  {action}", "gray", self.enabled, italic=True, dim=True)
+                lines.append(footer)
+        
+        return lines
+    
     def _run(self) -> None:
-        frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        """Animation loop."""
+        frame = 0
+        while not self._stop.is_set():
+            with self._lock:
+                lines = self._render(frame)
+            
+            # Move cursor to home position (top-left) and clear from there
+            # This ensures we always render at a fixed position
+            sys.stdout.write("\033[H")  # Move to home (top-left)
+            
+            # Draw each line, clearing to end of line
+            for i, line in enumerate(lines):
+                sys.stdout.write(f"{line}\033[K\n")
+            
+            # Clear any remaining lines from previous render
+            if len(lines) < self._line_count:
+                for _ in range(self._line_count - len(lines)):
+                    sys.stdout.write("\033[K\n")
+            
+            sys.stdout.flush()
+            self._line_count = len(lines)
+            frame += 1
+            time.sleep(0.1)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Compact Progress Bar (alternative minimal display)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ProgressBar:
+    """Minimal single-line progress indicator."""
+    
+    def __init__(self, enabled: bool = True) -> None:
+        self.enabled = enabled and sys.stdout.isatty()
+        self.stages = ["PARSE", "LINK", "BUILD", "GEN", "VAL", "FIX", "DONE"]
+        self.current = 0
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+    
+    def start(self) -> None:
+        if not self.enabled:
+            return
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+    
+    def advance(self) -> None:
+        self.current = min(self.current + 1, len(self.stages) - 1)
+    
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=0.3)
+        sys.stdout.write("\r\033[K")
+        sys.stdout.flush()
+    
+    def _run(self) -> None:
+        spin = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
         idx = 0
         while not self._stop.is_set():
-            frame = frames[idx % len(frames)]
-            frame_col = style(frame, self.color, self.enabled)
-            if self._parts:
-                _, rest = self._parts
-                rest_col = style(rest, "white", self.enabled, italic=True)
-                text_col = rest_col
-            else:
-                text_col = style(self._text, "white", self.enabled, italic=True)
-            stage_line = self._render_stage_line()
-            base_line = f"{frame_col} {text_col}"
-            if stage_line:
-                # Draw completion status on its own line, above the italic spinner text.
-                sys.stdout.write("\r")
-                if self._has_stage_line:
-                    sys.stdout.write("\033[F")  # move up to stage line
-                sys.stdout.write("\033[K" + stage_line + "\n")  # clear + write stage line
-                sys.stdout.write("\033[K" + base_line)  # clear + write spinner line
-                self._has_stage_line = True
-            else:
-                line = f"\r{base_line}"
-                self._last_len = max(self._last_len, len(line))
-                sys.stdout.write(line + " " * max(0, self._last_len - len(line)))
-                self._has_stage_line = False
+            parts = []
+            for i, stage in enumerate(self.stages):
+                if i < self.current:
+                    parts.append(style(f"✓{stage}", "green", self.enabled))
+                elif i == self.current:
+                    parts.append(style(f"{spin[idx % len(spin)]}{stage}", "mauve", self.enabled, bold=True))
+                else:
+                    parts.append(style(f"·{stage}", "dim", self.enabled))
+            
+            line = " → ".join(parts)
+            sys.stdout.write(f"\r{line}\033[K")
             sys.stdout.flush()
             idx += 1
             time.sleep(0.08)
 
 
-__all__ = ["Spinner", "style"]
-
-
-
+__all__ = ["Spinner", "ProgressBar", "StageProgress", "style", "icon"]
