@@ -24,6 +24,10 @@ pub enum StorageType {
     #[default]
     Sled,
 
+    /// Redb - Pure Rust ACID-compliant embedded database
+    /// Best for: ACID guarantees, crash-safety, zero-copy reads
+    Redb,
+
     /// Memory - In-memory storage for testing
     /// Best for: Unit testing, development
     Memory,
@@ -36,9 +40,10 @@ impl std::str::FromStr for StorageType {
         match s.to_lowercase().as_str() {
             "rocksdb" => Ok(StorageType::RocksDB),
             "sled" => Ok(StorageType::Sled),
+            "redb" => Ok(StorageType::Redb),
             "memory" => Ok(StorageType::Memory),
             _ => Err(format!(
-                "Unknown storage type: {}. Valid options: rocksdb, sled, memory",
+                "Unknown storage type: {}. Valid options: rocksdb, sled, redb, memory",
                 s
             )),
         }
@@ -50,6 +55,7 @@ impl std::fmt::Display for StorageType {
         let name = match self {
             StorageType::RocksDB => "rocksdb",
             StorageType::Sled => "sled",
+            StorageType::Redb => "redb",
             StorageType::Memory => "memory",
         };
         write!(f, "{}", name)

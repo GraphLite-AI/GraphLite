@@ -1,0 +1,15 @@
+#V2
+CREATE (p:Person {name: 'A', age: 30})\n;
+CREATE SCHEMA IF NOT EXISTS /example;
+SESSION SET SCHEMA /example;
+CREATE GRAPH IF NOT EXISTS social;
+SESSION SET GRAPH social;
+CREATE (p:Person {name: 'A', age: 30});
+CREATE (p:Person {name: 'B', age: 25});
+CREATE (p:Person {name: 'C', age: 35});
+CREATE (p:Person {name: 'D', age: 28});
+CREATE (p:Person {name: 'E', age: 23});
+CREATE (p:Person {name: 'F', age: 40});
+MATCH (p:Person) RETURN p.name as name, p.age as age;
+MATCH (p:Person) WHERE p.age > 25 RETURN p.name as name, p.age as age ORDER BY p.age DESC;
+MATCH (p:Person) WHERE p.age > 25 RETURN p.name as name, p.age as age ORDER BY p.age ASC;

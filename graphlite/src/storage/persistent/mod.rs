@@ -41,7 +41,10 @@ pub mod traits;
 pub mod types;
 
 // Driver implementations
+#[cfg(feature = "sled-backend")]
 pub mod sled;
+#[cfg(feature = "redb-backend")]
+pub mod redb;
 // pub mod rocksdb;  // TODO: Not yet extracted
 pub mod memory;
 

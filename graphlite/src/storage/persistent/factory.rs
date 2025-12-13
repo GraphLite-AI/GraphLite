@@ -34,11 +34,26 @@ pub fn create_storage_driver<P: AsRef<Path>>(
     path: P,
 ) -> StorageResult<Box<dyn StorageDriver<Tree = Box<dyn StorageTree>>>> {
     match storage_type {
+        #[cfg(feature = "sled-backend")]
         StorageType::Sled => {
             use crate::storage::persistent::sled::SledDriver;
             let driver = SledDriver::open(path)?;
             Ok(Box::new(driver) as Box<dyn StorageDriver<Tree = Box<dyn StorageTree>>>)
         }
+        #[cfg(not(feature = "sled-backend"))]
+        StorageType::Sled => Err(StorageDriverError::BackendSpecific(
+            "Sled storage backend not enabled. Enable the 'sled-backend' feature".to_string(),
+        )),
+        #[cfg(feature = "redb-backend")]
+        StorageType::Redb => {
+            use crate::storage::persistent::redb::RedbDriver;
+            let driver = RedbDriver::open(path)?;
+            Ok(Box::new(driver) as Box<dyn StorageDriver<Tree = Box<dyn StorageTree>>>)
+        }
+        #[cfg(not(feature = "redb-backend"))]
+        StorageType::Redb => Err(StorageDriverError::BackendSpecific(
+            "Redb storage backend not enabled. Enable the 'redb-backend' feature".to_string(),
+        )),
         StorageType::RocksDB => Err(StorageDriverError::BackendSpecific(
             "RocksDB storage backend not yet implemented".to_string(),
         )),
