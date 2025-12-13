@@ -334,6 +334,25 @@ class Refiner:
             return
         run_logger.log_debug({"task": task_label, **payload})
 
+    def _deterministic_schema_repair(self, ir: ISOQueryIR) -> bool:
+        """Auto-fix common schema errors deterministically (e.g., flip edge directions)."""
+        changed = False
+        for edge in list(ir.edges):
+            # Check if edge exists in schema
+            left_label = ir.nodes.get(edge.left_alias, IRNode(alias=edge.left_alias)).label
+            right_label = ir.nodes.get(edge.right_alias, IRNode(alias=edge.right_alias)).label
+            if not (left_label and right_label):
+                continue
+            if self.graph.edge_exists(left_label, edge.rel, right_label):
+                continue  # Already correct
+            # Check reverse
+            if self.graph.edge_exists(right_label, edge.rel, left_label):
+                # Flip the edge
+                edge.left_alias, edge.right_alias = edge.right_alias, edge.left_alias
+                changed = True
+                # Optionally log: print(f"Auto-flipped edge {left_label}-[:{edge.rel}]->{right_label} to {right_label}-[:{edge.rel}]->{left_label}")
+        return changed
+
     def _repair_ir_schema(
         self,
         ir: ISOQueryIR,
@@ -891,39 +910,97 @@ class Refiner:
                     )
             return hints_local
 
-        bundle = _evaluate_text(candidate.query)
+        initial_bundle = _evaluate_text(candidate.query)
         fix_records: List[Dict[str, Any]] = []
+        current_bundle = initial_bundle
 
-        # Attempt one LLM-based repair if the initial candidate is not clean.
-        bundle_errors = bundle.parse_errors + bundle.schema_errors + bundle.coverage_errors
-        edge_hints = _edge_consistency_hints(bundle.ir)
-        if (bundle_errors or not bundle.logic_valid or edge_hints) and bundle.ir:
-            fix_issues = list(bundle_errors) + edge_hints
-            if not bundle.logic_valid and bundle.logic_reason:
-                fix_issues.append(f"logic: {bundle.logic_reason}")
+        # STEP 1: Deterministic schema repair FIRST (free, no LLM cost)
+        # This fixes edge directions before we waste LLM tokens
+        if current_bundle.ir and current_bundle.schema_errors:
+            schema_repair_changed = self._deterministic_schema_repair(current_bundle.ir)
+            if schema_repair_changed:
+                repaired_query = current_bundle.ir.render()
+                current_bundle = _evaluate_text(repaired_query)
+                current_bundle.fix_applied = True
+                current_bundle.fix_details = "deterministic_schema_repair"
+                fix_records.append({
+                    "note": "deterministic_schema_repair",
+                    "input": initial_bundle.query_text,
+                    "output": repaired_query,
+                    "issues": initial_bundle.schema_errors,
+                })
+
+        # STEP 2: LLM fix for remaining non-schema issues (logic, coverage, etc.)
+        remaining_errors = current_bundle.parse_errors + current_bundle.schema_errors + current_bundle.coverage_errors
+        edge_hints = _edge_consistency_hints(current_bundle.ir)
+        needs_llm_fix = (remaining_errors or not current_bundle.logic_valid or edge_hints) and current_bundle.ir
+
+        if needs_llm_fix:
+            fix_issues = list(remaining_errors) + edge_hints
+            if not current_bundle.logic_valid and current_bundle.logic_reason:
+                fix_issues.append(f"logic: {current_bundle.logic_reason}")
+
             fixed_query = self._llm_fix_query(
-                nl, pre.filtered_schema.summary_lines(), contract, bundle.query_text, fix_issues, hints
+                nl, pre.filtered_schema.summary_lines(), contract, current_bundle.query_text, fix_issues, hints
             )
-            if fixed_query and fixed_query.strip() and fixed_query.strip() != bundle.query_text.strip():
-                fixed_bundle = _evaluate_text(fixed_query)
-                fixed_bundle.fix_applied = True
-                fixed_bundle.fix_details = "llm_fix"
-                fix_record = {
+
+            if fixed_query and fixed_query.strip() and fixed_query.strip() != current_bundle.query_text.strip():
+                llm_fixed_bundle = _evaluate_text(fixed_query)
+                llm_fixed_bundle.fix_applied = True
+                llm_fixed_bundle.fix_details = "llm_fix"
+                fix_records.append({
                     "note": "llm_fix",
-                    "input": bundle.query_text,
+                    "input": current_bundle.query_text,
                     "output": fixed_query,
                     "issues": fix_issues,
-                }
-                fix_records.append(fix_record)
+                })
 
-                if _score_bundle(fixed_bundle) <= _score_bundle(bundle):
-                    fixed_bundle.fixes = fix_records
-                    bundle = fixed_bundle
-                else:
-                    bundle.fixes = fix_records
-        if not bundle.fixes and fix_records:
-            bundle.fixes = fix_records
-        return bundle
+                # STEP 3: Deterministic schema repair AGAIN as safety net after LLM fix
+                # LLM might have introduced new schema errors
+                if llm_fixed_bundle.ir and llm_fixed_bundle.schema_errors:
+                    post_llm_repair_changed = self._deterministic_schema_repair(llm_fixed_bundle.ir)
+                    if post_llm_repair_changed:
+                        final_repaired_query = llm_fixed_bundle.ir.render()
+                        llm_fixed_bundle = _evaluate_text(final_repaired_query)
+                        llm_fixed_bundle.fix_applied = True
+                        llm_fixed_bundle.fix_details = "deterministic_schema_repair"
+                        fix_records.append({
+                            "note": "deterministic_schema_repair",
+                            "input": fixed_query,
+                            "output": final_repaired_query,
+                            "issues": ["post-llm schema cleanup"],
+                        })
+
+                # Keep the better bundle
+                if _score_bundle(llm_fixed_bundle) <= _score_bundle(current_bundle):
+                    current_bundle = llm_fixed_bundle
+
+        # Attach fix records to final bundle
+        current_bundle.fixes = fix_records if fix_records else []
+        final_bundle = current_bundle
+
+        # Return a bundle that includes pre/post for logging clarity
+        class EnhancedBundle(ValidationBundle):
+            def __init__(self, pre_fix_bundle, fixes, post_fix_bundle):
+                super().__init__(
+                    ir=post_fix_bundle.ir,
+                    parse_errors=post_fix_bundle.parse_errors,
+                    structural_errors=post_fix_bundle.structural_errors,
+                    schema_errors=post_fix_bundle.schema_errors,
+                    coverage_errors=post_fix_bundle.coverage_errors,
+                    syntax_result=post_fix_bundle.syntax_result,
+                    logic_valid=post_fix_bundle.logic_valid,
+                    logic_reason=post_fix_bundle.logic_reason,
+                    repaired=post_fix_bundle.repaired,
+                    query_text=post_fix_bundle.query_text,
+                    fix_applied=post_fix_bundle.fix_applied,
+                    fix_details=post_fix_bundle.fix_details,
+                    fixes=fixes,
+                )
+                self.pre_fix_bundle = pre_fix_bundle
+                self.post_fix_bundle = post_fix_bundle
+
+        return EnhancedBundle(initial_bundle, fix_records, final_bundle)
 
     def run(
         self,
@@ -1056,6 +1133,10 @@ class Refiner:
                     bundle = self._evaluate_candidate(
                         nl, pre, candidate, schema_validator, logic_hints, guidance.links, contract, label_hints
                     )
+                    pre_bundle = getattr(bundle, 'pre_fix_bundle', bundle)
+                    post_bundle = getattr(bundle, 'post_fix_bundle', bundle)
+                    fixes = getattr(bundle, 'fixes', [])
+
                     self._persist_debug(
                         run_logger,
                         f"attempt{attempt}",
@@ -1064,53 +1145,84 @@ class Refiner:
                             "attempt": attempt,
                             "contract": contract_view(contract),
                             "candidate": candidate.query,
-                            "coverage_errors": bundle.coverage_errors,
-                            "schema_errors": bundle.schema_errors,
-                            "parse_errors": bundle.parse_errors,
-                            "logic_valid": bundle.logic_valid,
-                            "logic_reason": bundle.logic_reason,
+                            "pre_fix_coverage_errors": pre_bundle.coverage_errors,
+                            "pre_fix_schema_errors": pre_bundle.schema_errors,
+                            "pre_fix_parse_errors": pre_bundle.parse_errors,
+                            "pre_fix_logic_valid": pre_bundle.logic_valid,
+                            "pre_fix_logic_reason": pre_bundle.logic_reason,
+                            "post_fix_coverage_errors": post_bundle.coverage_errors,
+                            "post_fix_schema_errors": post_bundle.schema_errors,
+                            "post_fix_parse_errors": post_bundle.parse_errors,
+                            "post_fix_logic_valid": post_bundle.logic_valid,
+                            "post_fix_logic_reason": post_bundle.logic_reason,
                             "logic_hints": logic_hints,
-                            "rendered": bundle.query_text,
-                            "fix_applied": bundle.fix_applied,
-                            "fix_details": bundle.fix_details,
+                            "rendered": post_bundle.query_text,
+                            "fix_applied": post_bundle.fix_applied,
+                            "fix_details": post_bundle.fix_details,
                         },
                     )
                     timeline.append(
                         {
                             "attempt": attempt,
                             "raw_query": candidate.query,
-                            "query": bundle.query_text,
-                            "parse_errors": bundle.parse_errors,
-                            "structural_errors": bundle.structural_errors,
-                            "schema_errors": bundle.schema_errors,
-                            "coverage_errors": bundle.coverage_errors,
-                            "syntax_ok": bundle.syntax_result.ok,
-                            "syntax_error": bundle.syntax_result.error,
-                            "logic_valid": bundle.logic_valid,
-                            "logic_reason": bundle.logic_reason,
-                            "repaired": bundle.repaired,
-                            "fix_applied": bundle.fix_applied,
-                            "fix_details": bundle.fix_details,
-                            "fixes": bundle.fixes,
+                            "pre_fix_bundle": {
+                                "query": pre_bundle.query_text,
+                                "parse_errors": pre_bundle.parse_errors,
+                                "structural_errors": pre_bundle.structural_errors,
+                                "schema_errors": pre_bundle.schema_errors,
+                                "coverage_errors": pre_bundle.coverage_errors,
+                                "syntax_ok": pre_bundle.syntax_result.ok,
+                                "syntax_error": pre_bundle.syntax_result.error,
+                                "logic_valid": pre_bundle.logic_valid,
+                                "logic_reason": pre_bundle.logic_reason,
+                                "repaired": pre_bundle.repaired,
+                            },
+                            "fixes": fixes,
+                            "post_fix_bundle": {
+                                "query": post_bundle.query_text,
+                                "parse_errors": post_bundle.parse_errors,
+                                "structural_errors": post_bundle.structural_errors,
+                                "schema_errors": post_bundle.schema_errors,
+                                "coverage_errors": post_bundle.coverage_errors,
+                                "syntax_ok": post_bundle.syntax_result.ok,
+                                "syntax_error": post_bundle.syntax_result.error,
+                                "logic_valid": post_bundle.logic_valid,
+                                "logic_reason": post_bundle.logic_reason,
+                                "repaired": post_bundle.repaired,
+                                "fix_applied": post_bundle.fix_applied,
+                                "fix_details": post_bundle.fix_details,
+                            },
                         }
                     )
 
                     if trace_dir:
+                        pre_bundle = getattr(bundle, 'pre_fix_bundle', bundle)
+                        post_bundle = getattr(bundle, 'post_fix_bundle', bundle)
+                        fixes = getattr(bundle, 'fixes', [])
                         attempt_trace.setdefault("candidates", []).append(
                             {
                                 "raw": candidate.query,
-                                "rendered": bundle.query_text,
-                                "parse_errors": bundle.parse_errors,
-                                "structural_errors": bundle.structural_errors,
-                                "schema_errors": bundle.schema_errors,
-                                "coverage_errors": bundle.coverage_errors,
-                                "syntax_ok": bundle.syntax_result.ok,
-                                "syntax_error": bundle.syntax_result.error,
-                                "logic_valid": bundle.logic_valid,
-                                "logic_reason": bundle.logic_reason,
-                                "fix_applied": bundle.fix_applied,
-                                "fix_details": bundle.fix_details,
-                                "fixes": bundle.fixes,
+                                "pre_fix_rendered": pre_bundle.query_text,
+                                "pre_fix_parse_errors": pre_bundle.parse_errors,
+                                "pre_fix_structural_errors": pre_bundle.structural_errors,
+                                "pre_fix_schema_errors": pre_bundle.schema_errors,
+                                "pre_fix_coverage_errors": pre_bundle.coverage_errors,
+                                "pre_fix_syntax_ok": pre_bundle.syntax_result.ok,
+                                "pre_fix_syntax_error": pre_bundle.syntax_result.error,
+                                "pre_fix_logic_valid": pre_bundle.logic_valid,
+                                "pre_fix_logic_reason": pre_bundle.logic_reason,
+                                "fixes": fixes,
+                                "post_fix_rendered": post_bundle.query_text,
+                                "post_fix_parse_errors": post_bundle.parse_errors,
+                                "post_fix_structural_errors": post_bundle.structural_errors,
+                                "post_fix_schema_errors": post_bundle.schema_errors,
+                                "post_fix_coverage_errors": post_bundle.coverage_errors,
+                                "post_fix_syntax_ok": post_bundle.syntax_result.ok,
+                                "post_fix_syntax_error": post_bundle.syntax_result.error,
+                                "post_fix_logic_valid": post_bundle.logic_valid,
+                                "post_fix_logic_reason": post_bundle.logic_reason,
+                                "fix_applied": post_bundle.fix_applied,
+                                "fix_details": post_bundle.fix_details,
                             }
                         )
 

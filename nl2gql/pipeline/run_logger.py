@@ -17,6 +17,48 @@ def _utc_timestamp() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
+def _status_icon(ok: bool) -> str:
+    return "✓" if ok else "✗"
+
+
+def _error_summary(bundle: Dict[str, Any]) -> str:
+    """Summarize errors from a validation bundle."""
+    parts = []
+    parse = bundle.get("parse_errors", [])
+    structural = bundle.get("structural_errors", [])
+    schema = bundle.get("schema_errors", [])
+    coverage = bundle.get("coverage_errors", [])
+    syntax_ok = bundle.get("syntax_ok", True)
+    logic_valid = bundle.get("logic_valid", True)
+
+    if parse:
+        parts.append(f"{len(parse)} parse")
+    if structural:
+        parts.append(f"{len(structural)} structural")
+    if schema:
+        parts.append(f"{len(schema)} schema")
+    if coverage:
+        parts.append(f"{len(coverage)} coverage")
+    if not syntax_ok:
+        parts.append("syntax")
+    if not logic_valid:
+        parts.append("logic")
+
+    return ", ".join(parts) if parts else "none"
+
+
+def _is_clean(bundle: Dict[str, Any]) -> bool:
+    """Check if a bundle has no errors."""
+    return (
+        not bundle.get("parse_errors")
+        and not bundle.get("structural_errors")
+        and not bundle.get("schema_errors")
+        and not bundle.get("coverage_errors")
+        and bundle.get("syntax_ok", True)
+        and bundle.get("logic_valid", True)
+    )
+
+
 def format_timeline(nl_query: str, validation_log: List[Dict[str, Any]], max_attempts: int) -> str:
     """Render the timeline into a human-readable string for log files."""
     lines: List[str] = []
@@ -25,41 +67,162 @@ def format_timeline(nl_query: str, validation_log: List[Dict[str, Any]], max_att
     lines.append("=" * 80)
     lines.append(f"Query: {nl_query}")
     lines.append(f"Max Attempts: {max_attempts}")
+    lines.append("")
 
     attempts: Dict[int, List[Dict[str, Any]]] = {}
     for entry in validation_log:
         attempts.setdefault(entry.get("attempt", 0), []).append(entry)
 
-    lines.append("")
-    lines.append("Timeline (per attempt):")
-    for attempt in sorted(attempts):
+    for attempt_num in sorted(attempts):
         lines.append("-" * 80)
-        lines.append(f"Attempt {attempt}")
-        for entry in attempts[attempt]:
-            phase = entry.get("phase")
-            if phase == "intent":
-                lines.append("  • Intent frame")
-                lines.append(json.dumps(entry.get("frame"), indent=2))
-            elif phase == "link":
-                lines.append("  • Schema links")
-                lines.append(json.dumps(entry.get("links"), indent=2))
-            elif phase == "contract":
-                lines.append("  • Contract requirements")
-                lines.append(json.dumps(entry.get("requirements"), indent=2))
-            elif phase == "hints":
-                lines.append("  • Logic hints")
-                lines.append(json.dumps(entry.get("logic_hints"), indent=2))
-            elif phase == "generate":
-                lines.append("  • Candidates")
-                lines.append(json.dumps(entry.get("candidates"), indent=2))
-            elif phase == "final":
-                lines.append("  • Final selection")
-                summary = {"status": entry.get("status"), "query": entry.get("query")}
-                lines.append(json.dumps(summary, indent=2))
-            else:
-                lines.append("  • Candidate evaluation")
-                details = {k: v for k, v in entry.items() if k not in {"attempt"}}
-                lines.append(json.dumps(details, indent=2))
+        lines.append(f"ATTEMPT {attempt_num}")
+        lines.append("-" * 80)
+
+        entries = attempts[attempt_num]
+
+        # Stage 1: Understanding
+        intent_entry = next((e for e in entries if e.get("phase") == "intent"), None)
+        link_entry = next((e for e in entries if e.get("phase") == "link"), None)
+        if intent_entry or link_entry:
+            lines.append("")
+            lines.append("┌─ STAGE 1: UNDERSTANDING")
+            if intent_entry:
+                frame = intent_entry.get("frame", {})
+                targets = frame.get("targets", [])
+                filters = frame.get("filters", [])
+                metrics = frame.get("metrics", [])
+                order = frame.get("order_by", [])
+                limit = frame.get("limit")
+                lines.append(f"│  Targets: {', '.join(str(t) for t in targets[:5])}{'...' if len(targets) > 5 else ''}")
+                if filters:
+                    lines.append(f"│  Filters: {', '.join(str(f) for f in filters[:3])}{'...' if len(filters) > 3 else ''}")
+                if metrics:
+                    lines.append(f"│  Metrics: {', '.join(str(m) for m in metrics[:3])}")
+                if order:
+                    lines.append(f"│  Order: {', '.join(str(o) for o in order)}")
+                if limit:
+                    lines.append(f"│  Limit: {limit}")
+            if link_entry:
+                links = link_entry.get("links", {})
+                node_links = links.get("node_links", [])
+                rel_links = links.get("rel_links", [])
+                node_strs = [f"{n.get('alias')}:{n.get('label')}" for n in node_links]
+                lines.append(f"│  Nodes: {', '.join(node_strs)}")
+                if rel_links:
+                    lines.append(f"│  Edges: {len(rel_links)} relationship(s)")
+            lines.append("└─ ✓ Understanding complete")
+
+        # Stage 2: Contract
+        contract_entry = next((e for e in entries if e.get("phase") == "contract"), None)
+        if contract_entry:
+            lines.append("")
+            lines.append("┌─ STAGE 2: CONTRACT")
+            reqs = contract_entry.get("requirements", {})
+            labels = reqs.get("required_labels", [])
+            edges = reqs.get("required_edges", [])
+            props = reqs.get("required_properties", [])
+            metrics = reqs.get("required_metrics", [])
+            order = reqs.get("required_order", [])
+            limit = reqs.get("limit")
+            lines.append(f"│  Required labels: {', '.join(labels)}")
+            if edges:
+                edge_strs = [f"{e[0]}-[:{e[1]}]->{e[2]}" for e in edges[:3]]
+                lines.append(f"│  Required edges: {', '.join(edge_strs)}{'...' if len(edges) > 3 else ''}")
+            if props:
+                lines.append(f"│  Required properties: {len(props)} property constraint(s)")
+            if metrics:
+                lines.append(f"│  Required metrics: {len(metrics)} metric(s)")
+            if order:
+                lines.append(f"│  Required order: {', '.join(order)}")
+            if limit:
+                lines.append(f"│  Limit: {limit}")
+            lines.append("└─ ✓ Contract built")
+
+        # Stage 3: Generation
+        gen_entry = next((e for e in entries if e.get("phase") == "generate"), None)
+        if gen_entry:
+            lines.append("")
+            lines.append("┌─ STAGE 3: GENERATION")
+            candidates = gen_entry.get("candidates", [])
+            lines.append(f"│  Generated {len(candidates)} candidate(s)")
+            lines.append("└─ ✓ Generation complete")
+
+        # Stage 4-6: Validation & Repair
+        eval_entries = [e for e in entries if e.get("phase") is None and "pre_fix_bundle" in e]
+        for eval_entry in eval_entries:
+            pre_bundle = eval_entry.get("pre_fix_bundle", {})
+            fixes = eval_entry.get("fixes", [])
+            post_bundle = eval_entry.get("post_fix_bundle", {})
+
+            lines.append("")
+            lines.append("┌─ STAGE 4: INITIAL VALIDATION")
+            pre_clean = _is_clean(pre_bundle)
+            pre_errors = _error_summary(pre_bundle)
+            lines.append(f"│  Status: {_status_icon(pre_clean)} {'PASS' if pre_clean else 'FAIL'}")
+            if not pre_clean:
+                lines.append(f"│  Errors: {pre_errors}")
+                # Show specific errors
+                for err in pre_bundle.get("schema_errors", [])[:2]:
+                    lines.append(f"│    - Schema: {err}")
+                for err in pre_bundle.get("coverage_errors", [])[:2]:
+                    lines.append(f"│    - Coverage: {err}")
+                if not pre_bundle.get("logic_valid", True) and pre_bundle.get("logic_reason"):
+                    reason = pre_bundle.get("logic_reason", "")
+                    if len(reason) > 80:
+                        reason = reason[:77] + "..."
+                    lines.append(f"│    - Logic: {reason}")
+            lines.append(f"└─ {_status_icon(pre_clean)} Initial validation {'passed' if pre_clean else 'needs repair'}")
+
+            # Stage 5: Repair (only if there were errors)
+            if fixes or (not pre_clean and post_bundle):
+                lines.append("")
+                lines.append("┌─ STAGE 5: REPAIR")
+
+                if fixes:
+                    for fix in fixes:
+                        note = fix.get("note", "unknown")
+                        issues = fix.get("issues", [])
+                        lines.append(f"│  Applied: {note}")
+                        for issue in issues[:2]:
+                            if len(issue) > 60:
+                                issue = issue[:57] + "..."
+                            lines.append(f"│    - Fixing: {issue}")
+
+                fix_details = post_bundle.get("fix_details", "")
+                if fix_details == "deterministic_schema_repair":
+                    lines.append("│  Applied: deterministic_schema_repair (auto-flipped edges)")
+
+                post_clean = _is_clean(post_bundle)
+                post_errors = _error_summary(post_bundle)
+                lines.append(f"│  After repair: {_status_icon(post_clean)} {'PASS' if post_clean else f'FAIL ({post_errors})'}")
+                if not post_clean:
+                    for err in post_bundle.get("schema_errors", [])[:2]:
+                        lines.append(f"│    - Schema: {err}")
+                lines.append(f"└─ {_status_icon(post_clean)} Repair {'successful' if post_clean else 'incomplete'}")
+
+            # Stage 6: Final Validation (show final query)
+            final_bundle = post_bundle if post_bundle else pre_bundle
+            final_clean = _is_clean(final_bundle)
+            lines.append("")
+            lines.append("┌─ STAGE 6: FINAL RESULT")
+            lines.append(f"│  Status: {_status_icon(final_clean)} {'SUCCESS' if final_clean else 'PARTIAL (best effort)'}")
+            final_query = final_bundle.get("query", "")
+            if final_query:
+                # Show query in a readable format
+                query_lines = final_query.strip().split("\n")
+                lines.append("│  Query:")
+                for ql in query_lines:
+                    lines.append(f"│    {ql}")
+            lines.append("└─")
+
+        # Final selection entry
+        final_entry = next((e for e in entries if e.get("phase") == "final"), None)
+        if final_entry:
+            status = final_entry.get("status", "unknown")
+            lines.append("")
+            lines.append(f">>> ATTEMPT {attempt_num} RESULT: {status.upper()}")
+
+    lines.append("")
     lines.append("=" * 80)
     return "\n".join(lines)
 
@@ -171,4 +334,3 @@ class RunLogger:
 
 
 __all__ = ["RunLogger", "format_timeline", "DEFAULT_LOG_RETAIN"]
-
