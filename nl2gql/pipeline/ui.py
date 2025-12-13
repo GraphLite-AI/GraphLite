@@ -108,6 +108,7 @@ class StageProgress:
     attempt: int = 1
     errors: List[str] = field(default_factory=list)
     fixes: List[str] = field(default_factory=list)
+    nl_query: str = ""
     
     def __post_init__(self):
         if not self.stages:
@@ -161,9 +162,10 @@ class Spinner:
         self._first_render = True
         self._lock = threading.Lock()
         
-    def start(self, initial: str = "") -> None:
+    def start(self, initial: str = "", nl_query: str = "") -> None:
         self._text = initial
         self.progress = StageProgress()
+        self.progress.nl_query = nl_query
         self._line_count = 0
         self._first_render = True
         if not self.enabled:
@@ -259,6 +261,15 @@ class Spinner:
         """Render the current display state."""
         lines: List[str] = []
         spin = self._SPIN_FRAMES[frame_idx % len(self._SPIN_FRAMES)]
+        
+        # Show NL query at the top
+        if self.progress.nl_query:
+            query_display = self.progress.nl_query
+            if len(query_display) > 70:
+                query_display = query_display[:67] + "..."
+            query_line = style(f'  "{query_display}"', "sky", self.enabled, italic=True)
+            lines.append(query_line)
+            lines.append("")
         
         # Header with attempt info
         attempt_str = style(f"ATTEMPT {self.progress.attempt}", "mauve", self.enabled, bold=True)

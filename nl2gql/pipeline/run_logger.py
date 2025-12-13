@@ -182,15 +182,27 @@ def format_timeline(nl_query: str, validation_log: List[Dict[str, Any]], max_att
                     for fix in fixes:
                         note = fix.get("note", "unknown")
                         issues = fix.get("issues", [])
-                        lines.append(f"│  Applied: {note}")
+                        # Provide clearer descriptions for fix types
+                        if note == "deterministic_schema_repair":
+                            lines.append("│  Applied: schema_repair (deterministic edge/label fixes)")
+                        elif note == "llm_fix":
+                            lines.append("│  Applied: llm_repair (LLM-based fix)")
+                        else:
+                            lines.append(f"│  Applied: {note}")
                         for issue in issues[:2]:
                             if len(issue) > 60:
                                 issue = issue[:57] + "..."
                             lines.append(f"│    - Fixing: {issue}")
 
+                # Also check for fix_details on post_bundle (when no explicit fix records)
                 fix_details = post_bundle.get("fix_details", "")
-                if fix_details == "deterministic_schema_repair":
-                    lines.append("│  Applied: deterministic_schema_repair (auto-flipped edges)")
+                if fix_details and not fixes:
+                    if fix_details == "deterministic_schema_repair":
+                        lines.append("│  Applied: schema_repair (deterministic edge/label fixes)")
+                    elif fix_details == "llm_fix":
+                        lines.append("│  Applied: llm_repair (LLM-based fix)")
+                    else:
+                        lines.append(f"│  Applied: {fix_details}")
 
                 post_clean = _is_clean(post_bundle)
                 post_errors = _error_summary(post_bundle)

@@ -45,6 +45,7 @@ class ISOQueryIR:
     filters: List[IRFilter] = field(default_factory=list)
     with_items: List[str] = field(default_factory=list)
     with_filters: List[str] = field(default_factory=list)
+    having_filters: List[str] = field(default_factory=list)
     group_by: List[str] = field(default_factory=list)
     returns: List[IRReturn] = field(default_factory=list)
     order_by: List[IROrder] = field(default_factory=list)
@@ -114,11 +115,12 @@ class ISOQueryIR:
             return "", None
 
         where_block, where_tok = _block_before("WHERE", with_tok["start"] if with_tok else float("inf"))
-        with_where_block, _ = _block("WHERE", after=with_tok["start"]) if with_tok else ("", None)
+        with_where_block, with_where_tok = _block("WHERE", after=with_tok["start"]) if with_tok else ("", None)
+        # HAVING comes after WITH but before RETURN - search for it in the correct position
+        having_block, having_tok = _block("HAVING", after=with_tok["start"]) if with_tok else _block("HAVING", after=match_end)
         return_block, return_tok = _block("RETURN", after=match_end)
-        having_block, having_tok = _block("HAVING", after=return_tok["start"] if return_tok else match_end)
-        group_block, group_tok = _block("GROUP BY", after=having_tok["start"] if having_tok else (return_tok["start"] if return_tok else match_end))
-        order_block, order_tok = _block("ORDER BY", after=group_tok["start"] if group_tok else (having_tok["start"] if having_tok else (return_tok["start"] if return_tok else match_end)))
+        group_block, group_tok = _block("GROUP BY", after=with_tok["start"] if with_tok else match_end)
+        order_block, order_tok = _block("ORDER BY", after=return_tok["start"] if return_tok else match_end)
         limit_block = ""
         limit_after = None
         if order_tok:
@@ -300,13 +302,13 @@ class ISOQueryIR:
 
         with_items: List[str] = []
         with_filters: List[str] = []
+        having_filters: List[str] = []
         if with_block:
             with_items = [item.strip() for item in with_block.split(",") if item.strip()]
         if with_where_block:
             with_filters = [c.strip() for c in re.split(r"\bAND\b", with_where_block, flags=re.IGNORECASE) if c.strip()]
         if having_block:
             having_filters = [c.strip() for c in re.split(r"\bAND\b", having_block, flags=re.IGNORECASE) if c.strip()]
-            with_filters.extend(having_filters)
 
         if filters:
             unique_filters: List[IRFilter] = []
@@ -358,6 +360,7 @@ class ISOQueryIR:
                 filters=filters,
                 with_items=with_items,
                 with_filters=with_filters,
+                having_filters=having_filters,
                 group_by=group_by,
                 returns=returns,
                 order_by=order_by,
@@ -403,9 +406,9 @@ class ISOQueryIR:
                 label_part = f":{node.label}" if node.label else ""
                 patterns.append(f"({alias}{label_part})")
         if patterns:
-            match_clause = "MATCH " + "\nMATCH ".join(patterns)
+            match_clause_default = "MATCH " + "\nMATCH ".join(patterns)
         else:
-            match_clause = "MATCH"
+            match_clause_default = "MATCH"
 
         where_clause = ""
         if self.filters:
@@ -423,6 +426,9 @@ class ISOQueryIR:
         with_where_clause = ""
         if self.with_filters:
             with_where_clause = "WHERE " + " AND ".join(self.with_filters)
+        having_clause = ""
+        if self.having_filters:
+            having_clause = "HAVING " + " AND ".join(self.having_filters)
 
         group_clause = ""
         if self.group_by:
@@ -436,16 +442,73 @@ class ISOQueryIR:
 
         limit_clause = f"LIMIT {self.limit}" if isinstance(self.limit, int) and self.limit > 0 else ""
 
-        parts = [match_clause]
+        # GraphLite compatibility: it rejects WITH ... GROUP BY ... (parser bug).
+        # Workaround: when we have a single-stage aggregation with simple WITH
+        # projections, drop the WITH entirely, inline those projections, and emit
+        # RETURN before GROUP BY. This keeps queries valid for GraphLite without
+        # changing behavior for multi-stage pipelines that genuinely need WITH.
+        use_group_compat = bool(self.group_by) and bool(self.with_items) and not self.with_filters and not self.having_filters
+        alias_map: Dict[str, str] = {}
+        if use_group_compat:
+            simple_aliases = True
+            for item in self.with_items:
+                m = re.match(r"(?is)\s*(.+?)\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)\s*$", item)
+                if m:
+                    expr, alias = m.groups()
+                    alias_map[alias] = expr.strip()
+                else:
+                    # Allow plain expressions (no alias) to pass through; they won't be expanded.
+                    continue
+            # Require at least one alias to rewrite; otherwise fall back.
+            use_group_compat = use_group_compat and simple_aliases and bool(alias_map)
+
+        def _expand_expr(expr: str) -> str:
+            return alias_map.get(expr, expr)
+
+        if use_group_compat:
+            # Coalesce patterns into a single MATCH clause.
+            match_clause = "MATCH " + ", ".join(patterns) if patterns else "MATCH"
+
+            # Rewrite returns/group/order to inline the expressions that would have been projected in WITH.
+            rewritten_returns = []
+            for r in self.returns:
+                if r.expr in alias_map:
+                    rewritten_returns.append(IRReturn(expr=_expand_expr(r.expr), alias=r.alias or r.expr))
+                else:
+                    rewritten_returns.append(r)
+            return_clause = "RETURN " + ", ".join([f"{r.expr} AS {r.alias}" if r.alias else r.expr for r in rewritten_returns])
+
+            group_clause = "GROUP BY " + ", ".join([_expand_expr(g) for g in self.group_by]) if self.group_by else ""
+            order_clause = (
+                "ORDER BY " + ", ".join([f"{_expand_expr(o.expr)} {o.direction}" for o in self.order_by])
+                if self.order_by
+                else ""
+            )
+
+            parts = [match_clause]
+            if where_clause:
+                parts.append(where_clause)
+            parts.append(return_clause)
+            if group_clause:
+                parts.append(group_clause)
+            if order_clause:
+                parts.append(order_clause)
+            if limit_clause:
+                parts.append(limit_clause)
+            return "\n".join(parts)
+
+        parts = [match_clause_default]
         if where_clause:
             parts.append(where_clause)
         if with_clause:
             parts.append(with_clause)
         if with_where_clause:
             parts.append(with_where_clause)
+        parts.append(return_clause)
         if group_clause:
             parts.append(group_clause)
-        parts.append(return_clause)
+        if having_clause:
+            parts.append(having_clause)
         if order_clause:
             parts.append(order_clause)
         if limit_clause:
@@ -473,5 +536,3 @@ class ISOQueryIR:
 
 
 __all__ = ["IRNode", "IREdge", "IRFilter", "IRReturn", "IROrder", "ISOQueryIR"]
-
-

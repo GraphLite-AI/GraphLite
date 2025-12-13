@@ -1238,12 +1238,10 @@ class Refiner:
                         )
 
                     logic_ok = bundle.logic_valid
-                    syntax_ok = bundle.syntax_result.ok or (
-                        bundle.syntax_result.error
-                        and not bundle.parse_errors
-                        and not bundle.schema_errors
-                        and not bundle.coverage_errors
-                    )
+                    # Only treat syntax as ok when the validator says so; having an
+                    # error string should not be considered acceptable even if other
+                    # error lists are empty.
+                    syntax_ok = bundle.syntax_result.ok
                     all_clear = (
                         bundle.ir is not None
                         and not bundle.parse_errors
@@ -1360,5 +1358,4 @@ class Refiner:
 
 
 __all__ = ["Refiner", "ValidationBundle", "PipelineFailure"]
-
 

@@ -139,7 +139,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     spinner = Spinner(enabled=args.spinner if args.spinner is not None else sys.stdout.isatty())
     reset_usage_log()
-    spinner.start()
+    spinner.start(nl_query=args.nl)
     start = time.perf_counter()
     try:
         pipeline = NL2GQLPipeline(
