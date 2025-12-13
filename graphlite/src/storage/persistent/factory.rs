@@ -7,7 +7,7 @@
 //! It handles the instantiation and setup of different storage driver types.
 
 use super::traits::{StorageDriver, StorageTree};
-use super::types::{StorageResult, StorageType};
+use super::types::{StorageDriverError, StorageResult, StorageType};
 use std::path::Path;
 
 /// Factory function to create a storage driver based on configuration
@@ -34,11 +34,26 @@ pub fn create_storage_driver<P: AsRef<Path>>(
     path: P,
 ) -> StorageResult<Box<dyn StorageDriver<Tree = Box<dyn StorageTree>>>> {
     match storage_type {
+        #[cfg(feature = "sled-backend")]
         StorageType::Sled => {
             use crate::storage::persistent::sled::SledDriver;
             let driver = SledDriver::open(path)?;
             Ok(Box::new(driver) as Box<dyn StorageDriver<Tree = Box<dyn StorageTree>>>)
         }
+        #[cfg(not(feature = "sled-backend"))]
+        StorageType::Sled => Err(StorageDriverError::BackendSpecific(
+            "Sled storage backend not enabled. Enable the 'sled-backend' feature".to_string(),
+        )),
+        #[cfg(feature = "redb-backend")]
+        StorageType::Redb => {
+            use crate::storage::persistent::redb::RedbDriver;
+            let driver = RedbDriver::open(path)?;
+            Ok(Box::new(driver) as Box<dyn StorageDriver<Tree = Box<dyn StorageTree>>>)
+        }
+        #[cfg(not(feature = "redb-backend"))]
+        StorageType::Redb => Err(StorageDriverError::BackendSpecific(
+            "Redb storage backend not enabled. Enable the 'redb-backend' feature".to_string(),
+        )),
         StorageType::Memory => {
             use crate::storage::persistent::memory::MemoryStorageDriver;
             let driver = MemoryStorageDriver::open(path)?;

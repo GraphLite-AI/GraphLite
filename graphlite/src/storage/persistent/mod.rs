@@ -41,8 +41,11 @@ pub mod traits;
 pub mod types;
 
 // Driver implementations
-pub mod memory;
+#[cfg(feature = "sled-backend")]
 pub mod sled;
+#[cfg(feature = "redb-backend")]
+pub mod redb;
+pub mod memory;
 
 // Public API re-exports
 pub use factory::create_storage_driver;

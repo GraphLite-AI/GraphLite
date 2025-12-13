@@ -53,6 +53,7 @@ comfy-table = "7.0"
 
 # Storage backend
 sled = { version = "0.34" }
+redb = { version = "2.3" }
 
 # Additional utilities
 once_cell = "1.21.3"

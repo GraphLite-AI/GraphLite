@@ -17,9 +17,10 @@ path = "src/lib.rs"
 doctest = false
 
 [features]
-default = ["sled-backend"]
+default = ["sled-backend", "redb-backend"]
 memory = []
 sled-backend = ["dep:sled"]
+redb-backend = ["dep:redb"]
 
 [dependencies]
 # Use workspace dependencies
@@ -46,6 +47,7 @@ env_logger = { workspace = true }
 fastrand = { workspace = true }
 
 sled = { workspace = true, optional = true }
+redb = { workspace = true, optional = true }
 
 once_cell = { workspace = true }
 lazy_static = { workspace = true }
