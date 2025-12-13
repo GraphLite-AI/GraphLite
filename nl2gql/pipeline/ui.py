@@ -265,8 +265,6 @@ class Spinner:
         # Show NL query at the top
         if self.progress.nl_query:
             query_display = self.progress.nl_query
-            if len(query_display) > 70:
-                query_display = query_display[:67] + "..."
             query_line = style(f'  "{query_display}"', "sky", self.enabled, italic=True)
             lines.append(query_line)
             lines.append("")
