@@ -215,8 +215,10 @@ class ISOQueryIR:
         else:
             errors.append("MATCH clause missing")
 
-        if where_block:
-            clauses = [c.strip() for c in re.split(r"\bAND\b", where_block, flags=re.IGNORECASE) if c.strip()]
+        def _ingest_where_block(block: str, *, location: str) -> None:
+            if not block:
+                return
+            clauses = [c.strip() for c in re.split(r"\bAND\b", block, flags=re.IGNORECASE) if c.strip()]
             for clause in clauses:
                 alias_compare = re.match(
                     r"^([A-Za-z_][A-Za-z0-9_]*)\s*(=|<>)\s*([A-Za-z_][A-Za-z0-9_]*)$", clause
@@ -323,13 +325,52 @@ class ISOQueryIR:
                             continue
                         filters.append(IRFilter(alias=dst_alias, prop=key_raw, op="=", value=_parse_value(val_raw)))
                 else:
-                    errors.append(f"unparsed WHERE clause: {clause}")
+                    errors.append(f"unparsed {location} clause: {clause}")
+
+        _ingest_where_block(where_block, location="WHERE")
+        _ingest_where_block(with_where_block, location="WITH WHERE")
+
+        def _split_items(block: str) -> List[str]:
+            if not block:
+                return []
+            items: List[str] = []
+            current: List[str] = []
+            depth = 0
+            quote: Optional[str] = None
+            prev = ""
+            for ch in block:
+                if quote:
+                    current.append(ch)
+                    if ch == quote and prev != "\\":
+                        quote = None
+                else:
+                    if ch in {"'", '"'}:
+                        quote = ch
+                        current.append(ch)
+                    elif ch in "([{":
+                        depth += 1
+                        current.append(ch)
+                    elif ch in ")]}":
+                        depth = max(0, depth - 1)
+                        current.append(ch)
+                    elif ch == "," and depth == 0:
+                        part = "".join(current).strip()
+                        if part:
+                            items.append(part)
+                        current = []
+                    else:
+                        current.append(ch)
+                prev = ch
+            part = "".join(current).strip()
+            if part:
+                items.append(part)
+            return items
 
         with_items: List[str] = []
         with_filters: List[str] = []
         having_filters: List[str] = []
         if with_block:
-            with_items = [item.strip() for item in with_block.split(",") if item.strip()]
+            with_items = _split_items(with_block)
         if with_where_block:
             with_filters = [c.strip() for c in re.split(r"\bAND\b", with_where_block, flags=re.IGNORECASE) if c.strip()]
         if having_block:
@@ -347,7 +388,7 @@ class ISOQueryIR:
 
         returns: List[IRReturn] = []
         if return_block:
-            items = [i.strip() for i in return_block.split(",") if i.strip()]
+            items = _split_items(return_block)
             for item in items:
                 if " AS " in item.upper():
                     parts = re.split(r"\s+AS\s+", item, flags=re.IGNORECASE)

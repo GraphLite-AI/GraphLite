@@ -60,3 +60,11 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// GraphLite crate name
 pub const CRATE_NAME: &str = env!("CARGO_PKG_NAME");
+
+/// Parse a GQL query and return the serialized AST as JSON.
+/// Intended for tooling/FFI consumers that need full syntax trees.
+pub fn parse_query_json(query: &str) -> Result<String, String> {
+    let document = crate::ast::parser::parse_query(query)
+        .map_err(|e| format!("Parse error: {:?}", e))?;
+    serde_json::to_string(&document).map_err(|e| format!("Serialization error: {e}"))
+}

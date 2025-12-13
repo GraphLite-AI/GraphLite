@@ -19,6 +19,7 @@ from nl2gql.pipeline import (
     SyntaxResult,
 )
 from nl2gql.pipeline.requirements import RequirementContract, coverage_violations
+from nl2gql.pipeline.temporal_analysis import TemporalWindowRequirement
 
 SCHEMA_TEXT = (Path(__file__).resolve().parents[1] / "sample_schema.txt").read_text(encoding="utf-8")
 
@@ -261,6 +262,190 @@ class CoverageNormalizationTests(unittest.TestCase):
         contract = RequirementContract(required_order=["WeIrDFuNc(Person.salary) DESC"])
         errors = coverage_violations(contract, ir, ir.render())
         self.assertEqual(errors, [])
+
+    def test_filter_terms_recognize_iso_duration_windows(self):
+        query = (
+            "MATCH (t:Transaction)\n"
+            "WHERE t.occurred_at >= date() - duration('P30D')\n"
+            "RETURN count(t) AS total"
+        )
+        ir, errors = ISOQueryIR.parse(query)
+        self.assertIsNotNone(ir)
+        self.assertFalse(errors)
+        contract = RequirementContract(required_filter_terms={"days", "last"})
+        violations = coverage_violations(contract, ir, query)
+        self.assertEqual(violations, [])
+
+    def test_filter_terms_recognize_map_duration_windows(self):
+        query = (
+            "MATCH (t:Transaction)\n"
+            "WHERE t.occurred_at >= datetime() - duration({weeks: 2})\n"
+            "RETURN count(t) AS total"
+        )
+        ir, errors = ISOQueryIR.parse(query)
+        self.assertIsNotNone(ir)
+        self.assertFalse(errors)
+        contract = RequirementContract(required_filter_terms={"weeks", "within"})
+        violations = coverage_violations(contract, ir, query)
+        self.assertEqual(violations, [])
+
+    def test_filter_terms_detect_relative_windows_from_with_clause(self):
+        query = (
+            "MATCH (t:Transaction)\n"
+            "WITH date() AS today, today - duration('P14D') AS window_start\n"
+            "WHERE t.occurred_at >= window_start\n"
+            "RETURN count(t) AS total"
+        )
+        ir, errors = ISOQueryIR.parse(query)
+        self.assertIsNotNone(ir)
+        self.assertFalse(errors)
+        contract = RequirementContract(required_filter_terms={"days", "last"})
+        violations = coverage_violations(contract, ir, query)
+        self.assertEqual(violations, [])
+
+    def test_filter_terms_recognize_parameterized_map_durations(self):
+        query = (
+            "MATCH (t:Transaction)\n"
+            "WHERE t.occurred_at >= datetime() - duration({weeks: $window_weeks})\n"
+            "RETURN count(t) AS total"
+        )
+        ir, errors = ISOQueryIR.parse(query)
+        self.assertIsNotNone(ir)
+        self.assertFalse(errors)
+        contract = RequirementContract(required_filter_terms={"weeks", "within"})
+        violations = coverage_violations(contract, ir, query)
+        self.assertEqual(violations, [])
+
+    def test_filter_terms_fail_when_window_direction_is_future(self):
+        query = (
+            "MATCH (t:Transaction)\n"
+            "WHERE t.occurred_at >= date() + duration('P30D')\n"
+            "RETURN count(t) AS total"
+        )
+        ir, errors = ISOQueryIR.parse(query)
+        self.assertIsNotNone(ir)
+        self.assertFalse(errors)
+        contract = RequirementContract(required_filter_terms={"last"})
+        violations = coverage_violations(contract, ir, query)
+        self.assertEqual(violations, ["missing required filter term 'last'"])
+
+    def test_filter_terms_ignore_unused_temporal_aliases(self):
+        query = (
+            "MATCH (t:Transaction)\n"
+            "WITH date() - duration('P30D') AS unused_window\n"
+            "RETURN count(t) AS total"
+        )
+        ir, errors = ISOQueryIR.parse(query)
+        self.assertIsNotNone(ir)
+        self.assertFalse(errors)
+        contract = RequirementContract(required_filter_terms={"days", "last"})
+        violations = coverage_violations(contract, ir, query)
+        self.assertEqual(
+            violations,
+            ["missing required filter term 'days'", "missing required filter term 'last'"]
+        )
+
+    def test_filter_terms_detect_alias_based_duration_references(self):
+        query = (
+            "MATCH (t:Transaction)\n"
+            "WITH duration('P21D') AS recent_window\n"
+            "WHERE t.occurred_at >= date() - recent_window\n"
+            "RETURN count(t) AS total"
+        )
+        ir, errors = ISOQueryIR.parse(query)
+        self.assertIsNotNone(ir)
+        self.assertFalse(errors)
+        contract = RequirementContract(required_filter_terms={"last", "days"})
+        violations = coverage_violations(contract, ir, query)
+        self.assertEqual(violations, [])
+
+    def test_temporal_requirement_binds_alias_without_direction_hint(self):
+        query = (
+            "MATCH (t:Transaction)\n"
+            "WITH date() AS today, today - duration('P10D') AS window_start\n"
+            "WHERE t.occurred_at >= window_start\n"
+            "RETURN count(t) AS total"
+        )
+        ir, errors = ISOQueryIR.parse(query)
+        self.assertIsNotNone(ir)
+        self.assertFalse(errors)
+        window = TemporalWindowRequirement(direction="past", comparator=">=", units={"days"}, min_magnitude=9, max_magnitude=11)
+        contract = RequirementContract(required_temporal_windows=[window])
+        violations = coverage_violations(contract, ir, query)
+        self.assertEqual(violations, [])
+
+    def test_temporal_requirement_detects_future_alias_usage(self):
+        query = (
+            "MATCH (t:Transaction)\n"
+            "WITH duration('P7D') AS window\n"
+            "WHERE t.occurred_at >= date() + window\n"
+            "RETURN count(t) AS total"
+        )
+        ir, errors = ISOQueryIR.parse(query)
+        self.assertIsNotNone(ir)
+        self.assertFalse(errors)
+        window = TemporalWindowRequirement(direction="past", comparator=">=", units={"days"})
+        contract = RequirementContract(required_temporal_windows=[window])
+        violations = coverage_violations(contract, ir, query)
+        self.assertEqual(violations, ["missing temporal constraint: past days >= value"])
+
+    def test_temporal_window_requirement_matches_past_window(self):
+        query = (
+            "MATCH (t:Transaction)\n"
+            "WHERE t.occurred_at >= date() - duration('P30D')\n"
+            "RETURN count(t) AS total"
+        )
+        ir, errors = ISOQueryIR.parse(query)
+        self.assertIsNotNone(ir)
+        self.assertFalse(errors)
+        window = TemporalWindowRequirement(direction="past", comparator=">=", units={"days"}, min_magnitude=29, max_magnitude=31)
+        contract = RequirementContract(required_temporal_windows=[window])
+        violations = coverage_violations(contract, ir, query)
+        self.assertEqual(violations, [])
+
+    def test_temporal_window_requirement_detects_direction_mismatch(self):
+        query = (
+            "MATCH (t:Transaction)\n"
+            "WHERE t.occurred_at >= date() + duration('P14D')\n"
+            "RETURN count(t) AS total"
+        )
+        ir, errors = ISOQueryIR.parse(query)
+        self.assertIsNotNone(ir)
+        self.assertFalse(errors)
+        window = TemporalWindowRequirement(direction="past", comparator=">=", units={"days"})
+        contract = RequirementContract(required_temporal_windows=[window])
+        violations = coverage_violations(contract, ir, query)
+        self.assertEqual(violations, ["missing temporal constraint: past days >= value"])
+
+    def test_temporal_requirement_handles_map_duration_window(self):
+        query = (
+            "MATCH (t:Transaction)\n"
+            "WHERE t.occurred_at >= datetime() - duration({weeks: 2})\n"
+            "RETURN count(t) AS total"
+        )
+        ir, errors = ISOQueryIR.parse(query)
+        self.assertIsNotNone(ir)
+        self.assertFalse(errors)
+        window = TemporalWindowRequirement(direction="past", comparator=">=", units={"weeks"}, min_magnitude=1, max_magnitude=3)
+        contract = RequirementContract(required_temporal_windows=[window])
+        violations = coverage_violations(contract, ir, query)
+        self.assertEqual(violations, [])
+
+    def test_temporal_requirement_handles_between_windows(self):
+        query = (
+            "MATCH (t:Transaction)\n"
+            "WHERE t.occurred_at BETWEEN date() - duration('P14D') AND date() + duration('P3D')\n"
+            "RETURN count(t) AS total"
+        )
+        ir = ISOQueryIR(
+            nodes={"t": IRNode(alias="t", label="Transaction")},
+            returns=[IRReturn(expr="count(t)", alias="total")],
+        )
+        lower_window = TemporalWindowRequirement(direction="past", comparator=">=", units={"days"}, min_magnitude=13, max_magnitude=15)
+        upper_window = TemporalWindowRequirement(direction="future", comparator="<=", units={"days"}, min_magnitude=2, max_magnitude=4)
+        contract = RequirementContract(required_temporal_windows=[lower_window, upper_window])
+        violations = coverage_violations(contract, ir, query)
+        self.assertEqual(violations, [])
 
 
 if __name__ == "__main__":  # pragma: no cover

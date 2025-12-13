@@ -5,6 +5,7 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple
 import re
 
 from .schema_graph import SchemaGraph
+from .temporal_analysis import TemporalEvidence, TemporalWindowRequirement
 
 
 @dataclass
@@ -39,6 +40,34 @@ class RequirementContract:
     required_numeric_comparisons: Set[Tuple[str, str]] = field(default_factory=set)
     # Semantic roles (tagged) that should map to dedicated aliases with optional distinctness.
     role_constraints: Dict[str, RoleConstraint] = field(default_factory=dict)
+    # Structured temporal windows inferred from NL filters.
+    required_temporal_windows: List[TemporalWindowRequirement] = field(default_factory=list)
+
+
+class SemanticEvidence:
+    """Aggregator for semantic analyzers (temporal, distance, etc.)."""
+
+    def __init__(self, ir, rendered: str):  # ir retained for future providers
+        self.providers: Dict[str, object] = {}
+        self.token_index: Dict[str, Set[str]] = {}
+        self._register("temporal", TemporalEvidence.from_rendered(rendered))
+
+    def _register(self, name: str, provider: Optional[object]) -> None:
+        if not provider:
+            return
+        self.providers[name] = provider
+        tokens = getattr(provider, "tokens", None)
+        if isinstance(tokens, set):
+            for token in tokens:
+                lowered = token.lower()
+                self.token_index.setdefault(lowered, set()).add(name)
+
+    def covers_token(self, token: str) -> bool:
+        lowered = token.lower()
+        return lowered in self.token_index
+
+    def provider(self, name: str) -> Optional[object]:
+        return self.providers.get(name)
 
 
 def _canonicalize_function_name(name: str) -> str:
@@ -261,6 +290,16 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
     errors: List[str] = []
     if not ir:
         return ["IR missing"]
+    semantic = SemanticEvidence(ir, rendered)
+    rendered_lower = rendered.lower()
+    expr_fragments = (
+        ir.with_items
+        + ir.with_filters
+        + [r.expr for r in ir.returns]
+        + [o.expr for o in ir.order_by]
+    )
+    expr_blob_lower = " ".join(expr_fragments).lower()
+    expr_blob_lower = f"{expr_blob_lower} {rendered_lower}".strip()
 
     label_by_alias: Dict[str, str] = {a: n.label for a, n in ir.nodes.items() if n.label}
     alias_def_pattern = re.compile(r"(.+?)\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)$", re.IGNORECASE)
@@ -361,24 +400,21 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
 
     # Bidirectional value coverage: ensure both sides of a "between A and B" mention appear.
     if contract.required_bidirectional_values:
-        rendered_lower = rendered.lower()
         for left, right in contract.required_bidirectional_values:
             if left not in rendered_lower or right not in rendered_lower:
                 errors.append(f"missing symmetric coverage for values '{left}' and '{right}'")
 
     # Filter token coverage: enforce that salient filter terms and literals survive generation.
     if contract.required_filter_terms:
-        rendered_lower = rendered.lower()
         for term in contract.required_filter_terms:
-            if term not in rendered_lower:
+            lowered = term.lower()
+            if lowered not in rendered_lower and not semantic.covers_token(lowered):
                 errors.append(f"missing required filter term '{term}'")
     if contract.required_numeric_literals:
-        rendered_lower = rendered.lower()
         for literal in contract.required_numeric_literals:
             if literal not in rendered_lower:
                 errors.append(f"missing required numeric literal '{literal}'")
     if contract.required_numeric_comparisons:
-        rendered_lower = rendered.lower()
         for literal, comparator in contract.required_numeric_comparisons:
             missing = False
             if literal not in rendered_lower:
@@ -388,18 +424,13 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
                     if comparator not in rendered:
                         missing = True
                 else:
-                    if comparator not in rendered_lower:
+                    if comparator.lower() not in rendered_lower:
                         missing = True
             if missing:
                 errors.append(f"missing comparator '{comparator}' for literal '{literal}'")
 
     # Zero/absence constraints: require explicit zero-handling when the NL indicated "no/zero X".
     if contract.required_zero_terms:
-        expr_blob_lower = " ".join(
-            ir.with_items + ir.with_filters + [r.expr for r in ir.returns] + [f"{o.expr}" for o in ir.order_by]
-        ).lower()
-        # Include rendered text as a fallback when parsing drops the clause.
-        expr_blob_lower = f"{expr_blob_lower} {rendered.lower()}"
         for term in contract.required_zero_terms:
             if term not in expr_blob_lower:
                 errors.append(f"missing explicit zero-handling for term '{term}'")
@@ -409,6 +440,15 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
                 expr_blob_lower,
             ):
                 errors.append(f"term '{term}' lacks zero/absence constraint")
+
+    if contract.required_temporal_windows:
+        temporal_provider = semantic.provider("temporal")
+        if isinstance(temporal_provider, TemporalEvidence):
+            for requirement in contract.required_temporal_windows:
+                if not temporal_provider.satisfies(requirement):
+                    errors.append(f"missing temporal constraint: {requirement.describe()}")
+        else:
+            errors.append("temporal analyzer unavailable")
 
     # Property coverage
     def _exprs_with_props() -> List[str]:
@@ -486,6 +526,16 @@ def contract_view(contract: RequirementContract) -> Dict[str, object]:
         "required_numeric_literals": sorted(contract.required_numeric_literals),
         "preferred_numeric_literals": sorted(contract.preferred_numeric_literals),
         "required_numeric_comparisons": sorted([list(c) for c in contract.required_numeric_comparisons]),
+        "required_temporal_windows": [
+            {
+                "direction": tw.direction,
+                "comparator": tw.comparator,
+                "units": sorted(tw.units),
+                "min_magnitude": tw.min_magnitude,
+                "max_magnitude": tw.max_magnitude,
+            }
+            for tw in contract.required_temporal_windows
+        ],
         "role_constraints": {
             role: {
                 "label": rc.label,
@@ -494,5 +544,3 @@ def contract_view(contract: RequirementContract) -> Dict[str, object]:
             for role, rc in sorted(contract.role_constraints.items())
         },
     }
-
-

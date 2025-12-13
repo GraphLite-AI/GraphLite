@@ -163,6 +163,9 @@ _lib.graphlite_query.argtypes = [
 ]
 _lib.graphlite_query.restype = ctypes.c_void_p
 
+_lib.graphlite_parse_query.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_int)]
+_lib.graphlite_parse_query.restype = ctypes.c_void_p
+
 _lib.graphlite_close_session.argtypes = [
     ctypes.POINTER(_GraphLiteDB),
     ctypes.c_char_p,
@@ -372,3 +375,16 @@ class GraphLite:
             version = ctypes.string_at(version_ptr).decode('utf-8')
             return version
         return "unknown"
+
+    @staticmethod
+    def parse(query: str) -> Dict[str, Any]:
+        """Parse a GQL query and return the AST as a dictionary"""
+        error = ctypes.c_int(0)
+        result_ptr = _lib.graphlite_parse_query(query.encode('utf-8'), ctypes.byref(error))
+        if not result_ptr:
+            raise GraphLiteError(ErrorCode(error.value), f"Failed to parse query: {query[:100]}")
+        try:
+            ast_json = ctypes.string_at(result_ptr).decode('utf-8')
+            return json.loads(ast_json)
+        finally:
+            _lib.graphlite_free_string(result_ptr)

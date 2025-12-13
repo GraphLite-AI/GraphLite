@@ -15,6 +15,12 @@ GraphLite uses a single binary and is an ideal solution for applications requiri
 - **Query Optimization** - Cost-based query optimization
 - **Pure Rust** - Memory-safe implementation in Rust
 
+## NL→GQL Pipeline
+
+- **Architecture**: Natural language input is grounded to schema-aware intents, rendered into ISO GQL via a generator/refiner loop, then re-parsed with GraphLite to verify that the emitted query satisfies every contract (labels, metrics, temporal windows, etc.). This create→execute→verify cycle keeps the LLM-driven pieces honest.
+- **Approach**: Rather than pattern-match NL text, we inspect the actual GQL AST that GraphLite already understands. Each semantic analyzer (metrics, numeric literals, temporal windows, and future ones) walks the AST to normalize “what the query really does” so requirement checks stay engine-accurate.
+- **Ideology**: We only add analyzers when the product promises new intent classes. That’s why temporal coverage grew from relative windows to map durations and will grow to absolute dates next. It’s not schema- or prompt-specific hardcoding; it’s incremental surfacing of query semantics so NL expectations can be enforced with mathematical fidelity.
+
 ## Prerequisites
 
 Before building GraphLite, you need to install Rust and a C compiler/linker.
