@@ -101,6 +101,7 @@ run_test_suite() {
         "list_graphs_bug_test_simple"
         "match_set_transactional_test"
         "match_with_tests"
+        "pattern_matching_integration"
         "pattern_tests"
         "readme_examples_test"
         "role_management_tests"

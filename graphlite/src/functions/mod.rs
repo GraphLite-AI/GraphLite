@@ -13,6 +13,7 @@ pub mod list_functions;
 mod mathematical_functions;
 mod null_functions;
 mod numeric_functions;
+mod pattern_matching_functions;
 mod special_functions;
 mod string_functions;
 mod temporal_functions;
@@ -291,6 +292,28 @@ impl FunctionRegistry {
         registry.register(
             "FT_WEIGHTED_SEARCH",
             Box::new(text_search_functions::WeightedSearchFunction::new()),
+        );
+
+        // Register pattern matching functions
+        registry.register(
+            "FT_STARTS_WITH",
+            Box::new(pattern_matching_functions::StartsWithFunction::new()),
+        );
+        registry.register(
+            "FT_ENDS_WITH",
+            Box::new(pattern_matching_functions::EndsWithFunction::new()),
+        );
+        registry.register(
+            "FT_WILDCARD",
+            Box::new(pattern_matching_functions::WildcardFunction::new()),
+        );
+        registry.register(
+            "FT_REGEX",
+            Box::new(pattern_matching_functions::RegexFunction::new()),
+        );
+        registry.register(
+            "FT_PHRASE_PREFIX",
+            Box::new(pattern_matching_functions::PhrasePrefixFunction::new()),
         );
 
         registry

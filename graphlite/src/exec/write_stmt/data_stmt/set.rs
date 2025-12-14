@@ -282,6 +282,7 @@ mod auto_index_update_tests {
     use crate::storage::indexes::text::metadata::{register_metadata, TextIndexMetadata};
     use crate::storage::indexes::text::registry::{get_text_index, register_text_index};
     use crate::storage::StorageManager;
+    use std::sync::Arc;
     use tempfile::tempdir;
 
     fn create_test_context() -> ExecutionContext {
