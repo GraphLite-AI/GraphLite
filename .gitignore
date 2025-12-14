@@ -55,3 +55,4 @@ my_db/
 # GitHub Actions local testing
 .secrets
 .env
+*.bak*
