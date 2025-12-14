@@ -1,0 +1,805 @@
+# Full Text Search Guide
+
+GraphLite provides comprehensive text search capabilities including fuzzy matching, similarity scoring, and hybrid search. This guide covers all available text search functions and their usage.
+
+**Related Documentation:**
+- [Getting Started With Fulltext.md](Getting%20Started%20With%20Fulltext.md) - Step-by-step tutorial
+- [Fuzzy Search Functions Reference.md](Fuzzy%20Search%20Functions%20Reference.md) - Technical algorithm details
+
+## Overview
+
+GraphLite's text search functionality includes:
+
+- **Fuzzy Matching**: Find approximate matches with configurable edit distance
+- **Similarity Scoring**: Calculate normalized similarity scores between strings
+- **Substring Search**: Fuzzy and exact substring matching
+- **Hybrid Search**: Combine multiple search strategies with configurable weights
+- **Keyword Matching**: Boolean AND/OR keyword search
+- **Relevance Ranking**: Score and rank search results
+
+All functions use case-insensitive matching and support Unicode characters.
+
+## Core Algorithm: Levenshtein Distance
+
+All fuzzy matching functions are built on the Levenshtein distance algorithm, which calculates the minimum number of single-character edits (insertions, deletions, or substitutions) needed to transform one string into another.
+
+**Example**: The edit distance between "kitten" and "sitting" is 3:
+1. kitten → sitten (substitution: k → s)
+2. sitten → sittin (substitution: e → i)
+3. sittin → sitting (insertion: g)
+
+## Available Functions
+
+### 1. FUZZY_MATCH
+
+Returns true if two strings are similar within a specified edit distance threshold.
+
+**Syntax**:
+```gql
+FUZZY_MATCH(string1, string2, max_distance)
+```
+
+**Parameters**:
+- `string1`: First string to compare
+- `string2`: Second string to compare
+- `max_distance`: Maximum allowed edit distance (integer)
+
+**Returns**: Boolean
+
+**Use Cases**:
+- Filtering results with typo tolerance
+- Deduplication with approximate matching
+- Input validation with fuzzy comparison
+
+**Examples**:
+
+```gql
+-- Find papers where title fuzzy matches "machine learning" within 2 edits
+MATCH (p:Paper)
+WHERE FUZZY_MATCH(p.title, 'machine learning', 2)
+RETURN p.title;
+
+-- Strict matching (only 1 character difference allowed)
+MATCH (p:Paper)
+WHERE FUZZY_MATCH(p.abstract, 'neural network', 1)
+RETURN p.title;
+
+-- Lenient matching (allows more typos)
+MATCH (p:Paper)
+WHERE FUZZY_MATCH(p.abstract, 'deep learning', 3)
+RETURN p.title;
+```
+
+**Performance Characteristics**:
+- Time Complexity: O(m × n) where m, n are string lengths
+- Space Complexity: O(m × n) for dynamic programming matrix
+- Best for: Short to medium strings (< 1000 characters)
+
+---
+
+### 2. LEVENSHTEIN_SIMILARITY
+
+Calculates a normalized Levenshtein-based similarity score between two strings, ranging from 0.0 (completely different) to 1.0 (identical).
+
+**Syntax**:
+```gql
+LEVENSHTEIN_SIMILARITY(string1, string2)
+```
+
+**Parameters**:
+- `string1`: First string to compare
+- `string2`: Second string to compare
+
+**Returns**: Number (0.0 to 1.0)
+
+**Formula**:
+```
+similarity = 1.0 - (levenshtein_distance / max_length)
+where max_length = max(length(string1), length(string2))
+```
+
+**Important Notes**:
+- **WARNING: Works best for strings of similar length**
+- Penalizes length differences heavily (e.g., "cat" vs "catastrophe" = low score despite prefix match)
+- Uses max length for normalization, not average or sum
+- For substring matching, use FUZZY_SEARCH or CONTAINS_FUZZY instead
+
+**Use Cases**:
+- Comparing strings of similar length (titles, codes, identifiers)
+- Finding near-duplicates in uniform-length fields
+- Deduplication when string lengths are comparable
+- **Not ideal for**: Prefix matching, comparing short vs long strings
+
+**Examples**:
+
+```gql
+-- Compare paper titles of similar length
+MATCH (p:Paper)
+WHERE length(p.title) BETWEEN 30 AND 50
+RETURN p.title,
+       LEVENSHTEIN_SIMILARITY(p.title, 'Machine Learning for Healthcare') AS score
+ORDER BY score DESC
+LIMIT 10;
+
+-- Find near-duplicate titles (similar lengths)
+MATCH (p1:Paper), (p2:Paper)
+WHERE p1.id < p2.id
+  AND abs(length(p1.title) - length(p2.title)) < 10  -- Similar lengths
+  AND LEVENSHTEIN_SIMILARITY(p1.title, p2.title) > 0.8
+RETURN p1.title AS title1,
+       p2.title AS title2,
+       LEVENSHTEIN_SIMILARITY(p1.title, p2.title) AS similarity;
+
+-- Compare fixed-length codes or identifiers
+MATCH (d:Document)
+WHERE LEVENSHTEIN_SIMILARITY(d.product_code, 'ABC-12345') > 0.7
+RETURN d.product_code,
+       LEVENSHTEIN_SIMILARITY(d.product_code, 'ABC-12345') AS similarity
+ORDER BY similarity DESC;
+```
+
+**Interpretation**:
+- **1.0**: Identical strings
+- **0.8-0.9**: Very similar (minor typos, similar lengths)
+- **0.6-0.7**: Moderately similar (several differences, similar lengths)
+- **< 0.5**: Significantly different
+- **Low scores with length mismatch**: Expected behavior (e.g., "test" vs "testing for bugs" will score low)
+
+---
+
+### 3. CONTAINS_FUZZY
+
+Returns true if the text contains the query as a fuzzy substring within the specified edit distance.
+
+**Syntax**:
+```gql
+CONTAINS_FUZZY(text, query, max_distance)
+```
+
+**Parameters**:
+- `text`: Text to search in
+- `query`: Substring to search for
+- `max_distance`: Maximum edit distance allowed
+
+**Returns**: Boolean
+
+**Algorithm**:
+1. First checks for exact substring match
+2. If no exact match, uses sliding window to check all substrings of length equal to query
+3. Returns true if any substring is within edit distance threshold
+
+**Use Cases**:
+- Fuzzy substring search in long documents
+- Finding mentions with typo tolerance
+- Flexible keyword matching
+
+**Examples**:
+
+```gql
+-- Find documents containing "machine learning" (allowing 2 typos)
+MATCH (d:Document)
+WHERE CONTAINS_FUZZY(d.content, 'machine learning', 2)
+RETURN d.title;
+
+-- Find papers mentioning "neural network" with typo tolerance
+MATCH (p:Paper)
+WHERE CONTAINS_FUZZY(p.abstract, 'neural network', 1)
+RETURN p.title;
+
+-- Multiple fuzzy conditions (AND logic)
+MATCH (p:Paper)
+WHERE CONTAINS_FUZZY(p.abstract, 'deep', 1)
+  AND CONTAINS_FUZZY(p.abstract, 'learning', 1)
+RETURN p.title;
+```
+
+**Performance**:
+- Time Complexity: O(n × m²) where n is text length, m is query length
+- Best for: Queries shorter than 50 characters
+- Optimization: Exact match is checked first (O(n) fast path)
+
+---
+
+### 4. FUZZY_SEARCH
+
+Returns a relevance score for how well a query matches text, optimized for ranking search results.
+
+**Syntax**:
+```gql
+FUZZY_SEARCH(text, query)
+```
+
+**Parameters**:
+- `text`: Text to search in
+- `query`: Search query
+
+**Returns**: Number (0.0 to 1.0)
+
+**Algorithm**:
+1. Checks for exact substring match (returns 1.0 immediately)
+2. Uses sliding window to find best fuzzy match across all substrings
+3. Returns highest similarity score found
+
+**Use Cases**:
+- Ranking search results
+- Finding most relevant documents
+- Implementing search engines
+
+**Examples**:
+
+```gql
+-- Rank papers by relevance to query
+MATCH (p:Paper)
+WHERE FUZZY_SEARCH(p.abstract, 'neural networks') > 0.5
+RETURN p.title,
+       FUZZY_SEARCH(p.abstract, 'neural networks') AS relevance
+ORDER BY relevance DESC
+LIMIT 20;
+
+-- Multi-term search
+MATCH (p:Paper)
+WHERE FUZZY_SEARCH(p.abstract, 'machine learning algorithms') > 0.6
+RETURN p.title,
+       FUZZY_SEARCH(p.abstract, 'machine learning algorithms') AS score
+ORDER BY score DESC;
+
+-- Combine with other filters
+MATCH (p:Paper)
+WHERE p.year >= 2020
+  AND FUZZY_SEARCH(p.abstract, 'deep learning') > 0.7
+RETURN p.title, p.year,
+       FUZZY_SEARCH(p.abstract, 'deep learning') AS relevance
+ORDER BY relevance DESC, p.year DESC;
+```
+
+**Score Interpretation**:
+- **1.0**: Exact match found
+- **0.8-0.9**: Very close match (1-2 character differences)
+- **0.6-0.7**: Moderate match (several differences)
+- **< 0.5**: Weak match
+
+---
+
+### 5. HYBRID_SEARCH
+
+Combines exact matching, fuzzy substring matching, and overall similarity into a single weighted score.
+
+**Syntax**:
+```gql
+HYBRID_SEARCH(text, query)
+HYBRID_SEARCH(text, query, exact_weight, fuzzy_weight, similarity_weight)
+```
+
+**Parameters**:
+- `text`: Text to search in
+- `query`: Search query
+- `exact_weight`: Weight for exact substring matching (optional, default: 0.4)
+- `fuzzy_weight`: Weight for fuzzy substring matching (optional, default: 0.4)
+- `similarity_weight`: Weight for overall similarity (optional, default: 0.2)
+
+**Returns**: Number (0.0 to 1.0)
+
+**Algorithm**:
+1. **Exact Score**: 1.0 if query is exact substring, 0.0 otherwise
+2. **Fuzzy Score**: Best fuzzy substring match using sliding window
+3. **Similarity Score**: Overall Levenshtein-based similarity
+4. **Combined**: `(exact × w1 + fuzzy × w2 + similarity × w3) / (w1 + w2 + w3)`
+
+**Use Cases**:
+- Advanced search engines
+- Multi-strategy relevance ranking
+- Balancing precision and recall
+
+**Examples**:
+
+```gql
+-- Default weights (0.4 exact, 0.4 fuzzy, 0.2 similarity)
+MATCH (p:Paper)
+WHERE HYBRID_SEARCH(p.abstract, 'machine learning') > 0.5
+RETURN p.title,
+       HYBRID_SEARCH(p.abstract, 'machine learning') AS score
+ORDER BY score DESC;
+
+-- Custom weights: prioritize exact matches
+MATCH (p:Paper)
+WHERE HYBRID_SEARCH(p.abstract, 'neural networks', 0.7, 0.2, 0.1) > 0.6
+RETURN p.title,
+       HYBRID_SEARCH(p.abstract, 'neural networks', 0.7, 0.2, 0.1) AS score
+ORDER BY score DESC;
+
+-- Balanced weights for exploration
+MATCH (p:Paper)
+WHERE HYBRID_SEARCH(p.abstract, 'deep learning', 0.33, 0.33, 0.34) > 0.4
+RETURN p.title,
+       HYBRID_SEARCH(p.abstract, 'deep learning', 0.33, 0.33, 0.34) AS score
+ORDER BY score DESC;
+
+-- Similarity-focused (emphasize overall text similarity)
+MATCH (p:Paper)
+WHERE HYBRID_SEARCH(p.abstract, 'AI research', 0.2, 0.2, 0.6) > 0.3
+RETURN p.title,
+       HYBRID_SEARCH(p.abstract, 'AI research', 0.2, 0.2, 0.6) AS score
+ORDER BY score DESC;
+```
+
+**Weight Tuning Recommendations**:
+- **High Precision**: (0.7, 0.2, 0.1) - Favor exact matches
+- **Balanced**: (0.4, 0.4, 0.2) - Default, works well for most cases
+- **High Recall**: (0.2, 0.4, 0.4) - More lenient, finds more results
+- **Similarity-Focused**: (0.2, 0.2, 0.6) - Emphasize overall text similarity (note: still Levenshtein-based, not semantic)
+
+---
+
+### 6. KEYWORD_MATCH
+
+Matches text against multiple keywords using OR logic (returns true if ANY keyword matches).
+
+**Syntax**:
+```gql
+KEYWORD_MATCH(text, keyword1, keyword2, ...)
+```
+
+**Parameters**:
+- `text`: Text to search in
+- `keyword1, keyword2, ...`: Variable number of keywords (minimum 1)
+
+**Returns**: Boolean
+
+**Use Cases**:
+- Multi-keyword filtering with OR logic
+- Category-based search
+- Tag matching
+
+**Examples**:
+
+```gql
+-- Find papers mentioning any programming language
+MATCH (p:Paper)
+WHERE KEYWORD_MATCH(p.abstract, 'Python', 'Java', 'JavaScript', 'C++')
+RETURN p.title;
+
+-- Match any of several related terms
+MATCH (p:Paper)
+WHERE KEYWORD_MATCH(p.content, 'machine learning', 'deep learning', 'AI', 'neural network')
+RETURN p.title;
+
+-- Combine with other conditions
+MATCH (p:Paper)
+WHERE p.year > 2020
+  AND KEYWORD_MATCH(p.tags, 'NLP', 'computer vision', 'reinforcement learning')
+RETURN p.title, p.year;
+```
+
+**Behavior**:
+- Case-insensitive matching
+- Checks for exact substring matches
+- Returns true on first match (short-circuits)
+- NULL keywords are ignored
+
+---
+
+### 7. KEYWORD_MATCH_ALL
+
+Matches text against multiple keywords using AND logic (returns true only if ALL keywords match).
+
+**Syntax**:
+```gql
+KEYWORD_MATCH_ALL(text, keyword1, keyword2, ...)
+```
+
+**Parameters**:
+- `text`: Text to search in
+- `keyword1, keyword2, ...`: Variable number of keywords (minimum 1)
+
+**Returns**: Boolean
+
+**Use Cases**:
+- Precise multi-term filtering
+- Requirement-based search
+- Conjunction queries
+
+**Examples**:
+
+```gql
+-- Find papers containing all specified terms
+MATCH (p:Paper)
+WHERE KEYWORD_MATCH_ALL(p.abstract, 'machine', 'learning', 'deep')
+RETURN p.title;
+
+-- Strict multi-keyword filter
+MATCH (p:Paper)
+WHERE KEYWORD_MATCH_ALL(p.content, 'neural', 'network', 'training')
+RETURN p.title;
+
+-- Combine with fuzzy matching
+MATCH (p:Paper)
+WHERE KEYWORD_MATCH_ALL(p.abstract, 'machine', 'learning')
+  AND CONTAINS_FUZZY(p.abstract, 'algorithm', 2)
+RETURN p.title;
+```
+
+**Behavior**:
+- Case-insensitive matching
+- All keywords must be present as substrings
+- Returns false if any keyword is missing
+- NULL keywords are ignored
+
+---
+
+### 8. WEIGHTED_SEARCH
+
+Calculates a weighted search score with explicit control over exact, fuzzy, and similarity components.
+
+**Syntax**:
+```gql
+WEIGHTED_SEARCH(text, query, exact_weight, fuzzy_weight, similarity_weight)
+```
+
+**Parameters**:
+- `text`: Text to search in
+- `query`: Search query
+- `exact_weight`: Weight for exact matching (0.0-1.0)
+- `fuzzy_weight`: Weight for fuzzy matching (0.0-1.0)
+- `similarity_weight`: Weight for similarity (0.0-1.0)
+
+**Returns**: Number (0.0 to 1.0)
+
+**Note**: This function is identical to HYBRID_SEARCH with explicit weights. Use WEIGHTED_SEARCH when you want to make weight configuration explicit.
+
+**Use Cases**:
+- Fine-tuned search ranking
+- A/B testing different weight configurations
+- Domain-specific search optimization
+
+**Examples**:
+
+```gql
+-- Text-focused search (70% exact, 20% fuzzy, 10% similarity)
+MATCH (p:Paper)
+WHERE WEIGHTED_SEARCH(p.abstract, 'neural network', 0.7, 0.2, 0.1) > 0.6
+RETURN p.title,
+       WEIGHTED_SEARCH(p.abstract, 'neural network', 0.7, 0.2, 0.1) AS score
+ORDER BY score DESC;
+
+-- Compare different weighting strategies
+MATCH (p:Paper)
+RETURN p.title,
+       WEIGHTED_SEARCH(p.abstract, 'machine learning', 0.7, 0.2, 0.1) AS exact_focused,
+       WEIGHTED_SEARCH(p.abstract, 'machine learning', 0.33, 0.33, 0.34) AS balanced,
+       WEIGHTED_SEARCH(p.abstract, 'machine learning', 0.1, 0.3, 0.6) AS similarity_focused
+ORDER BY balanced DESC
+LIMIT 10;
+
+-- Performance-optimized with pre-filter
+MATCH (p:Paper)
+WHERE CONTAINS_FUZZY(p.abstract, 'learning', 2)
+  AND WEIGHTED_SEARCH(p.abstract, 'machine learning', 0.6, 0.3, 0.1) > 0.7
+RETURN p.title,
+       WEIGHTED_SEARCH(p.abstract, 'machine learning', 0.6, 0.3, 0.1) AS score
+ORDER BY score DESC;
+```
+
+## Real-World Usage Patterns
+
+### Pattern 1: Typo-Tolerant Search
+
+```gql
+-- Find documents even with misspellings
+MATCH (d:Document)
+WHERE CONTAINS_FUZZY(d.content, 'machne lerning', 2)
+RETURN d.title, d.content;
+```
+
+### Pattern 2: Ranked Search Results
+
+```gql
+-- Rank by relevance
+MATCH (p:Paper)
+WHERE FUZZY_SEARCH(p.abstract, 'deep learning') > 0.5
+RETURN p.title,
+       FUZZY_SEARCH(p.abstract, 'deep learning') AS relevance
+ORDER BY relevance DESC
+LIMIT 20;
+```
+
+### Pattern 3: Multi-Strategy Search
+
+```gql
+-- Combine exact and fuzzy matching
+MATCH (p:Paper)
+WHERE KEYWORD_MATCH_ALL(p.title, 'machine', 'learning')
+  OR CONTAINS_FUZZY(p.abstract, 'machine learning', 2)
+RETURN p.title;
+```
+
+### Pattern 4: Similarity-Based Deduplication
+
+```gql
+-- Find near-duplicate papers (titles have similar lengths)
+MATCH (p1:Paper), (p2:Paper)
+WHERE p1.id < p2.id
+  AND abs(length(p1.title) - length(p2.title)) < 15  -- Similar lengths
+  AND LEVENSHTEIN_SIMILARITY(p1.title, p2.title) > 0.85
+RETURN p1.title AS original,
+       p2.title AS duplicate,
+       LEVENSHTEIN_SIMILARITY(p1.title, p2.title) AS similarity
+ORDER BY similarity DESC;
+```
+
+### Pattern 5: Author Expertise Ranking
+
+```gql
+-- Find authors by research area with fuzzy matching
+MATCH (author:Author)-[:WROTE]->(paper:Paper)
+WHERE HYBRID_SEARCH(paper.abstract, 'quantum computing') > 0.6
+RETURN author.name,
+       COUNT(paper) AS papers,
+       AVG(HYBRID_SEARCH(paper.abstract, 'quantum computing')) AS avg_relevance
+GROUP BY author.name
+ORDER BY avg_relevance DESC, papers DESC
+LIMIT 10;
+```
+
+### Pattern 6: Complex Boolean Search
+
+```gql
+-- (neural OR deep) AND (learning OR network) with fuzzy matching
+MATCH (p:Paper)
+WHERE (CONTAINS_FUZZY(p.abstract, 'neural', 1) OR CONTAINS_FUZZY(p.abstract, 'deep', 1))
+  AND (CONTAINS_FUZZY(p.abstract, 'learning', 1) OR CONTAINS_FUZZY(p.abstract, 'network', 1))
+RETURN p.title;
+```
+
+### Pattern 7: Threshold-Based Filtering
+
+```gql
+-- Use different thresholds for different fields
+-- Note: Works best when field lengths are similar to query length
+MATCH (p:Paper)
+WHERE LEVENSHTEIN_SIMILARITY(p.title, 'neural networks') > 0.8
+   OR FUZZY_SEARCH(p.abstract, 'neural networks') > 0.6  -- Better for variable-length text
+RETURN p.title,
+       LEVENSHTEIN_SIMILARITY(p.title, 'neural networks') AS title_score,
+       FUZZY_SEARCH(p.abstract, 'neural networks') AS abstract_score
+ORDER BY title_score DESC, abstract_score DESC;
+```
+
+## Performance Optimization
+
+### 1. Pre-filtering
+
+Use fast filters before expensive fuzzy operations:
+
+```gql
+-- BAD: Fuzzy search on all documents
+MATCH (d:Document)
+WHERE FUZZY_SEARCH(d.content, 'machine learning') > 0.7
+RETURN d.title;
+
+-- GOOD: Pre-filter with exact match first
+MATCH (d:Document)
+WHERE d.content CONTAINS 'machine' OR d.content CONTAINS 'learning'
+  AND FUZZY_SEARCH(d.content, 'machine learning') > 0.7
+RETURN d.title;
+```
+
+### 2. Threshold Selection
+
+Higher thresholds = fewer results, better performance:
+
+```gql
+-- Lower threshold (0.5) = more computation
+MATCH (p:Paper)
+WHERE FUZZY_SEARCH(p.abstract, 'artificial intelligence') > 0.5
+RETURN p.title;
+
+-- Higher threshold (0.8) = faster, more precise
+MATCH (p:Paper)
+WHERE FUZZY_SEARCH(p.abstract, 'artificial intelligence') > 0.8
+RETURN p.title;
+```
+
+### 3. Limit Results Early
+
+Use LIMIT to stop processing early:
+
+```gql
+-- Stop after finding 10 matches
+MATCH (p:Paper)
+WHERE FUZZY_SEARCH(p.abstract, 'neural networks') > 0.7
+RETURN p.title
+ORDER BY FUZZY_SEARCH(p.abstract, 'neural networks') DESC
+LIMIT 10;
+```
+
+### 4. Choose Right Function
+
+Use the simplest function that meets your needs:
+
+| Requirement | Best Function | Complexity |
+|-------------|---------------|------------|
+| Exact boolean filter | KEYWORD_MATCH | O(n) |
+| Fuzzy boolean filter | CONTAINS_FUZZY | O(n × m²) |
+| Similarity ranking (similar lengths) | LEVENSHTEIN_SIMILARITY | O(m × n) |
+| Substring ranking | FUZZY_SEARCH | O(n × m²) |
+| Multi-strategy ranking | HYBRID_SEARCH | O(n × m²) |
+
+## Common Pitfalls
+
+### 1. Threshold Too Low
+
+```gql
+-- BAD: 0.3 threshold returns too many irrelevant results
+MATCH (p:Paper)
+WHERE FUZZY_SEARCH(p.abstract, 'AI') > 0.3
+RETURN p.title;
+
+-- GOOD: 0.7 threshold filters to relevant results
+MATCH (p:Paper)
+WHERE FUZZY_SEARCH(p.abstract, 'AI') > 0.7
+RETURN p.title;
+```
+
+### 2. Wrong Edit Distance
+
+```gql
+-- BAD: Max distance 5 allows too many false matches
+MATCH (p:Paper)
+WHERE FUZZY_MATCH(p.title, 'machine learning', 5)
+RETURN p.title;
+
+-- GOOD: Max distance 2 allows minor typos only
+MATCH (p:Paper)
+WHERE FUZZY_MATCH(p.title, 'machine learning', 2)
+RETURN p.title;
+```
+
+### 3. Not Using ORDER BY
+
+```gql
+-- BAD: Results not ranked by relevance
+MATCH (p:Paper)
+WHERE FUZZY_SEARCH(p.abstract, 'neural networks') > 0.5
+RETURN p.title;
+
+-- GOOD: Results ranked by relevance
+MATCH (p:Paper)
+WHERE FUZZY_SEARCH(p.abstract, 'neural networks') > 0.5
+RETURN p.title,
+       FUZZY_SEARCH(p.abstract, 'neural networks') AS score
+ORDER BY score DESC;
+```
+
+## Function Selection Guide
+
+| Use Case | Recommended Function | Why |
+|----------|---------------------|-----|
+| Exact match with typo tolerance | FUZZY_MATCH | Boolean result, configurable threshold |
+| Ranking search results | FUZZY_SEARCH | Optimized for relevance scoring |
+| String similarity (similar lengths) | LEVENSHTEIN_SIMILARITY | Simple, normalized score |
+| Fuzzy substring search | CONTAINS_FUZZY | Boolean, works in long text |
+| Multi-strategy search | HYBRID_SEARCH | Combines multiple approaches |
+| OR keyword search | KEYWORD_MATCH | Fast, multiple keywords |
+| AND keyword search | KEYWORD_MATCH_ALL | Precise multi-term filter |
+| Custom weighted search | WEIGHTED_SEARCH | Explicit weight control |
+
+## Technical Details
+
+### Complexity Analysis
+
+| Function | Time Complexity | Space Complexity |
+|----------|----------------|------------------|
+| FUZZY_MATCH | O(m × n) | O(m × n) |
+| LEVENSHTEIN_SIMILARITY | O(m × n) | O(m × n) |
+| CONTAINS_FUZZY | O(k × m²) where k = text length | O(m²) |
+| FUZZY_SEARCH | O(k × m²) | O(m²) |
+| HYBRID_SEARCH | O(k × m²) | O(m²) |
+| KEYWORD_MATCH | O(k × t) where t = keywords | O(1) |
+| KEYWORD_MATCH_ALL | O(k × t) | O(1) |
+| WEIGHTED_SEARCH | O(k × m²) | O(m²) |
+
+Where:
+- m, n = string lengths being compared
+- k = text length for substring search
+- t = number of keywords
+
+### Unicode Support
+
+All functions support Unicode:
+
+```gql
+-- Works with non-ASCII characters
+MATCH (p:Paper)
+WHERE FUZZY_MATCH(p.title, 'Künstliche Intelligenz', 2)
+RETURN p.title;
+
+-- Works with special characters and symbols
+MATCH (d:Document)
+WHERE CONTAINS_FUZZY(d.content, 'machine learning!', 2)
+RETURN d.title;
+```
+
+### NULL Handling
+
+All functions handle NULL values gracefully:
+
+```gql
+-- FUZZY_MATCH returns false for NULL
+FUZZY_MATCH(NULL, 'test', 2)  -- Returns: false
+FUZZY_MATCH('test', NULL, 2)  -- Returns: false
+
+-- LEVENSHTEIN_SIMILARITY returns NULL
+LEVENSHTEIN_SIMILARITY(NULL, 'test')  -- Returns: NULL
+LEVENSHTEIN_SIMILARITY('test', NULL)  -- Returns: NULL
+
+-- FUZZY_SEARCH returns NULL
+FUZZY_SEARCH(NULL, 'test')  -- Returns: NULL
+```
+
+## Best Practices
+
+### 1. Always Use ORDER BY for Scoring Functions
+
+```gql
+-- Score functions should order results
+MATCH (p:Paper)
+WHERE FUZZY_SEARCH(p.abstract, 'machine learning') > 0.6
+RETURN p.title,
+       FUZZY_SEARCH(p.abstract, 'machine learning') AS score
+ORDER BY score DESC;
+```
+
+### 2. Choose Appropriate Thresholds
+
+- **Edit Distance**: 1-2 for short strings, 2-4 for longer strings
+- **Similarity Score**: 0.7-0.8 for similar, 0.9+ for near-identical
+- **Fuzzy/Hybrid Search**: 0.6-0.7 for relevant, 0.8+ for highly relevant
+
+### 3. Combine with Other Filters
+
+```gql
+-- Use metadata filters first
+MATCH (p:Paper)
+WHERE p.year >= 2020
+  AND p.citations > 100
+  AND FUZZY_SEARCH(p.abstract, 'deep learning') > 0.7
+RETURN p.title;
+```
+
+### 4. Use LIMIT for Large Datasets
+
+```gql
+-- Prevent processing entire dataset
+MATCH (p:Paper)
+WHERE HYBRID_SEARCH(p.abstract, 'AI research') > 0.5
+RETURN p.title
+ORDER BY HYBRID_SEARCH(p.abstract, 'AI research') DESC
+LIMIT 50;
+```
+
+### 5. Weight Tuning for Domain
+
+Test different weights for your specific use case:
+
+```gql
+-- A/B test different configurations
+MATCH (p:Paper)
+RETURN p.title,
+       HYBRID_SEARCH(p.abstract, 'neural networks', 0.7, 0.2, 0.1) AS config_a,
+       HYBRID_SEARCH(p.abstract, 'neural networks', 0.4, 0.4, 0.2) AS config_b,
+       HYBRID_SEARCH(p.abstract, 'neural networks', 0.3, 0.3, 0.4) AS config_c
+ORDER BY config_b DESC
+LIMIT 20;
+```
+
+## Summary
+
+GraphLite's text search functions provide powerful, flexible tools for:
+
+- **Fuzzy Matching**: Handle typos and variations using Levenshtein distance
+- **Similarity Scoring**: Rank by relevance using normalized edit distance
+- **Hybrid Search**: Combine multiple text-matching strategies (exact, fuzzy, similarity) with configurable weights
+- **Keyword Matching**: Boolean logic for filtering
+- **Performance**: Optimized algorithms with configurable behavior
+
+All search functions are **text-based** using Levenshtein distance algorithms. Choose the right function for your use case, tune thresholds and weights appropriately, and combine with standard GQL filters for optimal results.
