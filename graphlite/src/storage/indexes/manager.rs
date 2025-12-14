@@ -143,7 +143,7 @@ impl IndexManager {
                 let doc_id = hasher.finish();
 
                 // Add document to index
-                if let Ok(_) = index.add_document(doc_id, &text_value) {
+                if index.add_document(doc_id, &text_value).is_ok() {
                     indexed_count += 1;
                 }
             }

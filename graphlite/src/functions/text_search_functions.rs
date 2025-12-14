@@ -316,8 +316,8 @@ impl Function for HybridSearchFunction {
         };
 
         let score = Self::calculate_hybrid_score(
-            &text_str,
-            &query_str,
+            text_str,
+            query_str,
             exact_weight,
             fuzzy_weight,
             similarity_weight,
@@ -415,7 +415,7 @@ impl Function for KeywordMatchFunction {
         }
 
         // Return true if any keyword matches
-        let result = Self::contains_any_keyword(&text_str, &keywords);
+        let result = Self::contains_any_keyword(text_str, &keywords);
         Ok(Value::Boolean(result))
     }
 
@@ -490,7 +490,7 @@ impl Function for KeywordMatchAllFunction {
         }
 
         // Return true only if all keywords match
-        let result = KeywordMatchFunction::contains_all_keywords(&text_str, &keywords);
+        let result = KeywordMatchFunction::contains_all_keywords(text_str, &keywords);
         Ok(Value::Boolean(result))
     }
 
@@ -582,8 +582,8 @@ impl Function for WeightedSearchFunction {
                 })?;
 
         let score = HybridSearchFunction::calculate_hybrid_score(
-            &text_str,
-            &query_str,
+            text_str,
+            query_str,
             exact_w,
             fuzzy_w,
             similarity_w,

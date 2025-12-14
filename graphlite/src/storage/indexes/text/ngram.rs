@@ -54,7 +54,7 @@ impl NGramIndex {
         for ngram in self.generate_ngrams(&padded) {
             self.ngram_to_docs
                 .entry(ngram)
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(doc_id);
         }
     }

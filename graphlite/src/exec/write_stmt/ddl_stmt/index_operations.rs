@@ -689,14 +689,14 @@ impl DDLStatementExecutor for DropIndexExecutor {
         }
 
         // If this is a text index, also unregister from the global text index registry
-        if let Ok(_) = unregister_text_index(&self.statement.name) {
+        if unregister_text_index(&self.statement.name).is_ok() {
             log::debug!(
                 "Text index '{}' unregistered from global registry",
                 self.statement.name
             );
 
             // Also unregister the metadata
-            if let Ok(_) = unregister_metadata(&self.statement.name) {
+            if unregister_metadata(&self.statement.name).is_ok() {
                 log::debug!("Text index '{}' metadata unregistered", self.statement.name);
             }
         }

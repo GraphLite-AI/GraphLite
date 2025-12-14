@@ -248,9 +248,9 @@ impl FullSuitResults {
         let mut output = String::new();
         output.push_str("=== Full Benchmark Suite Results ===\n\n");
         output.push_str(&IndexBenchmark::format_results(&self.build));
-        output.push_str("\n");
+        output.push('\n');
         output.push_str(&IndexBenchmark::format_results(&self.search_unlimited));
-        output.push_str("\n");
+        output.push('\n');
         output.push_str(&IndexBenchmark::format_results(&self.search_limited));
 
         let targets = self.meets_targets();

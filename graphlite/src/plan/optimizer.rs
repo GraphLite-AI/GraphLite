@@ -2603,7 +2603,7 @@ impl QueryPlanner {
                     variable: "text_fallback".to_string(),
                     labels: vec!["*".to_string()],
                     properties: Some(properties),
-                    estimated_rows: estimated_rows,
+                    estimated_rows,
                     estimated_cost: estimated_cost * 15.0,
                 })
             }
