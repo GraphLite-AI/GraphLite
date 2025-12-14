@@ -17,7 +17,8 @@ use crate::ast::{
 };
 use crate::plan::cost::{CostEstimate, CostModel, Statistics};
 use crate::plan::logical::{
-    EntityType, JoinType, LogicalNode, LogicalPlan, ProjectExpression, SortExpression, VariableInfo,
+    EntityType, JoinType, LogicalNode, LogicalPlan, ProjectExpression, SortExpression,
+    TextSearchType, VariableInfo,
 };
 use crate::plan::pattern_optimization::integration::PatternOptimizationPipeline;
 use crate::plan::physical::{PhysicalNode, PhysicalPlan};
@@ -1689,7 +1690,8 @@ impl QueryPlanner {
             | LogicalNode::NotInSubquery { .. }
             | LogicalNode::ScalarSubquery { .. }
             | LogicalNode::WithQuery { .. }
-            | LogicalNode::Unwind { .. } => Ok(node),
+            | LogicalNode::Unwind { .. }
+            | LogicalNode::TextSearch { .. } => Ok(node),
         }
     }
 
@@ -2578,6 +2580,34 @@ impl QueryPlanner {
                 })
             }
 
+            PhysicalNode::TextIndexScan {
+                field,
+                query,
+                estimated_rows,
+                estimated_cost,
+                ..
+            } => {
+                // Fallback for text index: use a generic sequential scan with parameters
+                let mut properties: std::collections::HashMap<String, crate::ast::Expression> =
+                    std::collections::HashMap::new();
+                properties.insert(
+                    "field".to_string(),
+                    crate::ast::Expression::Literal(crate::ast::Literal::String(field.clone())),
+                );
+                properties.insert(
+                    "query".to_string(),
+                    crate::ast::Expression::Literal(crate::ast::Literal::String(query.clone())),
+                );
+
+                Ok(PhysicalNode::NodeSeqScan {
+                    variable: "text_fallback".to_string(),
+                    labels: vec!["*".to_string()],
+                    properties: Some(properties),
+                    estimated_rows,
+                    estimated_cost: estimated_cost * 15.0,
+                })
+            }
+
             PhysicalNode::IndexJoin {
                 left,
                 right,
@@ -2853,7 +2883,51 @@ impl<'a> IndexAwareOptimizer<'a> {
                 // First, recursively transform the input
                 let transformed_input = Box::new(self.transform_text_search_node(*input)?);
 
-                // Text search is not supported in GraphLite, keep as Filter
+                // Check if this filter contains a text-search predicate we can push down
+                if let Some((variable, query, field, min_score)) =
+                    self.extract_text_search_predicate(&condition)
+                {
+                    // Infer search type from condition shape
+                    let search_type = match &condition {
+                        Expression::FunctionCall(func)
+                            if func.name.eq_ignore_ascii_case("text_search") =>
+                        {
+                            TextSearchType::BM25
+                        }
+                        Expression::FunctionCall(func)
+                            if func.name.eq_ignore_ascii_case("fuzzy_match") =>
+                        {
+                            TextSearchType::NGram
+                        }
+                        Expression::Binary(binary)
+                            if matches!(binary.operator, Operator::Matches) =>
+                        {
+                            TextSearchType::Boolean
+                        }
+                        Expression::Binary(binary)
+                            if matches!(binary.operator, Operator::FuzzyEqual) =>
+                        {
+                            TextSearchType::NGram
+                        }
+                        _ => TextSearchType::BM25,
+                    };
+
+                    return Ok(LogicalNode::TextSearch {
+                        variable,
+                        field,
+                        query,
+                        search_type,
+                        min_score: if min_score > 0.0 {
+                            Some(min_score)
+                        } else {
+                            None
+                        },
+                        limit: None,
+                        input: transformed_input,
+                    });
+                }
+
+                // Otherwise keep as a regular Filter
                 Ok(LogicalNode::Filter {
                     condition,
                     input: transformed_input,

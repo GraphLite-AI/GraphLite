@@ -1768,6 +1768,7 @@ pub enum AlterIndexOperation {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IndexTypeSpecifier {
     Graph(GraphIndexTypeSpecifier),
+    Text(TextIndexTypeSpecifier),
 }
 
 /// Graph index type specifiers
@@ -1777,6 +1778,14 @@ pub enum GraphIndexTypeSpecifier {
     PathIndex,
     ReachabilityIndex,
     PatternIndex,
+}
+
+/// Text index type specifiers
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum TextIndexTypeSpecifier {
+    FullText,
+    Fuzzy,
+    Boolean,
 }
 
 /// Index options for CREATE INDEX

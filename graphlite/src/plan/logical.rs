@@ -125,6 +125,17 @@ pub enum LogicalNode {
         input: Box<LogicalNode>,
     },
 
+    /// Text search logical operator (index-backed)
+    TextSearch {
+        variable: String,
+        field: String,
+        query: String,
+        search_type: TextSearchType,
+        min_score: Option<f64>,
+        limit: Option<usize>,
+        input: Box<LogicalNode>,
+    },
+
     /// Filter rows based on condition
     Filter {
         condition: Expression,
@@ -280,6 +291,14 @@ pub enum JoinType {
     Cross,
     LeftSemi, // Used for EXISTS subquery unnesting
     LeftAnti, // Used for NOT EXISTS subquery unnesting
+}
+
+/// Types of text search supported by the logical plan
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TextSearchType {
+    BM25,
+    NGram,
+    Boolean,
 }
 
 /// Project expression with optional alias
@@ -856,6 +875,21 @@ impl LogicalNode {
                 vars
             }
 
+            LogicalNode::TextSearch {
+                variable,
+                field: _,
+                query: _,
+                search_type: _,
+                min_score: _,
+                limit: _,
+                input,
+            } => {
+                // Variables include the input's variables plus the referenced variable
+                let mut vars = input.get_variables();
+                vars.push(variable.clone());
+                vars
+            }
+
             // Subquery cases
             LogicalNode::ExistsSubquery {
                 subquery,
@@ -1000,6 +1034,12 @@ impl LogicalNode {
                     PathType::SimplePath => base_cardinality * 10, // Fewer due to vertex constraints
                     PathType::AcyclicPath => base_cardinality * 5, // Fewest due to strict constraints
                 }
+            }
+
+            LogicalNode::TextSearch { input, .. } => {
+                // Text search is selective; assume 5-10% selectivity over input
+                let base = input.estimate_cardinality();
+                std::cmp::max(1, base / 10)
             }
 
             // Subquery cardinality estimates

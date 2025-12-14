@@ -2438,6 +2438,10 @@ fn comparison_operator(tokens: &[Token]) -> IResult<&[Token], Operator> {
         value(Operator::Within, expect_token(Token::Within)),
         value(Operator::Like, expect_token(Token::Like)),
         value(Operator::Contains, expect_token(Token::Contains)),
+        // Pattern matching operator: MATCHES
+        value(Operator::Matches, expect_token(Token::Matches)),
+        // Fuzzy/approximate equality operator: ~=
+        value(Operator::FuzzyEqual, expect_token(Token::FuzzyEqual)),
         // Handle compound operators
         value(
             Operator::Starts,
@@ -4845,6 +4849,7 @@ fn create_index_statement(tokens: &[Token]) -> IResult<&[Token], CreateIndexStat
 
     // Parse index type specifier
     let (tokens, index_type) = alt((
+        // GRAPH index variants
         map(
             pair(
                 preceded(expect_identifier("GRAPH"), expect_identifier("INDEX")),
@@ -4853,6 +4858,23 @@ fn create_index_statement(tokens: &[Token]) -> IResult<&[Token], CreateIndexStat
             |(_, gtype)| {
                 IndexTypeSpecifier::Graph(gtype.unwrap_or(GraphIndexTypeSpecifier::AdjacencyList))
             },
+        ),
+        // TEXT index variants: FULLTEXT, FUZZY, BOOLEAN, TEXT
+        map(
+            preceded(expect_identifier("FULLTEXT"), expect_identifier("INDEX")),
+            |_| IndexTypeSpecifier::Text(TextIndexTypeSpecifier::FullText),
+        ),
+        map(
+            preceded(expect_identifier("FUZZY"), expect_identifier("INDEX")),
+            |_| IndexTypeSpecifier::Text(TextIndexTypeSpecifier::Fuzzy),
+        ),
+        map(
+            preceded(expect_identifier("BOOLEAN"), expect_identifier("INDEX")),
+            |_| IndexTypeSpecifier::Text(TextIndexTypeSpecifier::Boolean),
+        ),
+        map(
+            preceded(expect_identifier("TEXT"), expect_identifier("INDEX")),
+            |_| IndexTypeSpecifier::Text(TextIndexTypeSpecifier::FullText),
         ),
         // Default to adjacency list if just "CREATE INDEX"
         map(expect_identifier("INDEX"), |_| {
@@ -4871,16 +4893,50 @@ fn create_index_statement(tokens: &[Token]) -> IResult<&[Token], CreateIndexStat
     // Parse index name - use lenient parser to accept various tokens for better error messages
     let (tokens, name) = parse_index_name(tokens)?;
 
-    // Parse ON table_name
+    // Parse ON table_name or ON pattern
     let (tokens, _) = expect_token(Token::On)(tokens)?;
-    let (tokens, table) = parse_table_name(tokens)?;
 
-    // Parse optional column list (column1, column2, ...)
-    let (tokens, columns) = opt(delimited(
-        expect_token(Token::LeftParen),
-        separated_list1(expect_token(Token::Comma), identifier),
-        expect_token(Token::RightParen),
-    ))(tokens)?;
+    // For TEXT indexes, parse pattern like (p:Person) or just label
+    // For GRAPH indexes, parse table name
+    let (tokens, table, columns) = if matches!(&index_type, IndexTypeSpecifier::Text(_)) {
+        // TEXT INDEX: Try to parse pattern (p:Label) first, fall back to simple label
+        let parse_pattern_result = tuple((
+            expect_token(Token::LeftParen),
+            opt(identifier), // optional variable like 'p'
+            expect_token(Token::Colon),
+            identifier, // label name
+            expect_token(Token::RightParen),
+        ))(tokens);
+
+        if let Ok((remaining_tokens, (_lparen, _var, _colon, label, _rparen))) =
+            parse_pattern_result
+        {
+            // Successfully parsed pattern (p:Label), now look for {field} or (field)
+            let (tokens, field) = parse_index_fields(remaining_tokens)?;
+            (tokens, label, field)
+        } else {
+            // Fall back to simple label and field parsing
+            let (tokens, label) = identifier(tokens)?;
+            let (tokens, field) = parse_index_fields(tokens)?;
+            (tokens, label, field)
+        }
+    } else {
+        // GRAPH INDEX: Parse table name and optional columns
+        let (tokens, table) = parse_table_name(tokens)?;
+        let (tokens, columns) = opt(delimited(
+            expect_token(Token::LeftParen),
+            separated_list1(expect_token(Token::Comma), identifier),
+            expect_token(Token::RightParen),
+        ))(tokens)?;
+        (tokens, table, columns.unwrap_or_default())
+    };
+
+    // For GRAPH indexes, we already have columns. For TEXT, columns were parsed as part of pattern
+    let columns = if matches!(&index_type, IndexTypeSpecifier::Text(_)) {
+        columns
+    } else {
+        columns
+    };
 
     // Parse optional USING clause
     let (tokens, _using_type) = opt(preceded(
@@ -4906,13 +4962,31 @@ fn create_index_statement(tokens: &[Token]) -> IResult<&[Token], CreateIndexStat
         CreateIndexStatement {
             name,
             table,
-            columns: columns.unwrap_or_default(),
+            columns,
             index_type,
             options: options.unwrap_or_default(),
             if_not_exists,
             location: Location::default(),
         },
     ))
+}
+
+/// Parse index fields from {field} or (field) syntax
+fn parse_index_fields(tokens: &[Token]) -> IResult<&[Token], Vec<String>> {
+    alt((
+        // Parse {field1, field2, ...} syntax
+        delimited(
+            expect_token(Token::LeftBrace),
+            separated_list1(expect_token(Token::Comma), identifier),
+            expect_token(Token::RightBrace),
+        ),
+        // Parse (field1, field2, ...) syntax
+        delimited(
+            expect_token(Token::LeftParen),
+            separated_list1(expect_token(Token::Comma), identifier),
+            expect_token(Token::RightParen),
+        ),
+    ))(tokens)
 }
 
 /// Parse DROP INDEX statement

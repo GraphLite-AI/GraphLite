@@ -308,6 +308,20 @@ impl CostModel {
                 }
             }
 
+            // Text index scan - full-text search using inverted/index structures
+            PhysicalNode::TextIndexScan { estimated_rows, .. } => {
+                let base_cost = *estimated_rows as f64 * self.cpu_cost_per_row * 0.2; // heavier per-row work for scoring
+                let io_cost = (*estimated_rows / 5000) as f64 * self.io_cost_per_page * 0.5; // more I/O for inverted lists
+
+                CostEstimate {
+                    cpu_cost: base_cost,
+                    io_cost,
+                    memory_cost: *estimated_rows as f64 * 200.0 * self.memory_cost_per_byte, // caching posting lists
+                    network_cost: 0.0,
+                    total_time: base_cost + io_cost,
+                }
+            }
+
             // Index join - better than hash join for selective queries
             PhysicalNode::IndexJoin {
                 left,

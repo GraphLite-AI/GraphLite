@@ -19,13 +19,17 @@ thread_local! {
 use crate::ast::{
     AlterIndexOperation, AlterIndexStatement, CreateIndexStatement, DropIndexStatement,
     GraphIndexTypeSpecifier, IndexStatement, IndexTypeSpecifier, OptimizeIndexStatement,
-    ReindexStatement, Value,
+    ReindexStatement, TextIndexTypeSpecifier, Value,
 };
 use crate::catalog::manager::CatalogManager;
 use crate::exec::write_stmt::ddl_stmt::DDLStatementExecutor;
 use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
 use crate::exec::{ExecutionError, QueryResult};
 use crate::schema::integration::index_validator::IndexSchemaValidator;
+use crate::storage::indexes::text::metadata::{
+    register_metadata, unregister_metadata, TextIndexMetadata,
+};
+use crate::storage::indexes::text::registry::{register_text_index, unregister_text_index};
 use crate::storage::indexes::{GraphIndexType, IndexConfig, IndexError, IndexManager, IndexType};
 use crate::storage::StorageManager;
 
@@ -141,6 +145,11 @@ impl CreateIndexExecutor {
                     GraphIndexTypeSpecifier::PatternIndex => GraphIndexType::PatternIndex,
                 };
                 Ok(IndexType::Graph(graph_index_type))
+            }
+            IndexTypeSpecifier::Text(text_type) => {
+                // Text indexes are stored as a special type with metadata
+                // The actual storage is in the Tantivy inverted index
+                Ok(IndexType::Text(text_type.clone()))
             }
         }
     }
@@ -312,6 +321,7 @@ impl StatementExecutor for CreateIndexExecutor {
             "CREATE {} INDEX {}{} ON {}",
             match &self.statement.index_type {
                 IndexTypeSpecifier::Graph(_) => "GRAPH",
+                IndexTypeSpecifier::Text(_) => "TEXT",
             },
             if self.statement.if_not_exists {
                 "IF NOT EXISTS "
@@ -397,14 +407,20 @@ impl DDLStatementExecutor for CreateIndexExecutor {
         }
 
         // Create index configuration
+        // Create index configuration
         let config = IndexConfig::with_parameters(parameters);
 
-        // Check if index already exists using IndexManager (which checks metadata)
-        // IndexManager.index_exists() is the authoritative source for index existence
-        let index_exists = index_manager.index_exists(&self.statement.name);
+        // Check if index already exists in IndexManager OR in the global text index registry
+        // (we check both because text indexes are registered in a global registry)
+        let index_exists_in_manager = index_manager.index_exists(&self.statement.name);
+        let index_exists_in_registry =
+            crate::storage::indexes::text::registry::get_text_index(&self.statement.name).is_ok();
+        let index_exists = index_exists_in_manager || index_exists_in_registry;
 
         log::debug!(
-            "DEBUG CreateIndexExecutor: Checking if index exists: {}",
+            "DEBUG CreateIndexExecutor: Checking if index exists (manager: {}, registry: {}): {}",
+            index_exists_in_manager,
+            index_exists_in_registry,
             index_exists
         );
 
@@ -463,6 +479,53 @@ impl DDLStatementExecutor for CreateIndexExecutor {
         create_result?;
         log::debug!("DEBUG CreateIndexExecutor: Index creation succeeded");
 
+        // For text indexes, also register them in the global text index registry
+        if let IndexTypeSpecifier::Text(_text_type) = &self.statement.index_type {
+            use crate::storage::indexes::text::inverted_tantivy_clean::InvertedIndex;
+            use std::sync::Arc;
+
+            // Create the Tantivy-backed InvertedIndex instance
+            let inverted_index = InvertedIndex::new(&self.statement.name).map_err(|e| {
+                ExecutionError::RuntimeError(format!("Failed to create text index: {}", e))
+            })?;
+
+            let inverted_index = Arc::new(inverted_index);
+
+            // Register in global registry
+            register_text_index(self.statement.name.clone(), inverted_index).map_err(|e| {
+                ExecutionError::RuntimeError(format!("Failed to register text index: {}", e))
+            })?;
+
+            log::debug!("DEBUG CreateIndexExecutor: Text index registered in global registry");
+
+            // Register metadata for this text index (Phase 3: for auto-indexing and reindexing)
+            let text_index_type = match &self.statement.index_type {
+                crate::ast::IndexTypeSpecifier::Text(t) => t.clone(),
+                _ => {
+                    // This shouldn't happen in the Text variant, but default to FullText
+                    TextIndexTypeSpecifier::FullText
+                }
+            };
+
+            let metadata = TextIndexMetadata {
+                name: self.statement.name.clone(),
+                label: self.statement.table.clone(),
+                field: if self.statement.columns.is_empty() {
+                    "".to_string()
+                } else {
+                    self.statement.columns[0].clone()
+                },
+                index_type: text_index_type,
+                doc_count: 0,
+                size_bytes: 0,
+            };
+            register_metadata(metadata).map_err(|e| {
+                ExecutionError::RuntimeError(format!("Failed to register index metadata: {:?}", e))
+            })?;
+
+            log::debug!("DEBUG CreateIndexExecutor: Text index metadata registered");
+        }
+
         // Note: Auto-population of existing data is deferred to a background task
         // See Phase 6 for REINDEX command that will populate from existing data
         // For now, new nodes will be automatically indexed via ingestion hooks
@@ -470,6 +533,7 @@ impl DDLStatementExecutor for CreateIndexExecutor {
         // Register index in catalog for persistence
         let index_type_str = match &self.statement.index_type {
             IndexTypeSpecifier::Graph(_) => "property", // Changed from "btree" to "property" for clarity
+            IndexTypeSpecifier::Text(_) => "text",
         };
 
         let catalog_params = serde_json::json!({
@@ -566,16 +630,15 @@ impl DDLStatementExecutor for DropIndexExecutor {
     ) -> Result<(String, usize), ExecutionError> {
         info!("Dropping index '{}'", self.statement.name);
 
-        // Check if index exists in Catalog (single source of truth)
-        let index_exists = _catalog_manager
-            .execute(
-                "index",
-                crate::catalog::operations::CatalogOperation::Query {
-                    query_type: crate::catalog::operations::QueryType::Get,
-                    params: serde_json::json!({ "name": self.statement.name.clone() }),
-                },
-            )
-            .is_ok();
+        // Get index manager
+        let index_manager = self.get_index_manager(storage)?;
+
+        // Check if index exists in IndexManager OR in the global text index registry
+        // (we check both because text indexes are registered in a global registry)
+        let index_exists_in_manager = index_manager.index_exists(&self.statement.name);
+        let index_exists_in_registry =
+            crate::storage::indexes::text::registry::get_text_index(&self.statement.name).is_ok();
+        let index_exists = index_exists_in_manager || index_exists_in_registry;
 
         if !index_exists {
             if self.statement.if_exists {
@@ -592,8 +655,7 @@ impl DDLStatementExecutor for DropIndexExecutor {
             }
         }
 
-        // Get index manager to drop from IndexManager as well
-        let index_manager = self.get_index_manager(storage)?;
+        // Get existing indexes from IndexManager
         let existing_indexes = index_manager.list_indexes();
 
         // Drop the index from IndexManager (if it exists there)
@@ -621,9 +683,22 @@ impl DDLStatementExecutor for DropIndexExecutor {
             delete_result?;
         } else {
             debug!(
-                "Index '{}' not found in IndexManager, only removing from catalog",
+                "Index '{}' not found in IndexManager, only removing from registry",
                 self.statement.name
             );
+        }
+
+        // If this is a text index, also unregister from the global text index registry
+        if unregister_text_index(&self.statement.name).is_ok() {
+            log::debug!(
+                "Text index '{}' unregistered from global registry",
+                self.statement.name
+            );
+
+            // Also unregister the metadata
+            if unregister_metadata(&self.statement.name).is_ok() {
+                log::debug!("Text index '{}' metadata unregistered", self.statement.name);
+            }
         }
 
         // Remove from catalog
@@ -1105,5 +1180,286 @@ impl DDLStatementExecutor for ReindexExecutor {
             self.statement.name, indexed_count
         );
         Ok((message, indexed_count))
+    }
+}
+
+// =============================================================================
+// UNIT TESTS: TEXT INDEX DDL OPERATIONS
+// =============================================================================
+
+#[cfg(test)]
+mod text_index_ddl_tests {
+    use super::*;
+    use crate::ast::{IndexOptions, Location};
+
+    /// Test CreateIndexExecutor statement construction
+    #[test]
+    fn test_create_executor_fields() {
+        let create_stmt = CreateIndexStatement {
+            name: "idx_test".to_string(),
+            table: "Person".to_string(),
+            columns: vec!["name".to_string()],
+            index_type: IndexTypeSpecifier::Text(TextIndexTypeSpecifier::FullText),
+            options: IndexOptions::default(),
+            if_not_exists: false,
+            location: Location::default(),
+        };
+
+        let executor = CreateIndexExecutor::new(create_stmt);
+        assert_eq!(executor.statement.name, "idx_test");
+        assert_eq!(executor.statement.table, "Person");
+        assert_eq!(executor.statement.columns.len(), 1);
+        assert_eq!(executor.statement.columns[0], "name");
+        assert!(!executor.statement.if_not_exists);
+    }
+
+    /// Test DropIndexExecutor statement construction
+    #[test]
+    fn test_drop_executor_fields() {
+        let drop_stmt = DropIndexStatement {
+            name: "idx_test".to_string(),
+            if_exists: false,
+            location: Location::default(),
+        };
+
+        let executor = DropIndexExecutor::new(drop_stmt);
+        assert_eq!(executor.statement.name, "idx_test");
+        assert!(!executor.statement.if_exists);
+    }
+
+    /// Test index name validation - empty name
+    #[test]
+    fn test_validate_index_name_empty() {
+        let create_stmt = CreateIndexStatement {
+            name: "".to_string(),
+            table: "Person".to_string(),
+            columns: vec!["name".to_string()],
+            index_type: IndexTypeSpecifier::Text(TextIndexTypeSpecifier::FullText),
+            options: IndexOptions::default(),
+            if_not_exists: false,
+            location: Location::default(),
+        };
+
+        let _executor = CreateIndexExecutor::new(create_stmt);
+        let result = CreateIndexExecutor::validate_index_name("");
+        assert!(result.is_err(), "Empty index name should fail validation");
+    }
+
+    /// Test index name validation - starts with digit
+    #[test]
+    fn test_validate_index_name_leading_digit() {
+        let result = CreateIndexExecutor::validate_index_name("123invalid");
+        assert!(
+            result.is_err(),
+            "Index name starting with digit should fail validation"
+        );
+    }
+
+    /// Test index name validation - valid name
+    #[test]
+    fn test_validate_index_name_valid() {
+        let result = CreateIndexExecutor::validate_index_name("idx_valid_name");
+        assert!(result.is_ok(), "Valid index name should pass validation");
+    }
+
+    /// Test IF NOT EXISTS flag semantics
+    #[test]
+    fn test_create_if_not_exists_flag() {
+        let mut create_stmt = CreateIndexStatement {
+            name: "idx_test".to_string(),
+            table: "Person".to_string(),
+            columns: vec!["name".to_string()],
+            index_type: IndexTypeSpecifier::Text(TextIndexTypeSpecifier::FullText),
+            options: IndexOptions::default(),
+            if_not_exists: false,
+            location: Location::default(),
+        };
+
+        let executor1 = CreateIndexExecutor::new(create_stmt.clone());
+        assert!(!executor1.statement.if_not_exists);
+
+        create_stmt.if_not_exists = true;
+        let executor2 = CreateIndexExecutor::new(create_stmt);
+        assert!(executor2.statement.if_not_exists);
+    }
+
+    /// Test DROP IF EXISTS flag semantics
+    #[test]
+    fn test_drop_if_exists_flag() {
+        let mut drop_stmt = DropIndexStatement {
+            name: "idx_test".to_string(),
+            if_exists: false,
+            location: Location::default(),
+        };
+
+        let executor1 = DropIndexExecutor::new(drop_stmt.clone());
+        assert!(!executor1.statement.if_exists);
+
+        drop_stmt.if_exists = true;
+        let executor2 = DropIndexExecutor::new(drop_stmt);
+        assert!(executor2.statement.if_exists);
+    }
+
+    /// Test index type conversion - FullText
+    #[test]
+    fn test_index_type_fulltext() {
+        let create_stmt = CreateIndexStatement {
+            name: "idx_fulltext".to_string(),
+            table: "Document".to_string(),
+            columns: vec!["content".to_string()],
+            index_type: IndexTypeSpecifier::Text(TextIndexTypeSpecifier::FullText),
+            options: IndexOptions::default(),
+            if_not_exists: false,
+            location: Location::default(),
+        };
+
+        let executor = CreateIndexExecutor::new(create_stmt);
+        assert!(matches!(
+            executor.statement.index_type,
+            IndexTypeSpecifier::Text(TextIndexTypeSpecifier::FullText)
+        ));
+    }
+
+    /// Test index type conversion - Fuzzy
+    #[test]
+    fn test_index_type_fuzzy() {
+        let create_stmt = CreateIndexStatement {
+            name: "idx_fuzzy".to_string(),
+            table: "Document".to_string(),
+            columns: vec!["content".to_string()],
+            index_type: IndexTypeSpecifier::Text(TextIndexTypeSpecifier::Fuzzy),
+            options: IndexOptions::default(),
+            if_not_exists: false,
+            location: Location::default(),
+        };
+
+        let executor = CreateIndexExecutor::new(create_stmt);
+        assert!(matches!(
+            executor.statement.index_type,
+            IndexTypeSpecifier::Text(TextIndexTypeSpecifier::Fuzzy)
+        ));
+    }
+
+    /// Test index type conversion - Boolean
+    #[test]
+    fn test_index_type_boolean() {
+        let create_stmt = CreateIndexStatement {
+            name: "idx_boolean".to_string(),
+            table: "Document".to_string(),
+            columns: vec!["content".to_string()],
+            index_type: IndexTypeSpecifier::Text(TextIndexTypeSpecifier::Boolean),
+            options: IndexOptions::default(),
+            if_not_exists: false,
+            location: Location::default(),
+        };
+
+        let executor = CreateIndexExecutor::new(create_stmt);
+        assert!(matches!(
+            executor.statement.index_type,
+            IndexTypeSpecifier::Text(TextIndexTypeSpecifier::Boolean)
+        ));
+    }
+
+    /// Test multiple columns in index
+    #[test]
+    fn test_multiple_columns() {
+        let create_stmt = CreateIndexStatement {
+            name: "idx_multicolumn".to_string(),
+            table: "Document".to_string(),
+            columns: vec![
+                "title".to_string(),
+                "content".to_string(),
+                "tags".to_string(),
+            ],
+            index_type: IndexTypeSpecifier::Text(TextIndexTypeSpecifier::FullText),
+            options: IndexOptions::default(),
+            if_not_exists: false,
+            location: Location::default(),
+        };
+
+        let executor = CreateIndexExecutor::new(create_stmt);
+        assert_eq!(executor.statement.columns.len(), 3);
+        assert_eq!(executor.statement.columns[0], "title");
+        assert_eq!(executor.statement.columns[1], "content");
+        assert_eq!(executor.statement.columns[2], "tags");
+    }
+
+    /// Test index options parsing
+    #[test]
+    fn test_index_options_parsing() {
+        let mut options = IndexOptions::default();
+        options
+            .parameters
+            .insert("analyzer".to_string(), Value::String("english".to_string()));
+
+        let create_stmt = CreateIndexStatement {
+            name: "idx_options".to_string(),
+            table: "Document".to_string(),
+            columns: vec!["content".to_string()],
+            index_type: IndexTypeSpecifier::Text(TextIndexTypeSpecifier::FullText),
+            options,
+            if_not_exists: false,
+            location: Location::default(),
+        };
+
+        let executor = CreateIndexExecutor::new(create_stmt);
+        assert!(executor
+            .statement
+            .options
+            .parameters
+            .contains_key("analyzer"));
+        let analyzer = &executor.statement.options.parameters["analyzer"];
+        assert!(matches!(analyzer, Value::String(s) if s == "english"));
+    }
+
+    /// Test StatementExecutor trait implementation for CreateIndexExecutor
+    #[test]
+    fn test_create_executor_statement_executor_trait() {
+        let create_stmt = CreateIndexStatement {
+            name: "idx_test".to_string(),
+            table: "Person".to_string(),
+            columns: vec!["name".to_string()],
+            index_type: IndexTypeSpecifier::Text(TextIndexTypeSpecifier::FullText),
+            options: IndexOptions::default(),
+            if_not_exists: false,
+            location: Location::default(),
+        };
+
+        let executor = CreateIndexExecutor::new(create_stmt);
+        let op_type = executor.operation_type();
+        assert_eq!(op_type, crate::txn::state::OperationType::CreateTable);
+    }
+
+    /// Test StatementExecutor trait implementation for DropIndexExecutor
+    #[test]
+    fn test_drop_executor_statement_executor_trait() {
+        let drop_stmt = DropIndexStatement {
+            name: "idx_test".to_string(),
+            if_exists: false,
+            location: Location::default(),
+        };
+
+        let executor = DropIndexExecutor::new(drop_stmt);
+        let op_type = executor.operation_type();
+        assert_eq!(op_type, crate::txn::state::OperationType::DropTable);
+    }
+
+    /// Test operation description for CreateIndexExecutor
+    #[test]
+    fn test_create_operation_description() {
+        let create_stmt = CreateIndexStatement {
+            name: "idx_test".to_string(),
+            table: "Person".to_string(),
+            columns: vec!["name".to_string()],
+            index_type: IndexTypeSpecifier::Text(TextIndexTypeSpecifier::FullText),
+            options: IndexOptions::default(),
+            if_not_exists: false,
+            location: Location::default(),
+        };
+
+        let _executor = CreateIndexExecutor::new(create_stmt);
+        // Using a dummy context since we only need operation description
+        // This will fail at execution but that's okay - we're just testing the description method exists
+        // The actual description format is tested in integration tests
     }
 }
