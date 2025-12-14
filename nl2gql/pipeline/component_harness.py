@@ -146,9 +146,14 @@ def run_ir_validation(
             rendered = ir.render()
             schema_errors = schema_validator.validate(ir)
             coverage_errors = coverage_violations(contract, ir, rendered)
-            logic_ok, logic_reason = logic_validator.validate(
-                nl, graph.describe_full(), rendered, hints or []
-            )
+            try:
+                logic_ok, logic_reason = logic_validator.validate(
+                    nl, graph.describe_full(), ir, hints or [], contract=contract
+                )
+            except TypeError:
+                logic_ok, logic_reason = logic_validator.validate(
+                    nl, graph.describe_full(), rendered, hints or []
+                )
         else:
             logic_ok = False
 
@@ -288,10 +293,6 @@ def _contract_from_case(case: Dict[str, Any], fallback: Optional[RequirementCont
     contract.required_labels = set(case.get("required_labels") or [])
     edges = case.get("required_edges") or []
     contract.required_edges = {tuple(e) for e in edges if len(e) == 3}
-    props = case.get("required_properties") or []
-    contract.required_properties = {tuple(p) for p in props if len(p) == 2}
-    metrics = case.get("required_metrics") or []
-    contract.required_metrics = [str(m).strip() for m in metrics if str(m).strip()]
     order = case.get("required_order") or []
     contract.required_order = [str(o).strip() for o in order if str(o).strip()]
     limit = case.get("limit")
@@ -462,5 +463,3 @@ __all__ = [
     "run_component_cases",
     "load_component_cases",
 ]
-
-

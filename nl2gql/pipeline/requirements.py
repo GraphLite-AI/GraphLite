@@ -5,7 +5,6 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple
 import re
 
 from .schema_graph import SchemaGraph
-from .temporal_analysis import TemporalEvidence, TemporalWindowRequirement
 
 
 @dataclass
@@ -18,56 +17,16 @@ class RoleConstraint:
 class RequirementContract:
     required_labels: Set[str] = field(default_factory=set)
     required_edges: Set[Tuple[str, str, str]] = field(default_factory=set)  # (src_label, rel, dst_label)
-    required_properties: Set[Tuple[str, str]] = field(default_factory=set)  # (label, property)
-    required_metrics: List[str] = field(default_factory=list)
     required_order: List[str] = field(default_factory=list)
+    required_outputs: List[str] = field(default_factory=list)
     limit: Optional[int] = None
     # Roles that should be represented by distinct aliases (e.g., ORIGIN vs DESTINATION).
     required_distinct_roles: Set[Tuple[str, str, str, str]] = field(default_factory=set)
-    # Tokens that should appear with an explicit zero/absence constraint (heuristic).
-    required_zero_terms: Set[str] = field(default_factory=set)
-    # Unordered pairs mentioned as "between A and B" that should be covered symmetrically.
-    required_bidirectional_values: Set[Tuple[str, str]] = field(default_factory=set)
-    # Normalized filter tokens the NL explicitly asked for (keywords, entities).
-    required_filter_terms: Set[str] = field(default_factory=set)
-    # Preferred (soft) filter tokens inferred from intent; OK to drop if needed.
-    preferred_filter_terms: Set[str] = field(default_factory=set)
-    # Numeric literals the NL uses in constraints (e.g., thresholds, limits).
-    required_numeric_literals: Set[str] = field(default_factory=set)
-    # Preferred numeric literals inferred from intent; OK to drop if needed.
-    preferred_numeric_literals: Set[str] = field(default_factory=set)
-    # Numeric comparisons extracted from filters: (literal, comparator token/op).
-    required_numeric_comparisons: Set[Tuple[str, str]] = field(default_factory=set)
     # Semantic roles (tagged) that should map to dedicated aliases with optional distinctness.
     role_constraints: Dict[str, RoleConstraint] = field(default_factory=dict)
-    # Structured temporal windows inferred from NL filters.
-    required_temporal_windows: List[TemporalWindowRequirement] = field(default_factory=list)
-
-
-class SemanticEvidence:
-    """Aggregator for semantic analyzers (temporal, distance, etc.)."""
-
-    def __init__(self, ir, rendered: str):  # ir retained for future providers
-        self.providers: Dict[str, object] = {}
-        self.token_index: Dict[str, Set[str]] = {}
-        self._register("temporal", TemporalEvidence.from_rendered(rendered))
-
-    def _register(self, name: str, provider: Optional[object]) -> None:
-        if not provider:
-            return
-        self.providers[name] = provider
-        tokens = getattr(provider, "tokens", None)
-        if isinstance(tokens, set):
-            for token in tokens:
-                lowered = token.lower()
-                self.token_index.setdefault(lowered, set()).add(name)
-
-    def covers_token(self, token: str) -> bool:
-        lowered = token.lower()
-        return lowered in self.token_index
-
-    def provider(self, name: str) -> Optional[object]:
-        return self.providers.get(name)
+    # Concrete alias bindings resolved during enforcement (role -> alias).
+    role_aliases: Dict[str, str] = field(default_factory=dict)
+    role_distinct_filters: Set[Tuple[str, str]] = field(default_factory=set)
 
 
 def _canonicalize_function_name(name: str) -> str:
@@ -104,17 +63,10 @@ def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementCon
 
     # Token sets for grounding: only tokens present in NL or schema become "hard" constraints.
     lowered_nl = pre.normalized_nl.lower() if hasattr(pre, "normalized_nl") else nl.lower()
-    nl_tokens = set(re.findall(r"[a-z0-9_]+", lowered_nl))
-    schema_tokens: Set[str] = set()
-    for lbl, node in graph.nodes.items():
-        schema_tokens.add(lbl.lower())
-        schema_tokens.update(prop.lower() for prop in node.properties)
-    schema_tokens.update(edge.rel.lower() for edge in graph.edges)
 
     links = guidance.links or {}
     node_links = links.get("node_links") or []
     rel_links = links.get("rel_links") or []
-    prop_links = links.get("property_links") or []
     canonical_aliases = links.get("canonical_aliases") or {}
 
     role_constraints: Dict[str, RoleConstraint] = {}
@@ -129,21 +81,6 @@ def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementCon
         if label:
             if role_name not in roles_by_label.get(label, []):
                 roles_by_label.setdefault(label, []).append(role_name)
-
-    # Heuristic detection of "zero/no X" asks in NL to require explicit zero-count handling.
-    for match in re.finditer(r"\b(no|zero|without)\s+([a-z0-9_]+)\b", lowered_nl):
-        term = match.group(2).rstrip("s")  # normalize simple plurals like "comments"
-        if term:
-            contract.required_zero_terms.add(term)
-            contract.required_filter_terms.add(term)
-
-    # Heuristic detection of "between A and B" phrasing to require bidirectional coverage.
-    for match in re.finditer(r"\bbetween\s+([a-z0-9_' -]+?)\s+and\s+([a-z0-9_' -]+)\b", lowered_nl):
-        left = match.group(1).strip(" '")
-        right = match.group(2).strip(" '")
-        if left and right and left != right:
-            pair = tuple(sorted([left, right]))
-            contract.required_bidirectional_values.add(pair)  # type: ignore[arg-type]
 
     alias_to_label: Dict[str, str] = {}
     for nl in node_links:
@@ -167,12 +104,6 @@ def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementCon
         if left_label and right_label and graph.edge_exists(left_label, rel, right_label):
             contract.required_edges.add((left_label, rel, right_label))
 
-    for pl in prop_links:
-        alias, prop = pl.get("alias"), pl.get("property")
-        label = alias_to_label.get(alias)
-        if label and prop and graph.has_property(label, prop):
-            contract.required_properties.add((label, prop))
-
     # Detect NL hints that imply distinct roles for the same label (e.g., "different city").
     distinct_tokens = ("different", "other", "another", "separate", "elsewhere")
     distinct_labels: Set[str] = set()
@@ -193,49 +124,14 @@ def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementCon
         _register_role(alt_role, label)
 
     frame = guidance.frame or {}
-    metrics = frame.get("metrics") or []
+    targets = frame.get("targets") or []
     order_by = frame.get("order_by") or []
     limit = frame.get("limit")
 
-    contract.required_metrics = [_canonicalize_expr(str(m).strip()) for m in metrics if str(m).strip()]
+    contract.required_outputs = [str(t).strip() for t in targets if str(t).strip()]
     contract.required_order = [_canonicalize_expr(str(o).strip()) for o in order_by if str(o).strip()]
     if isinstance(limit, int) and limit > 0:
         contract.limit = limit
-
-    # Harvest filter terms and numeric literals from the intent frame filters.
-    filters = frame.get("filters") or []
-    for flt in filters:
-        text = str(flt or "").lower()
-        # Tokens: keep moderately long keywords to reduce false positives.
-        for token in re.findall(r"[a-z0-9_]+", text):
-            if token.isdigit():
-                if token in nl_tokens:
-                    contract.required_numeric_literals.add(token)
-                else:
-                    contract.preferred_numeric_literals.add(token)
-            elif len(token) >= 4:
-                if token in nl_tokens or token in schema_tokens:
-                    contract.required_filter_terms.add(token)
-                else:
-                    contract.preferred_filter_terms.add(token)
-        # Numeric literals that may include decimals.
-        for num in re.findall(r"\b\d+(?:\.\d+)?\b", text):
-            if num in nl_tokens:
-                contract.required_numeric_literals.add(num)
-            else:
-                contract.preferred_numeric_literals.add(num)
-        # Symbolic comparisons (>, >=, <, <=, =).
-        for op, num in re.findall(r"(>=|<=|>|<|=)\s*(\d+(?:\.\d+)?)", text):
-            contract.required_numeric_comparisons.add((num, op))
-        # Textual comparisons.
-        for num in re.findall(r"(?:at least|no less than|minimum of)\s+(\d+(?:\.\d+)?)", text):
-            contract.required_numeric_comparisons.add((num, "at least"))
-        for num in re.findall(r"(?:more than|over|above|exceeds?)\s+(\d+(?:\.\d+)?)", text):
-            contract.required_numeric_comparisons.add((num, "more than"))
-        for num in re.findall(r"(?:less than|under|below|fewer than)\s+(\d+(?:\.\d+)?)", text):
-            contract.required_numeric_comparisons.add((num, "less than"))
-        for num in re.findall(r"(?:at most|no more than|max(?:imum)? of)\s+(\d+(?:\.\d+)?)", text):
-            contract.required_numeric_comparisons.add((num, "at most"))
 
     # Populate role constraints and distinctness expectations.
     for label, roles in roles_by_label.items():
@@ -272,40 +168,17 @@ def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementCon
     return contract
 
 
-def _has_aggregate(tokens: Iterable[str]) -> bool:
-    agg_funcs = ("count(", "sum(", "avg(", "average(", "min(", "max(", "collect(")
-    return any(
-        ("distinct" in t.lower())
-        or any(func in t.lower() for func in agg_funcs)
-        for t in tokens
-    )
-
-
-def _has_ratio(tokens: Iterable[str]) -> bool:
-    return any("/" in t or "ratio" in t.lower() or "rate" in t.lower() or "share" in t.lower() for t in tokens)
-
-
 def coverage_violations(contract: RequirementContract, ir, rendered: str) -> List[str]:
-    """Check if IR/rendered query satisfies structural and metric expectations."""
+    """Check if IR/rendered query satisfies structural expectations."""
+    del rendered
     errors: List[str] = []
     if not ir:
         return ["IR missing"]
-    semantic = SemanticEvidence(ir, rendered)
-    rendered_lower = rendered.lower()
-    expr_fragments = (
-        ir.with_items
-        + ir.with_filters
-        + [r.expr for r in ir.returns]
-        + [o.expr for o in ir.order_by]
-    )
-    expr_blob_lower = " ".join(expr_fragments).lower()
-    expr_blob_lower = f"{expr_blob_lower} {rendered_lower}".strip()
 
     label_by_alias: Dict[str, str] = {a: n.label for a, n in ir.nodes.items() if n.label}
     alias_def_pattern = re.compile(r"(.+?)\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)$", re.IGNORECASE)
 
     def _alias_sources() -> Dict[str, str]:
-        """Deterministic map: alias -> defining expression text (lowered, no backticks)."""
         out: Dict[str, str] = {}
         for item in ir.with_items:
             match = alias_def_pattern.match(item.strip())
@@ -318,7 +191,6 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
         return out
 
     def _canonicalize_funcs(expr: str) -> str:
-        """Normalize function names to lowercase with synonym mapping."""
         def _normalize_func(match: re.Match) -> str:
             func = _canonicalize_function_name(match.group("func"))
             return f"{func}("
@@ -326,9 +198,7 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
         return re.sub(r"(?P<func>[A-Za-z_][A-Za-z0-9_]*)\s*\(", _normalize_func, expr)
 
     def _normalize(expr: str, alias_sources: Dict[str, str]) -> str:
-        """Expand aliases once, then normalize (lower, collapse ws, alias→label)."""
         expr = expr.replace("`", "").strip()
-        # Expand whole-expression aliases transitively (defensive depth cap).
         for _ in range(5):
             src = alias_sources.get(expr.lower())
             if not src:
@@ -336,6 +206,7 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
             expr = src.strip()
         expr = expr.lower()
         expr = re.sub(r"\bdistinct\s+", "", expr)
+
         def _swap_alias_prop(match: re.Match) -> str:
             alias = match.group("alias")
             prop = match.group("prop")
@@ -398,82 +269,32 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
                         )
                         break
 
-    # Bidirectional value coverage: ensure both sides of a "between A and B" mention appear.
-    if contract.required_bidirectional_values:
-        for left, right in contract.required_bidirectional_values:
-            if left not in rendered_lower or right not in rendered_lower:
-                errors.append(f"missing symmetric coverage for values '{left}' and '{right}'")
-
-    # Filter token coverage: enforce that salient filter terms and literals survive generation.
-    if contract.required_filter_terms:
-        for term in contract.required_filter_terms:
-            lowered = term.lower()
-            if lowered not in rendered_lower and not semantic.covers_token(lowered):
-                errors.append(f"missing required filter term '{term}'")
-    if contract.required_numeric_literals:
-        for literal in contract.required_numeric_literals:
-            if literal not in rendered_lower:
-                errors.append(f"missing required numeric literal '{literal}'")
-    if contract.required_numeric_comparisons:
-        for literal, comparator in contract.required_numeric_comparisons:
-            missing = False
-            if literal not in rendered_lower:
-                missing = True
-            else:
-                if comparator in {">", "<", ">=", "<=", "="}:
-                    if comparator not in rendered:
-                        missing = True
-                else:
-                    if comparator.lower() not in rendered_lower:
-                        missing = True
-            if missing:
-                errors.append(f"missing comparator '{comparator}' for literal '{literal}'")
-
-    # Zero/absence constraints: require explicit zero-handling when the NL indicated "no/zero X".
-    if contract.required_zero_terms:
-        for term in contract.required_zero_terms:
-            if term not in expr_blob_lower:
-                errors.append(f"missing explicit zero-handling for term '{term}'")
+    if contract.role_distinct_filters:
+        present_pairs: Set[Tuple[str, str]] = set()
+        for flt in ir.filters:
+            if flt.op != "<>":
                 continue
-            if not re.search(
-                rf"(=\s*0|<=\s*0|\bcount\([^)]*{re.escape(term)}[^)]*\)\s*=\s*0|not\s+exists)",
-                expr_blob_lower,
-            ):
-                errors.append(f"term '{term}' lacks zero/absence constraint")
+            other_alias = None
+            if isinstance(flt.value, dict):
+                other_alias = flt.value.get("ref_alias")
+            if not other_alias:
+                continue
+            pair = tuple(sorted((flt.alias, other_alias)))
+            present_pairs.add(pair)
+        for pair in contract.role_distinct_filters:
+            if pair not in present_pairs:
+                errors.append(f"missing distinct filter between aliases {pair[0]} and {pair[1]}")
 
-    if contract.required_temporal_windows:
-        temporal_provider = semantic.provider("temporal")
-        if isinstance(temporal_provider, TemporalEvidence):
-            for requirement in contract.required_temporal_windows:
-                if not temporal_provider.satisfies(requirement):
-                    errors.append(f"missing temporal constraint: {requirement.describe()}")
-        else:
-            errors.append("temporal analyzer unavailable")
-
-    # Property coverage
-    def _exprs_with_props() -> List[str]:
-        exprs: List[str] = []
-        exprs.extend([f"{f.alias}.{f.prop}" for f in ir.filters])
-        exprs.extend([r.expr for r in ir.returns])
-        exprs.extend(ir.with_items)
-        exprs.extend(ir.with_filters)
-        return exprs
-
-    expr_blob = " ".join(_exprs_with_props())
-    for (label, prop) in contract.required_properties:
-        if f".{prop}" not in expr_blob:
-            errors.append(f"missing required property {label}.{prop}")
-
-    # Metric coverage
-    if contract.required_metrics:
-        tokens = ir.with_items + [r.expr for r in ir.returns]
-        if not _has_aggregate(tokens):
-            errors.append("required metrics present but no aggregates defined")
-        ratio_needed = any(
-            any(term in m.lower() for term in ["rate", "share", "ratio", "percent", "%"]) for m in contract.required_metrics
-        )
-        if ratio_needed and not _has_ratio(tokens):
-            errors.append("ratio/rate metric expected but no ratio-like expression found")
+    # Output coverage: ensure required outputs are returned.
+    if contract.required_outputs:
+        alias_sources = _alias_sources()
+        normalized_returns = {_normalize(r.expr, alias_sources) for r in ir.returns}
+        for expected in contract.required_outputs:
+            expected = str(expected).strip()
+            if not expected:
+                continue
+            if _normalize(expected, alias_sources) not in normalized_returns:
+                errors.append(f"missing required output {expected.lower()}")
 
     # Order coverage
     if contract.required_order and not ir.order_by:
@@ -487,18 +308,6 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
             if _normalize(exp_expr, alias_sources) not in normalized_order:
                 errors.append(f"missing required order key {exp_expr.lower()}")
 
-    # Heuristic type sanity: flag aggregates over temporal-looking fields.
-    temporal_suffixes = ("_at", "date", "time")
-    agg_patterns = ("avg(", "sum(")
-
-    def _is_temporal(expr: str) -> bool:
-        lowered = expr.lower()
-        return any(suf in lowered for suf in temporal_suffixes)
-
-    for expr in ir.with_items + [r.expr for r in ir.returns]:
-        if any(pat in expr.lower() for pat in agg_patterns) and _is_temporal(expr):
-            errors.append(f"suspicious aggregate over temporal field: {expr}")
-
     # Limit coverage
     if contract.limit is not None and (ir.limit is None or ir.limit > contract.limit):
         errors.append(f"limit should be <= {contract.limit}")
@@ -506,7 +315,14 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
     return sorted(set(errors))
 
 
-__all__ = ["RequirementContract", "RoleConstraint", "build_contract", "coverage_violations", "contract_view"]
+__all__ = [
+    "RequirementContract",
+    "RoleConstraint",
+    "build_contract",
+    "coverage_violations",
+    "contract_view",
+    "resolve_required_output_forms",
+]
 
 
 def contract_view(contract: RequirementContract) -> Dict[str, object]:
@@ -514,28 +330,10 @@ def contract_view(contract: RequirementContract) -> Dict[str, object]:
     return {
         "required_labels": sorted(contract.required_labels),
         "required_edges": sorted([list(e) for e in contract.required_edges]),
-        "required_properties": sorted([list(p) for p in contract.required_properties]),
-        "required_metrics": contract.required_metrics,
+        "required_outputs": contract.required_outputs,
         "required_order": contract.required_order,
         "limit": contract.limit,
         "required_distinct_roles": sorted([list(r) for r in contract.required_distinct_roles]),
-        "required_zero_terms": sorted(contract.required_zero_terms),
-        "required_bidirectional_values": sorted([list(v) for v in contract.required_bidirectional_values]),
-        "required_filter_terms": sorted(contract.required_filter_terms),
-        "preferred_filter_terms": sorted(contract.preferred_filter_terms),
-        "required_numeric_literals": sorted(contract.required_numeric_literals),
-        "preferred_numeric_literals": sorted(contract.preferred_numeric_literals),
-        "required_numeric_comparisons": sorted([list(c) for c in contract.required_numeric_comparisons]),
-        "required_temporal_windows": [
-            {
-                "direction": tw.direction,
-                "comparator": tw.comparator,
-                "units": sorted(tw.units),
-                "min_magnitude": tw.min_magnitude,
-                "max_magnitude": tw.max_magnitude,
-            }
-            for tw in contract.required_temporal_windows
-        ],
         "role_constraints": {
             role: {
                 "label": rc.label,
@@ -543,4 +341,42 @@ def contract_view(contract: RequirementContract) -> Dict[str, object]:
             }
             for role, rc in sorted(contract.role_constraints.items())
         },
+        "role_aliases": {role: alias for role, alias in sorted(contract.role_aliases.items())},
+        "role_distinct_filters": sorted([list(pair) for pair in contract.role_distinct_filters]),
+    }
+
+
+def resolve_required_output_forms(contract: RequirementContract, ir: Optional["ISOQueryIR"] = None) -> Dict[str, List[str]]:
+    """
+    Provide both the original NL-derived outputs and alias-level equivalents based on
+    resolved role aliases / IR labels so downstream prompts can reference concrete expressions.
+    """
+    label_to_alias: Dict[str, str] = {}
+    for role, alias in (contract.role_aliases or {}).items():
+        rc = (contract.role_constraints or {}).get(role)
+        if rc and rc.label and alias:
+            label_to_alias.setdefault(rc.label, alias)
+
+    if ir:
+        for alias, node in ir.nodes.items():
+            if node.label and alias:
+                label_to_alias.setdefault(node.label, alias)
+
+    alias_forms: List[str] = []
+    canonical_forms: List[str] = []
+
+    for expr in contract.required_outputs:
+        alias_expr = expr
+        for label, alias in label_to_alias.items():
+            pattern_dot = re.compile(rf"(?i)\b{re.escape(label)}\.")
+            alias_expr = pattern_dot.sub(f"{alias}.", alias_expr)
+            pattern_word = re.compile(rf"(?i)\b{re.escape(label)}\b")
+            alias_expr = pattern_word.sub(alias, alias_expr)
+        alias_forms.append(alias_expr)
+        canonical_forms.append(_canonicalize_expr(alias_expr))
+
+    return {
+        "original": list(contract.required_outputs),
+        "alias": alias_forms,
+        "alias_canonical": canonical_forms,
     }

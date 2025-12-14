@@ -120,18 +120,12 @@ def format_timeline(nl_query: str, validation_log: List[Dict[str, Any]], max_att
             reqs = contract_entry.get("requirements", {})
             labels = reqs.get("required_labels", [])
             edges = reqs.get("required_edges", [])
-            props = reqs.get("required_properties", [])
-            metrics = reqs.get("required_metrics", [])
             order = reqs.get("required_order", [])
             limit = reqs.get("limit")
             lines.append(f"│  Required labels: {', '.join(labels)}")
             if edges:
                 edge_strs = [f"{e[0]}-[:{e[1]}]->{e[2]}" for e in edges[:3]]
                 lines.append(f"│  Required edges: {', '.join(edge_strs)}{'...' if len(edges) > 3 else ''}")
-            if props:
-                lines.append(f"│  Required properties: {len(props)} property constraint(s)")
-            if metrics:
-                lines.append(f"│  Required metrics: {len(metrics)} metric(s)")
             if order:
                 lines.append(f"│  Required order: {', '.join(order)}")
             if limit:

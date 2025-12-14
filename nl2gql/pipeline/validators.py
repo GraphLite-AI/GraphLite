@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from .config import DEFAULT_OPENAI_MODEL_FIX
 from .ir import ISOQueryIR
 from .openai_client import chat_complete
+from .requirements import RequirementContract, contract_view, resolve_required_output_forms
 from .schema_graph import SchemaGraph
 
 
@@ -63,21 +64,63 @@ class LogicValidator:
     def __init__(self, model: str = DEFAULT_OPENAI_MODEL_FIX) -> None:
         self.model = model
 
-    def validate(self, nl: str, schema_summary: str, query: str, hints: List[str]) -> Tuple[bool, Optional[str]]:
+    def validate(
+        self,
+        nl: str,
+        schema_summary: Sequence[str] | str,
+        query_or_ir: Union[str, ISOQueryIR],
+        hints: List[str],
+        *,
+        contract: Optional[RequirementContract] = None,
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Validate query semantics.
+
+        Preferred mode (less noisy): pass `query_or_ir` as an `ISOQueryIR` plus the `contract`,
+        so the judge sees the same structured artifact used by other stages.
+
+        Backwards-compatible mode: pass `query_or_ir` as a rendered query string.
+        """
+        schema_text = schema_summary if isinstance(schema_summary, str) else "\n".join(schema_summary)
         hint_text = "\n".join(f"- {h}" for h in hints) if hints else "none"
-        user = (
-            f"SCHEMA SUMMARY:\n{schema_summary}\n\n"
-            f"NATURAL LANGUAGE:\n{nl}\n\n"
-            f"QUERY:\n{query}\n\n"
-            f"STRUCTURAL HINTS (optional):\n{hint_text}\n\n"
-            "Does the query satisfy the request while staying faithful to the natural-language ask?"
-        )
+
+        if isinstance(query_or_ir, ISOQueryIR) and contract is not None:
+            output_forms = resolve_required_output_forms(contract, query_or_ir)
+            payload = {
+                "schema_summary": schema_text,
+                "natural_language": nl,
+                "hints": list(dict.fromkeys([h for h in hints if h])),
+                "contract": contract_view(contract),
+                "role_aliases": getattr(contract, "role_aliases", {}),
+                "required_outputs_original": output_forms["original"],
+                "required_outputs_alias": output_forms["alias"],
+                "required_outputs_canonical": output_forms["alias_canonical"],
+                "ast": query_or_ir.describe(),
+            }
+            user = json.dumps(payload, indent=2)
+            system = (
+                "You judge whether an ISO GQL AST satisfies a natural-language request.\n"
+                "- Use the role_aliases + required_outputs_alias/canonical as authoritative.\n"
+                "- Do not invent extra requirements beyond the request.\n"
+                "- Respond as JSON: {\"result\":\"VALID\"} or {\"result\":\"INVALID\",\"reason\":\"...\"}.\n"
+                "- Never propose a new query.\n"
+            )
+        else:
+            user = (
+                f"SCHEMA SUMMARY:\n{schema_text}\n\n"
+                f"NATURAL LANGUAGE:\n{nl}\n\n"
+                f"QUERY:\n{str(query_or_ir)}\n\n"
+                f"STRUCTURAL HINTS (optional):\n{hint_text}\n\n"
+                "Does the query satisfy the request while staying faithful to the natural-language ask?"
+            )
+            system = self.SYSTEM
+
         # Keep logic gating strict but reduce randomness by using a single
         # low-temperature evaluation with a tighter nucleus sample.
         temps = [0.0]
         verdict, _ = chat_complete(
             self.model,
-            self.SYSTEM,
+            system,
             user,
             temperature=temps[0],
             top_p=0.3,
@@ -109,5 +152,4 @@ class LogicValidator:
 
 
 __all__ = ["SchemaGroundingValidator", "LogicValidator"]
-
 

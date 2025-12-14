@@ -139,19 +139,6 @@ char *graphlite_query(struct GraphLiteDB *db,
                       enum GraphLiteErrorCode *error_out);
 
 /**
- * Parse a GQL query and return the AST as JSON
- *
- * # Arguments
- * * `query` - C string containing the GQL query text (must not be null)
- * * `error_out` - Output parameter for error code (can be null)
- *
- * # Returns
- * * JSON string representing the AST on success (caller must free with `graphlite_free_string`)
- * * null pointer on error
- */
-char *graphlite_parse_query(const char *query, enum GraphLiteErrorCode *error_out);
-
-/**
  * Close a session
  *
  * # Arguments

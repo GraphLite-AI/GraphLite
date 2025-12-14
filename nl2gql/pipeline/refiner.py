@@ -11,11 +11,19 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .config import DEFAULT_OPENAI_MODEL_FIX
 from .generator import CandidateQuery, QueryGenerator
+from .intent_judge import IntentJudge, IntentJudgeResult
 from .intent_linker import IntentLinkGuidance, links_to_hints
 from .ir import IRFilter, IREdge, IRNode, IROrder, IRReturn, ISOQueryIR
 from .openai_client import chat_complete, clean_block
 from .preprocess import PreprocessResult, Preprocessor
-from .requirements import RequirementContract, RoleConstraint, build_contract, contract_view, coverage_violations
+from .requirements import (
+    RequirementContract,
+    RoleConstraint,
+    build_contract,
+    contract_view,
+    coverage_violations,
+    resolve_required_output_forms,
+)
 from .run_logger import RunLogger
 from .runner import GraphLiteRunner, SyntaxResult
 from .schema_graph import SchemaEdge, SchemaGraph
@@ -34,6 +42,9 @@ class ValidationBundle:
     syntax_result: SyntaxResult
     logic_valid: bool
     logic_reason: Optional[str]
+    intent_valid: bool = True
+    intent_reasons: List[str] = field(default_factory=list)
+    intent_missing: List[str] = field(default_factory=list)
     repaired: bool = False
     query_text: str = ""
     fix_applied: bool = False
@@ -55,6 +66,7 @@ class Refiner:
         generator: QueryGenerator,
         *,
         logic_validator: Optional[LogicValidator] = None,
+        intent_judge: Optional[IntentJudge] = None,
         runner: Optional[GraphLiteRunner] = None,
         db_path: Optional[str] = None,
         max_loops: int = 2,
@@ -62,6 +74,8 @@ class Refiner:
         self.graph = graph
         self.generator = generator
         self.logic_validator = logic_validator or LogicValidator()
+        judge_model = getattr(self.logic_validator, "model", DEFAULT_OPENAI_MODEL_FIX)
+        self.intent_judge = intent_judge or IntentJudge(model=judge_model)
         self.runner = runner or GraphLiteRunner(db_path=db_path)
         self.max_loops = max_loops
 
@@ -76,6 +90,8 @@ class Refiner:
     def _enforce_contract_structure(self, ir: ISOQueryIR, contract: RequirementContract) -> None:
         """Add missing nodes/edges/properties required by the contract in a schema-agnostic way."""
         existing_aliases = set(ir.nodes.keys())
+        contract.role_aliases = {}
+        contract.role_distinct_filters = set()
 
         # Track role-tagged expectations to keep aliases distinct when requested.
         role_aliases: Dict[str, str] = {}
@@ -104,6 +120,8 @@ class Refiner:
                 node = ir.nodes.get(alias_existing)
                 if node and rc.label and node.label is None:
                     node.label = rc.label
+                if node:
+                    node.role = role
                 return alias_existing
 
             avoid_aliases = {role_aliases[o] for o in role_distinct.get(role, set()) if o in role_aliases}
@@ -128,10 +146,14 @@ class Refiner:
                 base_seed = preferred_label[:2] if preferred_label else re.sub(r"[^a-z0-9_]", "", preferred_alias.lower())[:2]
                 base = base_seed or "n"
                 alias_candidate = self._fresh_alias(base, existing_aliases | avoid_aliases)
-                ir.nodes[alias_candidate] = IRNode(alias=alias_candidate, label=preferred_label)
+                ir.nodes[alias_candidate] = IRNode(alias=alias_candidate, label=preferred_label, role=role)
                 existing_aliases.add(alias_candidate)
                 if preferred_label:
                     label_to_aliases[preferred_label].append(alias_candidate)
+            else:
+                node = ir.nodes.get(alias_candidate)
+                if node:
+                    node.role = role
 
             role_aliases[role] = alias_candidate
             return alias_candidate
@@ -221,38 +243,9 @@ class Refiner:
                         continue
                     ir.filters.append(IRFilter(alias=alias_a, prop="id", op="<>", value=flt_value))
                     existing_filter_keys.add(key)
-
-        # Ensure required properties appear somewhere (at least in RETURN) to keep them visible.
-        agg_pattern = re.compile(r"\b(count|sum|avg|min|max|collect)\s*\(", re.IGNORECASE)
-        expr_bag = (
-            list(ir.with_items)
-            + list(ir.with_filters)
-            + [r.expr for r in ir.returns]
-            + [o.expr for o in ir.order_by]
-            + [f"{flt.alias}.{flt.prop}" for flt in ir.filters]
-        )
-
-        def _prop_already_used(label: str, prop: str) -> bool:
-            aliases_for_label = label_to_aliases.get(label, [])
-            for expr in expr_bag:
-                for alias in aliases_for_label:
-                    if re.search(rf"\b{re.escape(alias)}\.{re.escape(prop)}\b", expr):
-                        return True
-            return False
-
-        has_agg_context = any(agg_pattern.search(expr) for expr in expr_bag)
-
-        for label, prop in contract.required_properties:
-            if _prop_already_used(label, prop):
-                continue
-            alias = get_alias_for_label(label)
-            expr = f"{alias}.{prop}"
-            # In aggregate-heavy queries, avoid injecting raw properties that would
-            # force an unintended grouping explosion; treat them as optional hints.
-            if has_agg_context:
-                continue
-            ir.returns.append(IRReturn(expr=expr, alias=None))
-            expr_bag.append(expr)
+                    if alias_a and alias_b:
+                        ordered = tuple(sorted((alias_a, alias_b)))
+                        contract.role_distinct_filters.add(ordered)
 
         # Seed ORDER BY when the contract requires it but the query omitted it.
         if contract.required_order and not ir.order_by:
@@ -268,6 +261,11 @@ class Refiner:
         if contract.limit is not None:
             if ir.limit is None or ir.limit > contract.limit:
                 ir.limit = contract.limit
+
+        if contract.role_constraints:
+            contract.role_aliases = {
+                role: alias for role, alias in role_aliases.items() if alias
+            }
 
     def _ensure_grouping(self, ir: ISOQueryIR) -> None:
         """
@@ -599,6 +597,13 @@ class Refiner:
 
     def _prune_returns(self, ir: ISOQueryIR) -> None:
         """Remove return expressions that reference unknown aliases or properties outside the schema."""
+        with_aliases: set[str] = set()
+        alias_def_pattern = re.compile(r"(.+?)\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)$", re.IGNORECASE)
+        for item in ir.with_items or []:
+            match = alias_def_pattern.match(item.strip())
+            if match:
+                with_aliases.add(match.group(2).strip())
+
         pruned: List[IRReturn] = []
         for ret in ir.returns:
             expr = ret.expr.strip()
@@ -606,6 +611,10 @@ class Refiner:
                 continue
             # Allow aggregate expressions without deep checks.
             if re.search(r"\b(count|sum|avg|min|max|collect)\s*\(", expr, re.IGNORECASE):
+                pruned.append(ret)
+                continue
+            # Keep aliases defined in WITH (they are valid projection identifiers).
+            if expr in with_aliases:
                 pruned.append(ret)
                 continue
             alias_match = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)", expr)
@@ -622,6 +631,46 @@ class Refiner:
                 pruned.append(ret)
         if pruned:
             ir.returns = pruned
+
+    def _ensure_required_outputs(self, ir: ISOQueryIR, contract: RequirementContract) -> None:
+        """
+        Ensure the IR returns every contract-required output, even when the generator/repair
+        uses intermediate WITH aliases or drops projections.
+        """
+
+        forms = resolve_required_output_forms(contract, ir=ir)
+        required_exprs = [str(e).strip() for e in (forms.get("alias") or []) if str(e).strip()]
+        if not required_exprs:
+            return
+
+        alias_def_pattern = re.compile(r"(.+?)\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)$", re.IGNORECASE)
+        alias_sources: Dict[str, str] = {}
+        for item in ir.with_items or []:
+            match = alias_def_pattern.match(item.strip())
+            if match:
+                alias_sources[match.group(2).strip().lower()] = match.group(1).strip()
+        for ret in ir.returns:
+            if ret.alias:
+                alias_sources[ret.alias.strip().lower()] = ret.expr.strip()
+
+        def _normalize(expr: str) -> str:
+            expr = expr.replace("`", "").strip()
+            for _ in range(5):
+                src = alias_sources.get(expr.lower())
+                if not src:
+                    break
+                expr = src.strip()
+            expr = expr.lower()
+            expr = re.sub(r"\bdistinct\s+", "", expr)
+            expr = re.sub(r"\s+", " ", expr).strip()
+            return expr
+
+        have = {_normalize(r.expr) for r in ir.returns if r.expr and r.expr.strip()}
+        for required in required_exprs:
+            if _normalize(required) in have:
+                continue
+            ir.returns.append(IRReturn(expr=required))
+            have.add(_normalize(required))
 
     def _ensure_order_fields(self, ir: ISOQueryIR) -> None:
         if not ir.order_by:
@@ -709,7 +758,7 @@ class Refiner:
         new_nodes: Dict[str, IRNode] = {}
         for alias, node in ir.nodes.items():
             new_alias = mapping.get(alias, alias)
-            new_nodes[new_alias] = IRNode(alias=new_alias, label=node.label)
+            new_nodes[new_alias] = IRNode(alias=new_alias, label=node.label, role=node.role)
         ir.nodes = new_nodes
 
         for edge in ir.edges:
@@ -762,17 +811,29 @@ class Refiner:
         query: str,
         errors: List[str],
         hints: List[str],
+        ir: Optional[ISOQueryIR] = None,
     ) -> Optional[str]:
         error_text = "- " + "\n- ".join(errors) if errors else "none"
         hint_text = "- " + "\n- ".join(hints) if hints else "none"
         contract_text = json.dumps(contract_view(contract), indent=2)
+        metadata_block = json.dumps(
+            {
+                "required_outputs": resolve_required_output_forms(contract, ir),
+                "role_aliases": contract.role_aliases,
+                "role_distinct_filters": list(sorted(contract.role_distinct_filters)),
+            },
+            indent=2,
+        )
         user = (
             "You are fixing an ISO GQL query so it exactly satisfies the request and schema.\n"
             "Preserve only valid labels/relationships/properties from the schema summary.\n"
-            "Keep aggregates grouped; keep required metrics/order/limits from the contract.\n"
+            "Keep aggregates grouped; keep required order/limits from the contract.\n"
+            "Respect the metadata JSON that accompanies the contract when aligning outputs and aliases.\n"
             "Return ONLY the corrected ISO GQL query, no explanation.\n\n"
             f"NATURAL LANGUAGE:\n{nl}\n\nSCHEMA SUMMARY:\n{schema_summary}\n\n"
-            f"CONTRACT:\n{contract_text}\n\nCURRENT QUERY:\n{query}\n\n"
+            f"CONTRACT:\n{contract_text}\n\n"
+            f"STRUCTURED METADATA:\n{metadata_block}\n\n"
+            f"CURRENT QUERY:\n{query}\n\n"
             f"ISSUES:\n{error_text}\n\nSTRUCTURAL HINTS:\n{hint_text}"
         )
         try:
@@ -843,6 +904,7 @@ class Refiner:
                 self._enforce_contract_structure(ir, contract)
                 self._dedupe_edges(ir)
                 self._prune_returns(ir)
+                self._ensure_required_outputs(ir, contract)
                 self._prune_unconnected_nodes(ir)
                 # Normalize grouping if aggregates + non-aggregates are mixed.
                 self._ensure_grouping(ir)
@@ -856,10 +918,35 @@ class Refiner:
             syntax = self.runner.validate(rendered)
             logic_valid = False
             logic_reason: Optional[str] = None
+            intent_valid = True
+            intent_reasons: List[str] = []
+            intent_missing: List[str] = []
+            schema_summary = pre.filtered_schema.summary_lines()
             if ir:
-                logic_valid, logic_reason = self.logic_validator.validate(
-                    nl, pre.filtered_schema.summary_lines(), rendered, hints
-                )
+                try:
+                    logic_valid, logic_reason = self.logic_validator.validate(
+                        nl, schema_summary, ir, hints, contract=contract
+                    )
+                except TypeError:  # pragma: no cover - compatibility with test stubs
+                    logic_valid, logic_reason = self.logic_validator.validate(nl, schema_summary, rendered, hints)
+                if self.intent_judge:
+                    judge_outcome = self.intent_judge.evaluate(
+                        nl, schema_summary, ir, contract, hints
+                    )
+                    if isinstance(judge_outcome, IntentJudgeResult):
+                        intent_valid = judge_outcome.valid
+                        intent_reasons = judge_outcome.reasons
+                        intent_missing = judge_outcome.missing_requirements
+                    elif isinstance(judge_outcome, tuple):
+                        intent_valid = bool(judge_outcome[0])
+                        if len(judge_outcome) > 1:
+                            payload = judge_outcome[1]
+                            if isinstance(payload, (list, tuple)):
+                                intent_reasons = [str(p) for p in payload if str(p).strip()]
+                            elif payload:
+                                intent_reasons = [str(payload)]
+                    else:
+                        intent_valid = bool(judge_outcome)
             return ValidationBundle(
                 ir=ir,
                 parse_errors=parse_errors,
@@ -869,6 +956,9 @@ class Refiner:
                 syntax_result=syntax,
                 logic_valid=logic_valid,
                 logic_reason=logic_reason,
+                intent_valid=intent_valid,
+                intent_reasons=intent_reasons,
+                intent_missing=intent_missing,
                 repaired=repaired,
                 query_text=rendered,
             )
@@ -881,6 +971,7 @@ class Refiner:
                 + len(bundle.coverage_errors)
                 + (0 if bundle.syntax_result.ok else 1)
                 + (0 if bundle.logic_valid else 1)
+                + (0 if bundle.intent_valid else 1)
             )
 
         def _edge_consistency_hints(ir: Optional[ISOQueryIR]) -> List[str]:
@@ -931,17 +1022,37 @@ class Refiner:
                 })
 
         # STEP 2: LLM fix for remaining non-schema issues (logic, coverage, etc.)
-        remaining_errors = current_bundle.parse_errors + current_bundle.schema_errors + current_bundle.coverage_errors
+        remaining_errors = (
+            current_bundle.parse_errors
+            + current_bundle.schema_errors
+            + current_bundle.coverage_errors
+            + current_bundle.intent_missing
+        )
         edge_hints = _edge_consistency_hints(current_bundle.ir)
-        needs_llm_fix = (remaining_errors or not current_bundle.logic_valid or edge_hints) and current_bundle.ir
+        needs_llm_fix = (
+            remaining_errors
+            or not current_bundle.logic_valid
+            or edge_hints
+            or not current_bundle.intent_valid
+        ) and current_bundle.ir
 
         if needs_llm_fix:
             fix_issues = list(remaining_errors) + edge_hints
             if not current_bundle.logic_valid and current_bundle.logic_reason:
                 fix_issues.append(f"logic: {current_bundle.logic_reason}")
+            if not current_bundle.intent_valid:
+                fix_issues.extend(current_bundle.intent_reasons or [])
+                if not current_bundle.intent_reasons and current_bundle.intent_missing:
+                    fix_issues.extend(current_bundle.intent_missing)
 
             fixed_query = self._llm_fix_query(
-                nl, pre.filtered_schema.summary_lines(), contract, current_bundle.query_text, fix_issues, hints
+                nl,
+                pre.filtered_schema.summary_lines(),
+                contract,
+                current_bundle.query_text,
+                fix_issues,
+                hints,
+                current_bundle.ir,
             )
 
             if fixed_query and fixed_query.strip() and fixed_query.strip() != current_bundle.query_text.strip():
@@ -987,13 +1098,16 @@ class Refiner:
                     parse_errors=post_fix_bundle.parse_errors,
                     structural_errors=post_fix_bundle.structural_errors,
                     schema_errors=post_fix_bundle.schema_errors,
-                    coverage_errors=post_fix_bundle.coverage_errors,
-                    syntax_result=post_fix_bundle.syntax_result,
-                    logic_valid=post_fix_bundle.logic_valid,
-                    logic_reason=post_fix_bundle.logic_reason,
-                    repaired=post_fix_bundle.repaired,
-                    query_text=post_fix_bundle.query_text,
-                    fix_applied=post_fix_bundle.fix_applied,
+                coverage_errors=post_fix_bundle.coverage_errors,
+                syntax_result=post_fix_bundle.syntax_result,
+                logic_valid=post_fix_bundle.logic_valid,
+                logic_reason=post_fix_bundle.logic_reason,
+                intent_valid=post_fix_bundle.intent_valid,
+                intent_reasons=post_fix_bundle.intent_reasons,
+                intent_missing=post_fix_bundle.intent_missing,
+                repaired=post_fix_bundle.repaired,
+                query_text=post_fix_bundle.query_text,
+                fix_applied=post_fix_bundle.fix_applied,
                     fix_details=post_fix_bundle.fix_details,
                     fixes=fixes,
                 )
@@ -1075,7 +1189,14 @@ class Refiner:
                     candidates = self.generator.generate(pre, failures, guidance, contract=contract, trace=gen_trace)
                 else:  # pragma: no cover - compatibility with older stubs
                     candidates = self.generator.generate(pre, failures, guidance)
-                timeline.append({"attempt": attempt, "phase": "generate", "candidates": [c.query for c in candidates]})
+                timeline.append(
+                    {
+                        "attempt": attempt,
+                        "phase": "generate",
+                        "candidates": [c.query for c in candidates],
+                        "candidate_metadata": [getattr(c, "metadata", None) for c in candidates],
+                    }
+                )
                 if not candidates:
                     if trace_dir and gen_trace:
                         attempt_trace = {
@@ -1121,6 +1242,10 @@ class Refiner:
                         "label_hints": label_hints,
                         "generator_prompt": gen_trace.get("prompt"),
                         "generator_raw": gen_trace.get("raw"),
+                        "candidates": [
+                            {"query": c.query, "reason": c.reason, "metadata": getattr(c, "metadata", None)}
+                            for c in candidates
+                        ],
                     }
 
                 if spinner:
@@ -1156,16 +1281,23 @@ class Refiner:
                             "attempt": attempt,
                             "contract": contract_view(contract),
                             "candidate": candidate.query,
+                            "candidate_metadata": getattr(candidate, "metadata", None),
                             "pre_fix_coverage_errors": pre_bundle.coverage_errors,
                             "pre_fix_schema_errors": pre_bundle.schema_errors,
                             "pre_fix_parse_errors": pre_bundle.parse_errors,
                             "pre_fix_logic_valid": pre_bundle.logic_valid,
                             "pre_fix_logic_reason": pre_bundle.logic_reason,
+                            "pre_fix_intent_valid": pre_bundle.intent_valid,
+                            "pre_fix_intent_reasons": pre_bundle.intent_reasons,
+                            "pre_fix_intent_missing": pre_bundle.intent_missing,
                             "post_fix_coverage_errors": post_bundle.coverage_errors,
                             "post_fix_schema_errors": post_bundle.schema_errors,
                             "post_fix_parse_errors": post_bundle.parse_errors,
                             "post_fix_logic_valid": post_bundle.logic_valid,
                             "post_fix_logic_reason": post_bundle.logic_reason,
+                            "post_fix_intent_valid": post_bundle.intent_valid,
+                            "post_fix_intent_reasons": post_bundle.intent_reasons,
+                            "post_fix_intent_missing": post_bundle.intent_missing,
                             "logic_hints": logic_hints,
                             "rendered": post_bundle.query_text,
                             "fix_applied": post_bundle.fix_applied,
@@ -1186,6 +1318,9 @@ class Refiner:
                                 "syntax_error": pre_bundle.syntax_result.error,
                                 "logic_valid": pre_bundle.logic_valid,
                                 "logic_reason": pre_bundle.logic_reason,
+                                "intent_valid": pre_bundle.intent_valid,
+                                "intent_reasons": pre_bundle.intent_reasons,
+                                "intent_missing": pre_bundle.intent_missing,
                                 "repaired": pre_bundle.repaired,
                             },
                             "fixes": fixes,
@@ -1199,6 +1334,9 @@ class Refiner:
                                 "syntax_error": post_bundle.syntax_result.error,
                                 "logic_valid": post_bundle.logic_valid,
                                 "logic_reason": post_bundle.logic_reason,
+                                "intent_valid": post_bundle.intent_valid,
+                                "intent_reasons": post_bundle.intent_reasons,
+                                "intent_missing": post_bundle.intent_missing,
                                 "repaired": post_bundle.repaired,
                                 "fix_applied": post_bundle.fix_applied,
                                 "fix_details": post_bundle.fix_details,
@@ -1222,6 +1360,9 @@ class Refiner:
                                 "pre_fix_syntax_error": pre_bundle.syntax_result.error,
                                 "pre_fix_logic_valid": pre_bundle.logic_valid,
                                 "pre_fix_logic_reason": pre_bundle.logic_reason,
+                                "pre_fix_intent_valid": pre_bundle.intent_valid,
+                                "pre_fix_intent_reasons": pre_bundle.intent_reasons,
+                                "pre_fix_intent_missing": pre_bundle.intent_missing,
                                 "fixes": fixes,
                                 "post_fix_rendered": post_bundle.query_text,
                                 "post_fix_parse_errors": post_bundle.parse_errors,
@@ -1232,6 +1373,9 @@ class Refiner:
                                 "post_fix_syntax_error": post_bundle.syntax_result.error,
                                 "post_fix_logic_valid": post_bundle.logic_valid,
                                 "post_fix_logic_reason": post_bundle.logic_reason,
+                                "post_fix_intent_valid": post_bundle.intent_valid,
+                                "post_fix_intent_reasons": post_bundle.intent_reasons,
+                                "post_fix_intent_missing": post_bundle.intent_missing,
                                 "fix_applied": post_bundle.fix_applied,
                                 "fix_details": post_bundle.fix_details,
                             }
@@ -1250,6 +1394,7 @@ class Refiner:
                         and not bundle.coverage_errors
                         and syntax_ok
                         and logic_ok
+                        and bundle.intent_valid
                     )
                     if all_clear:
                         if spinner:
@@ -1289,6 +1434,7 @@ class Refiner:
                         + len(bundle.coverage_errors)
                         + (0 if bundle.syntax_result.ok else 1)
                         + (0 if bundle.logic_valid else 1)
+                        + (0 if bundle.intent_valid else 1)
                     )
                     if best_score is None or score < best_score:
                         if (
@@ -1297,6 +1443,7 @@ class Refiner:
                             and not bundle.schema_errors
                             and not bundle.coverage_errors
                             and bundle.syntax_result.ok
+                            and bundle.intent_valid
                         ):
                             best_score = score
                             best_query = bundle.query_text or candidate.query
@@ -1308,6 +1455,11 @@ class Refiner:
                         combined_reasons.append(f"syntax: {bundle.syntax_result.error}")
                     if not bundle.logic_valid and bundle.logic_reason:
                         combined_reasons.append(f"logic: {bundle.logic_reason}")
+                    if not bundle.intent_valid:
+                        if bundle.intent_reasons:
+                            combined_reasons.extend(f"intent: {reason}" for reason in bundle.intent_reasons)
+                        elif bundle.intent_missing:
+                            combined_reasons.extend(f"intent missing: {miss}" for miss in bundle.intent_missing)
                     if not combined_reasons:
                         combined_reasons.append("unspecified failure")
                     failures.append("; ".join(sorted(set(combined_reasons))))
@@ -1358,4 +1510,3 @@ class Refiner:
 
 
 __all__ = ["Refiner", "ValidationBundle", "PipelineFailure"]
-

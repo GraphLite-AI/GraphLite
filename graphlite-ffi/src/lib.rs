@@ -297,60 +297,6 @@ pub extern "C" fn graphlite_query(
 
 /// Parse a GQL query and return the AST as JSON
 ///
-/// # Arguments
-/// * `query` - C string containing the GQL query text (must not be null)
-/// * `error_out` - Output parameter for error code (can be null)
-///
-/// # Returns
-/// * JSON string representing the AST on success (caller must free with `graphlite_free_string`)
-/// * null pointer on error
-#[no_mangle]
-pub extern "C" fn graphlite_parse_query(
-    query: *const c_char,
-    error_out: *mut GraphLiteErrorCode,
-) -> *mut c_char {
-    let result = panic::catch_unwind(AssertUnwindSafe(|| {
-        if query.is_null() {
-            set_error(error_out, GraphLiteErrorCode::NullPointer);
-            return ptr::null_mut();
-        }
-
-        let c_str = unsafe { CStr::from_ptr(query) };
-        let query_str = match c_str.to_str() {
-            Ok(s) => s,
-            Err(_) => {
-                set_error(error_out, GraphLiteErrorCode::InvalidUtf8);
-                return ptr::null_mut();
-            }
-        };
-
-        match graphlite::parse_query_json(query_str) {
-            Ok(json) => match CString::new(json) {
-                Ok(c_string) => {
-                    set_error(error_out, GraphLiteErrorCode::Success);
-                    c_string.into_raw()
-                }
-                Err(_) => {
-                    set_error(error_out, GraphLiteErrorCode::InvalidUtf8);
-                    ptr::null_mut()
-                }
-            },
-            Err(_) => {
-                set_error(error_out, GraphLiteErrorCode::QueryError);
-                ptr::null_mut()
-            }
-        }
-    }));
-
-    match result {
-        Ok(ptr) => ptr,
-        Err(_) => {
-            set_error(error_out, GraphLiteErrorCode::PanicError);
-            ptr::null_mut()
-        }
-    }
-}
-
 /// Close a session
 ///
 /// # Arguments

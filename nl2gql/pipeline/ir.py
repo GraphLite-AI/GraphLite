@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 class IRNode:
     alias: str
     label: Optional[str] = None
+    role: Optional[str] = None
 
 
 @dataclass
@@ -580,6 +581,61 @@ class ISOQueryIR:
         if limit_clause:
             parts.append(limit_clause)
         return "\n".join(parts)
+
+    def describe(self) -> Dict[str, Any]:
+        """Return a JSON-safe summary of the current IR structure."""
+
+        def _format_value(value: Any) -> Any:
+            if isinstance(value, dict):
+                ref_alias = value.get("ref_alias")
+                ref_prop = value.get("ref_property")
+                if ref_alias and ref_prop:
+                    return {"type": "property_ref", "alias": ref_alias, "property": ref_prop}
+                return {str(k): _format_value(v) for k, v in value.items()}
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                return value
+            if isinstance(value, (list, tuple)):
+                return [_format_value(v) for v in value]
+            return str(value)
+
+        return {
+            "nodes": [
+                {"alias": alias, "label": node.label, "role": node.role}
+                for alias, node in sorted(self.nodes.items())
+            ],
+            "edges": [
+                {
+                    "left_alias": edge.left_alias,
+                    "right_alias": edge.right_alias,
+                    "relationship": edge.rel,
+                    "left_label": (self.nodes.get(edge.left_alias) or IRNode(alias=edge.left_alias)).label,
+                    "right_label": (self.nodes.get(edge.right_alias) or IRNode(alias=edge.right_alias)).label,
+                }
+                for edge in self.edges
+            ],
+            "filters": [
+                {
+                    "alias": flt.alias,
+                    "property": flt.prop,
+                    "op": flt.op,
+                    "value": _format_value(flt.value),
+                }
+                for flt in self.filters
+            ],
+            "with_items": list(self.with_items),
+            "with_filters": list(self.with_filters),
+            "having_filters": list(self.having_filters),
+            "group_by": list(self.group_by),
+            "returns": [
+                {"expr": ret.expr, "alias": ret.alias}
+                for ret in self.returns
+            ],
+            "order_by": [
+                {"expr": order.expr, "direction": order.direction}
+                for order in self.order_by
+            ],
+            "limit": self.limit,
+        }
 
     def validate_bindings(self) -> List[str]:
         errors: List[str] = []

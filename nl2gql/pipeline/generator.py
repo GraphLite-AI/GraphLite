@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
-from typing import List, Optional, Set, Tuple
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Set, Tuple
 
 from .config import DEFAULT_OPENAI_MODEL_GEN
 from .intent_linker import IntentLinkGuidance, links_to_hints
@@ -16,6 +16,7 @@ class CandidateQuery:
     query: str
     reason: Optional[str] = None
     usage: Optional[dict] = None
+    metadata: Optional[dict] = None
 
 
 @dataclass
@@ -29,6 +30,7 @@ class Plan:
     order_by: List[str]
     limit: Optional[int]
     reason: Optional[str]
+    metadata: Dict[str, object] = field(default_factory=dict)
 
     @staticmethod
     def _collect_aliases(match_lines: List[str]) -> Set[str]:
@@ -52,7 +54,7 @@ class Plan:
         return aliases
 
     @classmethod
-    def from_raw(cls, data: dict) -> Optional["Plan"]:
+    def from_raw(cls, data: dict, contract: Optional[RequirementContract] = None) -> Optional["Plan"]:
         if not isinstance(data, dict):
             return None
 
@@ -133,7 +135,7 @@ class Plan:
         if not _all_aliases_known(returns + order_by + with_items + group_by + where):
             return None
 
-        return cls(
+        plan = cls(
             match=match,
             where=where,
             having=having,
@@ -144,6 +146,147 @@ class Plan:
             limit=limit,
             reason=reason if isinstance(reason, str) else None,
         )
+        plan._attach_contract(contract)
+        return plan
+
+    @staticmethod
+    def _alias_labels(match_lines: List[str]) -> Dict[str, str]:
+        pattern = re.compile(r"\(([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)")
+        labels: Dict[str, str] = {}
+        for line in match_lines:
+            for alias, label in pattern.findall(line):
+                labels[alias] = label
+        return labels
+
+    @staticmethod
+    def _bind_roles(contract: RequirementContract, alias_labels: Dict[str, str]) -> Dict[str, str]:
+        bindings: Dict[str, str] = {}
+        used_aliases: Set[str] = set()
+        role_constraints = contract.role_constraints or {}
+        for role, rc in role_constraints.items():
+            if not rc or not rc.label:
+                continue
+
+            chosen: Optional[str] = None
+            if alias_labels.get(role) == rc.label:
+                chosen = role
+            else:
+                for alias, label in alias_labels.items():
+                    if label == rc.label and alias not in used_aliases:
+                        chosen = alias
+                        break
+
+            if chosen:
+                bindings[role] = chosen
+                used_aliases.add(chosen)
+        return bindings
+
+    @staticmethod
+    def _aliasize_expression(expr: str, label_to_alias: Dict[str, str]) -> str:
+        result = expr
+        for label, alias in label_to_alias.items():
+            pattern_dot = re.compile(rf"(?i)\b{re.escape(label)}\.")
+            result = pattern_dot.sub(f"{alias}.", result)
+            pattern_word = re.compile(rf"(?i)\b{re.escape(label)}\b")
+            result = pattern_word.sub(alias, result)
+        return result
+
+    @classmethod
+    def _required_alias_outputs(
+        cls, contract: RequirementContract, role_bindings: Dict[str, str]
+    ) -> List[str]:
+        if not contract.required_outputs:
+            return []
+        label_to_alias: Dict[str, str] = {}
+        role_constraints = contract.role_constraints or {}
+        for role, alias in role_bindings.items():
+            rc = role_constraints.get(role)
+            if rc and rc.label and alias:
+                label_to_alias.setdefault(rc.label, alias)
+        outputs: List[str] = []
+        for expr in contract.required_outputs:
+            expr = str(expr).strip()
+            if not expr:
+                continue
+            outputs.append(cls._aliasize_expression(expr, label_to_alias))
+        return outputs
+
+    def _alias_sources(self) -> Dict[str, str]:
+        alias_sources: Dict[str, str] = {}
+        alias_def_pattern = re.compile(r"(.+?)\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)$", re.IGNORECASE)
+        for item in list(self.with_items) + list(self.returns):
+            match = alias_def_pattern.match(item.strip())
+            if not match:
+                continue
+            expr, alias = match.group(1).strip(), match.group(2).strip()
+            alias_sources[alias.lower()] = expr
+        return alias_sources
+
+    @staticmethod
+    def _expr_from_projected(expr: str) -> str:
+        parts = re.split(r"\s+AS\s+", expr, flags=re.IGNORECASE)
+        return parts[0].strip() if parts else expr.strip()
+
+    @staticmethod
+    def _normalize_expr(expr: str) -> str:
+        return re.sub(r"\s+", " ", expr).strip().lower()
+
+    @staticmethod
+    def _bare_identifier(expr: str) -> Optional[str]:
+        expr = expr.strip()
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", expr):
+            return expr
+        return None
+
+    @staticmethod
+    def _default_alias_name(expr: str, existing: Set[str]) -> str:
+        base = re.sub(r"[^A-Za-z0-9]+", "_", expr).strip("_").lower() or "alias"
+        candidate = base
+        counter = 2
+        while candidate in existing:
+            candidate = f"{base}_{counter}"
+            counter += 1
+        existing.add(candidate)
+        return candidate
+
+    def _ensure_required_outputs(self, required_outputs: List[str], alias_sources: Dict[str, str]) -> None:
+        if not required_outputs:
+            return
+
+        normalized_returns = {self._normalize_expr(self._expr_from_projected(ret)) for ret in self.returns}
+        bare_returns = {self._bare_identifier(ret).lower() for ret in self.returns if self._bare_identifier(ret)}
+        alias_expr_map = {alias: self._normalize_expr(expr) for alias, expr in alias_sources.items()}
+        reserved_aliases: Set[str] = set(alias_sources.keys()) | set(bare_returns)
+
+        for expr in required_outputs:
+            normalized = self._normalize_expr(expr)
+            if normalized in normalized_returns:
+                continue
+            satisfied = False
+            for alias, alias_expr in alias_expr_map.items():
+                if alias_expr == normalized and alias in bare_returns:
+                    satisfied = True
+                    break
+            if satisfied:
+                continue
+            alias_name = self._default_alias_name(expr, reserved_aliases)
+            self.returns.append(f"{expr} AS {alias_name}")
+            normalized_returns.add(normalized)
+
+    def _attach_contract(self, contract: Optional[RequirementContract]) -> None:
+        if not contract:
+            return
+        alias_labels = self._alias_labels(self.match)
+        role_bindings = self._bind_roles(contract, alias_labels)
+        required_alias_outputs = self._required_alias_outputs(contract, role_bindings)
+        alias_sources = self._alias_sources()
+        self.metadata = {
+            "contract": contract_view(contract),
+            "alias_labels": alias_labels,
+            "role_bindings": role_bindings,
+            "required_alias_outputs": required_alias_outputs,
+        }
+        self._ensure_required_outputs(required_alias_outputs, alias_sources)
 
     def render(self) -> str:
         lines: List[str] = []
@@ -166,6 +309,7 @@ class Plan:
         explicit_with = list(self.with_items)
         group_fill: List[str] = []
         known_aliases: set[str] = set()
+        match_aliases = self._collect_aliases(deduped_match)
 
         def _alias_of(expr: str) -> Optional[str]:
             parts = re.split(r"\s+AS\s+", expr, flags=re.IGNORECASE)
@@ -186,6 +330,19 @@ class Plan:
             group_fill.append(grp)
 
         merged_with = group_fill + explicit_with
+        defined_in_with = {a for a in (_alias_of(item) for item in merged_with) if a}
+
+        def _keep_with_item(item: str) -> bool:
+            bare = self._bare_identifier(item)
+            if not bare:
+                return True
+            if bare in match_aliases:
+                return True
+            if bare in defined_in_with:
+                return False
+            return False
+
+        merged_with = [item for item in merged_with if _keep_with_item(item)]
 
         seen_parts: set[str] = set()
         seen_aliases: set[str] = set()
@@ -325,9 +482,9 @@ Emit JSON:
         data = safe_json_loads(raw) or {}
 
         candidates: List[CandidateQuery] = []
-        plan = Plan.from_raw(data) if isinstance(data, dict) else None
+        plan = Plan.from_raw(data, contract) if isinstance(data, dict) else None
         if plan:
-            candidates.append(CandidateQuery(query=plan.render(), reason=plan.reason, usage=usage))
+            candidates.append(CandidateQuery(query=plan.render(), reason=plan.reason, usage=usage, metadata=plan.metadata))
         elif raw.strip():
             # As a last resort, treat cleaned text as query (kept for debuggability).
             candidates.append(CandidateQuery(query=clean_block(raw), usage=usage))
@@ -335,5 +492,3 @@ Emit JSON:
 
 
 __all__ = ["QueryGenerator", "CandidateQuery"]
-
-

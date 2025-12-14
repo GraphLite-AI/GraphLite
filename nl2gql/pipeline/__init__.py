@@ -2,6 +2,7 @@ from .pipeline import NL2GQLPipeline
 from .schema_graph import SchemaGraph, FilteredSchema
 from .preprocess import PreprocessResult, Preprocessor
 from .intent_linker import IntentLinkGuidance
+from .intent_judge import IntentJudge
 from .ir import IRFilter, IREdge, IRNode, IROrder, IRReturn, ISOQueryIR
 from .generator import CandidateQuery
 from .validators import SchemaGroundingValidator, LogicValidator
@@ -16,6 +17,7 @@ __all__ = [
     "PreprocessResult",
     "Preprocessor",
     "IntentLinkGuidance",
+    "IntentJudge",
     "IRFilter",
     "IREdge",
     "IRNode",
@@ -31,5 +33,4 @@ __all__ = [
     "PipelineFailure",
     "RunLogger",
 ]
-
 
