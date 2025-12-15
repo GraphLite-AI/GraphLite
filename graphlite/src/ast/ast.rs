@@ -268,6 +268,7 @@ pub struct UnwindStatement {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MatchClause {
     pub patterns: Vec<PathPattern>,
+    pub optional: bool, // true for OPTIONAL MATCH, false for regular MATCH
     pub location: Location,
 }
 

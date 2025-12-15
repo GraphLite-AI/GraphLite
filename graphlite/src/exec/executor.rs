@@ -3150,6 +3150,7 @@ impl QueryExecutor {
                     })],
                     location: crate::ast::Location::default(),
                 }],
+                optional: false, // Not an optional match
                 location: crate::ast::Location::default(),
             }
         });

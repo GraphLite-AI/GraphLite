@@ -1145,19 +1145,21 @@ fn yield_item(tokens: &[Token]) -> IResult<&[Token], YieldItem> {
     )(tokens)
 }
 
-/// Parse MATCH clause
+/// Parse MATCH clause (with optional OPTIONAL keyword)
 fn match_clause(tokens: &[Token]) -> IResult<&[Token], MatchClause> {
     map(
         tuple((
+            opt(expect_token(Token::Optional)),
             expect_token(Token::Match),
             path_pattern,
             many0(tuple((expect_token(Token::Comma), path_pattern))),
         )),
-        |(_, first_pattern, additional_patterns)| {
+        |(optional_token, _, first_pattern, additional_patterns)| {
             let mut patterns = vec![first_pattern];
             patterns.extend(additional_patterns.into_iter().map(|(_, pattern)| pattern));
             MatchClause {
                 patterns,
+                optional: optional_token.is_some(),
                 location: Location::default(),
             }
         },

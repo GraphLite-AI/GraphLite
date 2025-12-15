@@ -798,11 +798,34 @@ impl QueryPlanner {
             // Extract variables from pattern
             self.extract_pattern_variables(pattern, context)?;
 
-            // Convert pattern to logical plan
-            let root_node =
+            // Convert pattern to logical plan node
+            let pattern_node =
                 LogicalPlan::from_path_pattern(pattern).map_err(PlanningError::InvalidQuery)?;
 
-            return Ok(LogicalPlan::new(root_node));
+            // If this is an OPTIONAL MATCH, wrap it in a left outer join with SingleRow
+            if match_clause.optional {
+                log::debug!("Creating LEFT OUTER JOIN for OPTIONAL MATCH");
+
+                // Create LEFT OUTER JOIN with SingleRow on left (empty binding)
+                let join_node = LogicalNode::Join {
+                    join_type: JoinType::LeftOuter,
+                    condition: None, // No join condition - we want all combinations
+                    left: Box::new(LogicalNode::SingleRow),
+                    right: Box::new(pattern_node),
+                };
+
+                // Build the plan with variables from the pattern
+                let mut variables = HashMap::new();
+                // Extract variables from pattern_node if needed
+                // For now, we'll rely on later stages to populate variables
+
+                return Ok(LogicalPlan {
+                    root: join_node,
+                    variables,
+                });
+            }
+
+            return Ok(LogicalPlan::new(pattern_node));
         }
 
         // 🔧 PATTERN OPTIMIZATION FIX: Replace Cartesian product with intelligent optimization

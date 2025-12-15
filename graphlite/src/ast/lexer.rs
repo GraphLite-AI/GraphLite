@@ -62,6 +62,7 @@ use nom::{
 pub enum Token {
     // Keywords
     Match,
+    Optional, // For OPTIONAL MATCH
     Where,
     Return,
     Select,
@@ -1010,6 +1011,13 @@ fn simple_patterns(input: &str) -> IResult<&str, Token> {
                 && input.chars().nth(5).unwrap_or(' ') != '_'))
     {
         Ok((&input[5..], Token::Match))
+    } else if input.len() >= 8
+        && input[..8].eq_ignore_ascii_case("OPTIONAL")
+        && (input.len() == 8
+            || (!input.chars().nth(8).unwrap_or(' ').is_alphanumeric()
+                && input.chars().nth(8).unwrap_or(' ') != '_'))
+    {
+        Ok((&input[8..], Token::Optional))
     } else if input.len() >= 5
         && input[..5].eq_ignore_ascii_case("WHERE")
         && (input.len() == 5
