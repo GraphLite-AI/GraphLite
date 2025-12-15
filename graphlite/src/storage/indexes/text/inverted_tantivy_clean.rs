@@ -5,6 +5,7 @@ use crate::storage::indexes::text::errors::TextSearchError;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use tantivy::schema::document::TantivyDocument;
 use tantivy::schema::Value;
 
 /// Search result from the inverted index
@@ -140,8 +141,8 @@ impl InvertedIndex {
 
         let mut results = Vec::new();
         for (score, doc_address) in top_docs {
-            let retrieved = searcher
-                .doc::<tantivy::schema::document::TantivyDocument>(doc_address)
+            let retrieved: TantivyDocument = searcher
+                .doc(doc_address)
                 .map_err(|e| {
                     TextSearchError::IndexError(format!("tantivy doc retrieval error: {}", e))
                 })?;

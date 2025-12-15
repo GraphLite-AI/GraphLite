@@ -54,7 +54,7 @@ petgraph = { workspace = true }
 lru = { workspace = true }
 
 # Full-text search dependencies
-tantivy = "0.22"
+tantivy = "0.25"
 rust-stemmers = "1.2"
 unicode-segmentation = "1.10"
 
