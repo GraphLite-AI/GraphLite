@@ -6,7 +6,7 @@ A step-by-step tutorial for learning GraphLite's **fuzzy search** capabilities u
 
 ## ⚠️ Important: This Tutorial Covers Fuzzy Search
 
-This tutorial focuses on **fuzzy search functions** (FUZZY_MATCH, FUZZY_SEARCH, LEVENSHTEIN_SIMILARITY) that use Levenshtein distance for typo-tolerant matching **without requiring indexes**.
+This tutorial focuses on **fuzzy search functions** (FUZZY_MATCH, FUZZY_SEARCH, FT_SIMILARITY_SCORE) that use Levenshtein distance for typo-tolerant matching **without requiring indexes**.
 
 | What This Covers | What It Doesn't Cover |
 |-----------------|----------------------|
@@ -236,15 +236,15 @@ RETURN p.title;
 ```gql
 -- Levenshtein similarity scoring with threshold
 MATCH (p:Paper)
-WHERE LEVENSHTEIN_SIMILARITY(p.abstract, 'artifical inteligence') > 0.6
+WHERE FT_SIMILARITY_SCORE(p.abstract, 'artifical inteligence') > 0.6
 RETURN p.title,
-       LEVENSHTEIN_SIMILARITY(p.abstract, 'artifical inteligence') AS similarity
+       FT_SIMILARITY_SCORE(p.abstract, 'artifical inteligence') AS similarity
 ORDER BY similarity DESC;
 ```
 ## Add one line why should this query doesn't return results?
 **Reason**: The abstracts don't contain "artificial intelligence" or similar terms, so similarity scores are very low (<0.2), all below the 0.6 threshold.
 
-**Note**: LEVENSHTEIN_SIMILARITY uses formula `1.0 - (edit_distance / max_length)` and works best when comparing strings of similar length.
+**Note**: FT_SIMILARITY_SCORE uses formula `1.0 - (edit_distance / max_length)` and works best when comparing strings of similar length.
 
 #### Output (6e)
 
@@ -255,9 +255,9 @@ No results found
 **Working alternative**: Use terms that exist in the dataset:
 ```gql
 MATCH (p:Paper)
-WHERE LEVENSHTEIN_SIMILARITY(p.abstract, 'machine learning') > 0.6
+WHERE FT_SIMILARITY_SCORE(p.abstract, 'machine learning') > 0.6
 RETURN p.title,
-       LEVENSHTEIN_SIMILARITY(p.abstract, 'machine learning') AS similarity
+       FT_SIMILARITY_SCORE(p.abstract, 'machine learning') AS similarity
 ORDER BY similarity DESC;
 -- Returns papers with high similarity to "machine learning"
 ```
@@ -311,13 +311,13 @@ RETURN p.title;
 ```gql
 -- Multi-term Levenshtein similarity search
 MATCH (p:Paper)
-WHERE LEVENSHTEIN_SIMILARITY(p.abstract, 'neural network deep learning') > 0.4
+WHERE FT_SIMILARITY_SCORE(p.abstract, 'neural network deep learning') > 0.4
 RETURN p.title,
-       LEVENSHTEIN_SIMILARITY(p.abstract, 'neural network deep learning') AS score
+       FT_SIMILARITY_SCORE(p.abstract, 'neural network deep learning') AS score
 ORDER BY score DESC;
 ```
 ## Add one line why should this query doesn't return results?
-**Reason**: LEVENSHTEIN_SIMILARITY compares the entire query string against the abstract; the long phrase has low overall similarity (< 0.4) even though individual words match. Works best for strings of similar length.
+**Reason**: FT_SIMILARITY_SCORE compares the entire query string against the abstract; the long phrase has low overall similarity (< 0.4) even though individual words match. Works best for strings of similar length.
 
 #### Output (7c)
 
@@ -362,7 +362,7 @@ MATCH (p:Paper)
 WHERE FT_HYBRID_SEARCH(p.abstract, 'neural networks deep learning') > 0.3
 RETURN p.title,
        FT_HYBRID_SEARCH(p.abstract, 'neural networks deep learning') AS hybrid_score,
-       LEVENSHTEIN_SIMILARITY(p.abstract, 'neural networks') AS levenshtein_score
+       FT_SIMILARITY_SCORE(p.abstract, 'neural networks') AS levenshtein_score
 ORDER BY hybrid_score DESC;
 ```
 ## Add one line why should this query doesn't return results?
@@ -990,3 +990,286 @@ LIMIT 10;
 -- For typo tolerance: 0.2, 0.6, 0.2 (prioritize fuzzy matching)
 -- For conceptual similarity: 0.2, 0.2, 0.6 (prioritize overall similarity)
 ```
+
+---
+
+## Tutorial: Pattern Matching Functions
+
+GraphLite also provides **pattern matching functions** for prefix, suffix, wildcard, regex, and autocomplete operations. This section demonstrates how to use these functions with practical examples.
+
+### Available Pattern Matching Functions
+
+| Function | Purpose | Example |
+|----------|---------|---------|
+| `FT_STARTS_WITH(text, prefix)` | Prefix matching | Find emails starting with "admin" |
+| `FT_ENDS_WITH(text, suffix)` | Suffix matching | Find files ending with ".pdf" |
+| `FT_WILDCARD(text, pattern)` | Wildcard patterns (`*`, `?`) | Match "user_*" or "*.pdf" |
+| `FT_REGEX(text, pattern)` | Regular expressions | Match email patterns |
+| `FT_PHRASE_PREFIX(text, phrase)` | Autocomplete | "Machine Learn" → "Machine Learning" |
+
+### Setup Pattern Matching Data
+
+```gql
+-- Insert sample data for pattern matching examples
+INSERT
+  (:Person {name: "Alice Johnson", email: "alice@gmail.com", username: "alice123"}),
+  (:Person {name: "Bob Smith", email: "bob@company.com", username: "bsmith"}),
+  (:Person {name: "Carol Davis", email: "carol@gmail.com", username: "cdavis99"}),
+  (:Person {name: "David Wilson", email: "david@outlook.com", username: "dwilson"}),
+  (:Person {name: "Eve Brown", email: "eve@company.com", username: "ebrown"});
+
+INSERT
+  (:Document {name: "report.pdf", content: "Annual report", category: "Business"}),
+  (:Document {name: "image.jpg", content: "Photo album", category: "Media"}),
+  (:Document {name: "data.csv", content: "Sales data", category: "Data"}),
+  (:Document {name: "readme.md", content: "Documentation", category: "Docs"});
+
+INSERT
+  (:Product {sku: "ABC-001", name: "Widget A", category: "Electronics"}),
+  (:Product {sku: "ABC-002", name: "Widget B", category: "Electronics"}),
+  (:Product {sku: "XYZ-100", name: "Gadget X", category: "Hardware"}),
+  (:Product {sku: "DEF-500", name: "Tool D", category: "Tools"});
+```
+
+### Example 1: Prefix Matching with FT_STARTS_WITH
+
+Find all users whose email starts with "admin":
+
+```gql
+MATCH (p:Person)
+WHERE FT_STARTS_WITH(p.email, 'alice')
+RETURN p.name, p.email;
+```
+
+**Result:**
+```
+name            | email
+----------------|------------------
+Alice Johnson   | alice@gmail.com
+```
+
+Find documents with titles starting with "Machine":
+
+```gql
+MATCH (d:Document)
+WHERE FT_STARTS_WITH(d.name, 'report')
+RETURN d.name, d.category;
+```
+
+### Example 2: Suffix Matching with FT_ENDS_WITH
+
+Find all PDF files:
+
+```gql
+MATCH (d:Document)
+WHERE FT_ENDS_WITH(d.name, '.pdf')
+RETURN d.name, d.content;
+```
+
+**Result:**
+```
+name        | content
+------------|-------------
+report.pdf  | Annual report
+```
+
+Find all Gmail users:
+
+```gql
+MATCH (p:Person)
+WHERE FT_ENDS_WITH(p.email, '@gmail.com')
+RETURN p.name, p.email
+ORDER BY p.name;
+```
+
+**Result:**
+```
+name          | email
+--------------|------------------
+Alice Johnson | alice@gmail.com
+Carol Davis   | carol@gmail.com
+```
+
+### Example 3: Wildcard Patterns with FT_WILDCARD
+
+Match files with any PDF extension:
+
+```gql
+MATCH (d:Document)
+WHERE FT_WILDCARD(d.name, '*.pdf')
+RETURN d.name;
+```
+
+Match usernames starting with specific letters:
+
+```gql
+MATCH (p:Person)
+WHERE FT_WILDCARD(p.username, 'alice*')
+RETURN p.username, p.name;
+```
+
+Match product SKUs in ABC series:
+
+```gql
+MATCH (pr:Product)
+WHERE FT_WILDCARD(pr.sku, 'ABC-*')
+RETURN pr.sku, pr.name
+ORDER BY pr.sku;
+```
+
+**Result:**
+```
+sku      | name
+---------|----------
+ABC-001  | Widget A
+ABC-002  | Widget B
+```
+
+### Example 4: Regular Expressions with FT_REGEX
+
+Match email addresses:
+
+```gql
+MATCH (p:Person)
+WHERE FT_REGEX(p.email, '^[a-z]+@[a-z]+\\.com$')
+RETURN p.email, p.name;
+```
+
+Match product SKU format (ABC-123):
+
+```gql
+MATCH (pr:Product)
+WHERE FT_REGEX(pr.sku, '^[A-Z]{3}-[0-9]{3}$')
+RETURN pr.sku, pr.name;
+```
+
+**Result:**
+```
+sku      | name
+---------|----------
+ABC-001  | Widget A
+ABC-002  | Widget B
+DEF-500  | Tool D
+```
+
+Match usernames with numbers:
+
+```gql
+MATCH (p:Person)
+WHERE FT_REGEX(p.username, '.*[0-9]+$')
+RETURN p.username, p.name;
+```
+
+### Example 5: Autocomplete with FT_PHRASE_PREFIX
+
+Find papers with "Machine Learn" prefix (autocomplete):
+
+```gql
+MATCH (p:Paper)
+WHERE FT_PHRASE_PREFIX(p.title, 'Machine Learn')
+RETURN p.title;
+```
+
+**Matches:** "Machine Learning for Healthcare Diagnostics"
+
+Single word prefix:
+
+```gql
+MATCH (p:Paper)
+WHERE FT_PHRASE_PREFIX(p.title, 'Quant')
+RETURN p.title;
+```
+
+**Matches:** "Quantum Machine Learning Algorithms"
+
+### Example 6: Combining Pattern Matching with Fuzzy Search
+
+Find PDF documents with fuzzy content matching:
+
+```gql
+MATCH (d:Document)
+WHERE FT_ENDS_WITH(d.name, '.pdf')
+  AND FT_FUZZY_SEARCH(d.content, 'annual') > 0.7
+RETURN d.name, d.content;
+```
+
+Find Gmail users with name prefix:
+
+```gql
+MATCH (p:Person)
+WHERE FT_STARTS_WITH(p.name, 'Alice')
+  AND FT_ENDS_WITH(p.email, '@gmail.com')
+RETURN p.name, p.email;
+```
+
+Find products with wildcard SKU and fuzzy name:
+
+```gql
+MATCH (pr:Product)
+WHERE FT_WILDCARD(pr.sku, 'ABC-*')
+  AND FT_FUZZY_SEARCH(pr.name, 'Widget') > 0.6
+RETURN pr.sku, pr.name
+ORDER BY pr.sku;
+```
+
+### Pattern Matching Best Practices
+
+1. **Use Specific Functions for Specific Needs**
+   ```gql
+   -- Use FT_STARTS_WITH for prefix (faster than wildcard)
+   WHERE FT_STARTS_WITH(email, 'admin')  -- Better
+   WHERE FT_WILDCARD(email, 'admin*')    -- Slower
+   ```
+
+2. **Combine with Standard Filters**
+   ```gql
+   -- Filter by category first, then pattern match
+   WHERE p.category = 'Electronics'           -- Fast
+     AND FT_STARTS_WITH(p.sku, 'ABC')         -- Then pattern
+   ```
+
+3. **Use Regex for Complex Patterns**
+   ```gql
+   -- Email validation
+   WHERE FT_REGEX(email, '^[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}$')
+   ```
+
+4. **Combine Pattern Matching with Fuzzy Search**
+   ```gql
+   -- Exact extension + fuzzy content
+   WHERE FT_ENDS_WITH(filename, '.pdf')
+     AND FT_FUZZY_SEARCH(content, query) > 0.7
+   ```
+
+### Pattern Matching Performance Tips
+
+- **Prefix matching** (`FT_STARTS_WITH`) is fastest - O(n) with early termination
+- **Suffix matching** (`FT_ENDS_WITH`) is slightly slower due to string reversal
+- **Wildcard** (`FT_WILDCARD`) converts to regex internally
+- **Regex** (`FT_REGEX`) compiles pattern once, then matches - O(n)
+- **Phrase prefix** (`FT_PHRASE_PREFIX`) tokenizes and matches words
+
+For datasets > 100K records, consider migrating to Tantivy-indexed implementations in Phase 2.
+
+---
+
+## Summary
+
+This tutorial covered:
+
+✅ **Fuzzy Search**: Typo-tolerant matching with Levenshtein distance
+✅ **Similarity Scoring**: Ranking results by relevance
+✅ **Hybrid Search**: Combining multiple matching strategies
+✅ **Keyword Matching**: Boolean AND/OR filtering
+✅ **Pattern Matching**: Prefix, suffix, wildcard, regex, and autocomplete
+
+**Next Steps:**
+- Explore [Full Text Search Guide](Fulltext%20Search%20User%20Guide.md) for comprehensive function reference
+- Review [Fuzzy Search Functions Reference](Fuzzy%20Search%20Functions%20Reference.md) for algorithm details
+- Check out example queries in production applications
+
+**Performance Tips:**
+- Start with fuzzy search for prototyping
+- Add pattern matching for specific filtering needs
+- Combine functions for powerful search capabilities
+- For large datasets (>100K), plan migration to Tantivy-indexed search

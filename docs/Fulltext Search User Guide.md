@@ -53,6 +53,8 @@ All fuzzy matching functions are built on the Levenshtein distance algorithm, wh
 
 ## Available Functions
 
+### Fuzzy Search Functions (Levenshtein-based)
+
 ### 1. FT_FUZZY_MATCH
 
 Returns true if two strings are similar within a specified edit distance threshold.
@@ -106,7 +108,7 @@ Calculates a normalized Levenshtein-based similarity score between two strings, 
 
 **Syntax**:
 ```gql
-LEVENSHTEIN_SIMILARITY(string1, string2)
+FT_SIMILARITY_SCORE(string1, string2)
 ```
 
 **Parameters**:
@@ -140,7 +142,7 @@ where max_length = max(length(string1), length(string2))
 MATCH (p:Paper)
 WHERE length(p.title) BETWEEN 30 AND 50
 RETURN p.title,
-       LEVENSHTEIN_SIMILARITY(p.title, 'Machine Learning for Healthcare') AS score
+       FT_SIMILARITY_SCORE(p.title, 'Machine Learning for Healthcare') AS score
 ORDER BY score DESC
 LIMIT 10;
 
@@ -148,16 +150,16 @@ LIMIT 10;
 MATCH (p1:Paper), (p2:Paper)
 WHERE p1.id < p2.id
   AND abs(length(p1.title) - length(p2.title)) < 10  -- Similar lengths
-  AND LEVENSHTEIN_SIMILARITY(p1.title, p2.title) > 0.8
+  AND FT_SIMILARITY_SCORE(p1.title, p2.title) > 0.8
 RETURN p1.title AS title1,
        p2.title AS title2,
-       LEVENSHTEIN_SIMILARITY(p1.title, p2.title) AS similarity;
+       FT_SIMILARITY_SCORE(p1.title, p2.title) AS similarity;
 
 -- Compare fixed-length codes or identifiers
 MATCH (d:Document)
-WHERE LEVENSHTEIN_SIMILARITY(d.product_code, 'ABC-12345') > 0.7
+WHERE FT_SIMILARITY_SCORE(d.product_code, 'ABC-12345') > 0.7
 RETURN d.product_code,
-       LEVENSHTEIN_SIMILARITY(d.product_code, 'ABC-12345') AS similarity
+       FT_SIMILARITY_SCORE(d.product_code, 'ABC-12345') AS similarity
 ORDER BY similarity DESC;
 ```
 
@@ -542,10 +544,10 @@ RETURN p.title;
 MATCH (p1:Paper), (p2:Paper)
 WHERE p1.id < p2.id
   AND abs(length(p1.title) - length(p2.title)) < 15  -- Similar lengths
-  AND LEVENSHTEIN_SIMILARITY(p1.title, p2.title) > 0.85
+  AND FT_SIMILARITY_SCORE(p1.title, p2.title) > 0.85
 RETURN p1.title AS original,
        p2.title AS duplicate,
-       LEVENSHTEIN_SIMILARITY(p1.title, p2.title) AS similarity
+       FT_SIMILARITY_SCORE(p1.title, p2.title) AS similarity
 ORDER BY similarity DESC;
 ```
 
@@ -579,10 +581,10 @@ RETURN p.title;
 -- Use different thresholds for different fields
 -- Note: Works best when field lengths are similar to query length
 MATCH (p:Paper)
-WHERE LEVENSHTEIN_SIMILARITY(p.title, 'neural networks') > 0.8
+WHERE FT_SIMILARITY_SCORE(p.title, 'neural networks') > 0.8
    OR FT_FUZZY_SEARCH(p.abstract, 'neural networks') > 0.6  -- Better for variable-length text
 RETURN p.title,
-       LEVENSHTEIN_SIMILARITY(p.title, 'neural networks') AS title_score,
+       FT_SIMILARITY_SCORE(p.title, 'neural networks') AS title_score,
        FT_FUZZY_SEARCH(p.abstract, 'neural networks') AS abstract_score
 ORDER BY title_score DESC, abstract_score DESC;
 ```
@@ -643,7 +645,7 @@ Use the simplest function that meets your needs:
 |-------------|---------------|------------|
 | Exact boolean filter | KEYWORD_MATCH | O(n) |
 | Fuzzy boolean filter | CONTAINS_FUZZY | O(n × m²) |
-| Similarity ranking (similar lengths) | LEVENSHTEIN_SIMILARITY | O(m × n) |
+| Similarity ranking (similar lengths) | FT_SIMILARITY_SCORE | O(m × n) |
 | Substring ranking | FUZZY_SEARCH | O(n × m²) |
 | Multi-strategy ranking | HYBRID_SEARCH | O(n × m²) |
 
@@ -699,7 +701,7 @@ ORDER BY score DESC;
 |----------|---------------------|-----|
 | Exact match with typo tolerance | FUZZY_MATCH | Boolean result, configurable threshold |
 | Ranking search results | FUZZY_SEARCH | Optimized for relevance scoring |
-| String similarity (similar lengths) | LEVENSHTEIN_SIMILARITY | Simple, normalized score |
+| String similarity (similar lengths) | FT_SIMILARITY_SCORE | Simple, normalized score |
 | Fuzzy substring search | CONTAINS_FUZZY | Boolean, works in long text |
 | Multi-strategy search | HYBRID_SEARCH | Combines multiple approaches |
 | OR keyword search | KEYWORD_MATCH | Fast, multiple keywords |
@@ -713,7 +715,7 @@ ORDER BY score DESC;
 | Function | Time Complexity | Space Complexity |
 |----------|----------------|------------------|
 | FUZZY_MATCH | O(m × n) | O(m × n) |
-| LEVENSHTEIN_SIMILARITY | O(m × n) | O(m × n) |
+| FT_SIMILARITY_SCORE | O(m × n) | O(m × n) |
 | CONTAINS_FUZZY | O(k × m²) where k = text length | O(m²) |
 | FUZZY_SEARCH | O(k × m²) | O(m²) |
 | HYBRID_SEARCH | O(k × m²) | O(m²) |
@@ -751,9 +753,9 @@ All functions handle NULL values gracefully:
 FT_FUZZY_MATCH(NULL, 'test', 2)  -- Returns: false
 FT_FUZZY_MATCH('test', NULL, 2)  -- Returns: false
 
--- LEVENSHTEIN_SIMILARITY returns NULL
-LEVENSHTEIN_SIMILARITY(NULL, 'test')  -- Returns: NULL
-LEVENSHTEIN_SIMILARITY('test', NULL)  -- Returns: NULL
+-- FT_SIMILARITY_SCORE returns NULL
+FT_SIMILARITY_SCORE(NULL, 'test')  -- Returns: NULL
+FT_SIMILARITY_SCORE('test', NULL)  -- Returns: NULL
 
 -- FUZZY_SEARCH returns NULL
 FT_FUZZY_SEARCH(NULL, 'test')  -- Returns: NULL
@@ -815,6 +817,263 @@ ORDER BY config_b DESC
 LIMIT 20;
 ```
 
+## Pattern Matching Functions
+
+GraphLite also provides **pattern matching functions** for prefix, suffix, wildcard, regex, and autocomplete operations. These functions use the `FT_` prefix to indicate they are full-text search functions.
+
+### 9. FT_STARTS_WITH
+
+Checks if a string starts with a given prefix.
+
+**Syntax**:
+```gql
+FT_STARTS_WITH(text, prefix)
+```
+
+**Parameters**:
+- `text`: String to check
+- `prefix`: Prefix to match
+
+**Returns**: Boolean
+
+**Examples**:
+```gql
+-- Find users whose email starts with "admin"
+MATCH (u:Person)
+WHERE FT_STARTS_WITH(u.email, 'admin')
+RETURN u.name, u.email;
+
+-- Find documents with titles starting with "Machine"
+MATCH (d:Document)
+WHERE FT_STARTS_WITH(d.title, 'Machine')
+RETURN d.title;
+
+-- Case-sensitive prefix matching
+MATCH (p:Person)
+WHERE FT_STARTS_WITH(p.username, 'alice')
+RETURN p.username;
+```
+
+### 10. FT_ENDS_WITH
+
+Checks if a string ends with a given suffix.
+
+**Syntax**:
+```gql
+FT_ENDS_WITH(text, suffix)
+```
+
+**Parameters**:
+- `text`: String to check
+- `suffix`: Suffix to match
+
+**Returns**: Boolean
+
+**Examples**:
+```gql
+-- Find files ending with .pdf extension
+MATCH (d:Document)
+WHERE FT_ENDS_WITH(d.name, '.pdf')
+RETURN d.name;
+
+-- Find email addresses from gmail.com
+MATCH (u:Person)
+WHERE FT_ENDS_WITH(u.email, '@gmail.com')
+RETURN u.email;
+
+-- Find usernames ending with "_admin"
+MATCH (u:Person)
+WHERE FT_ENDS_WITH(u.username, '_admin')
+RETURN u.username;
+```
+
+### 11. FT_WILDCARD
+
+Matches text against wildcard patterns using `*` (zero or more characters) and `?` (exactly one character).
+
+**Syntax**:
+```gql
+FT_WILDCARD(text, pattern)
+```
+
+**Parameters**:
+- `text`: String to match
+- `pattern`: Wildcard pattern with `*` and `?`
+
+**Returns**: Boolean
+
+**Examples**:
+```gql
+-- Match files with any extension (*.*)
+MATCH (d:Document)
+WHERE FT_WILDCARD(d.name, '*.pdf')
+RETURN d.name;
+
+-- Match usernames starting with 'bob' (bob*)
+MATCH (u:Person)
+WHERE FT_WILDCARD(u.username, 'bob*')
+RETURN u.username;
+
+-- Match three-letter usernames (???)
+MATCH (u:Person)
+WHERE FT_WILDCARD(u.username, '???')
+RETURN u.username;
+
+-- Match product SKUs (ABC-*)
+MATCH (p:Person)
+WHERE FT_WILDCARD(p.sku, 'ABC-*')
+RETURN p.sku, p.name;
+
+-- Complex pattern (user_*)
+MATCH (u:Person)
+WHERE FT_WILDCARD(u.username, 'user_*')
+RETURN u.username;
+```
+
+### 12. FT_REGEX
+
+Matches text against regular expression patterns.
+
+**Syntax**:
+```gql
+FT_REGEX(text, pattern)
+```
+
+**Parameters**:
+- `text`: String to match
+- `pattern`: Regular expression pattern
+
+**Returns**: Boolean
+
+**Supports**:
+- `.` - Match any character
+- `*` - Zero or more of preceding
+- `+` - One or more of preceding
+- `?` - Zero or one of preceding
+- `[abc]` - Character class
+- `[^abc]` - Negated character class
+- `^` - Start anchor
+- `$` - End anchor
+- `|` - Alternation (OR)
+- `()` - Grouping
+- `\d` - Digit, `\w` - Word char, `\s` - Whitespace
+
+**Examples**:
+```gql
+-- Match email addresses
+MATCH (u:Person)
+WHERE FT_REGEX(u.email, '^[a-z]+@[a-z]+\\.com$')
+RETURN u.email;
+
+-- Match product SKUs (ABC-123 format)
+MATCH (p:Person)
+WHERE FT_REGEX(p.sku, '^[A-Z]{3}-[0-9]{3}$')
+RETURN p.sku;
+
+-- Match usernames with numbers at end
+MATCH (u:Person)
+WHERE FT_REGEX(u.username, '.*[0-9]+$')
+RETURN u.username;
+
+-- Match admin or moderator roles
+MATCH (u:Person)
+WHERE FT_REGEX(u.role, '^(admin|moderator)$')
+RETURN u.username, u.role;
+
+-- Match file extensions (pdf, png, md)
+MATCH (d:Document)
+WHERE FT_REGEX(d.name, '\\.(pdf|png|md)$')
+RETURN d.name;
+```
+
+### 13. FT_PHRASE_PREFIX
+
+Matches phrases with prefix completion on the last word (autocomplete functionality).
+
+**Syntax**:
+```gql
+FT_PHRASE_PREFIX(text, phrase_prefix)
+```
+
+**Parameters**:
+- `text`: Text to search in
+- `phrase_prefix`: Phrase where the last word is a prefix
+
+**Returns**: Boolean
+
+**Features**:
+- Case-insensitive matching
+- Tokenizes by whitespace
+- Last word must be a prefix match
+- All previous words must exact match
+
+**Examples**:
+```gql
+-- Find documents with titles starting with "Machine Learn"
+MATCH (d:Document)
+WHERE FT_PHRASE_PREFIX(d.title, 'Machine Learn')
+RETURN d.title;
+-- Matches: "Machine Learning Basics", "Machine Learning Advanced"
+
+-- Autocomplete for "Deep Lear"
+MATCH (d:Document)
+WHERE FT_PHRASE_PREFIX(d.title, 'Deep Lear')
+RETURN d.title;
+-- Matches: "Deep Learning Guide"
+
+-- Single word prefix
+MATCH (d:Document)
+WHERE FT_PHRASE_PREFIX(d.title, 'Nat')
+RETURN d.title;
+-- Matches: "Natural Language Processing"
+
+-- Three word phrase prefix
+MATCH (d:Document)
+WHERE FT_PHRASE_PREFIX(d.title, 'Machine Learning Bas')
+RETURN d.title;
+-- Matches: "Machine Learning Basics"
+```
+
+### Pattern Matching Function Comparison
+
+| Function | Use Case | Example Pattern | Matches |
+|----------|----------|-----------------|---------|
+| `FT_STARTS_WITH` | Prefix matching | `"admin"` | "admin", "admin123", "administrator" |
+| `FT_ENDS_WITH` | Suffix matching | `".pdf"` | "document.pdf", "report.PDF" |
+| `FT_WILDCARD` | Wildcard patterns | `"*.pdf"` | Any file ending with .pdf |
+| `FT_REGEX` | Complex patterns | `"^[A-Z]{3}-[0-9]{3}$"` | "ABC-123", "XYZ-456" |
+| `FT_PHRASE_PREFIX` | Autocomplete | `"Machine Learn"` | "Machine Learning..." |
+
+### Performance Notes
+
+All pattern matching functions use **string-based operations** (Phase 1 implementation):
+- **Time Complexity**: O(n) where n is the number of nodes
+- **Space Complexity**: O(1) for most functions, O(m) for regex compilation
+- **Best For**: Small to medium datasets (< 100K records)
+- **Future**: Phase 2 will add Tantivy-indexed implementations for O(log n) performance
+
+### Combining Pattern Matching with Fuzzy Search
+
+```gql
+-- Find PDF documents with fuzzy title matching
+MATCH (d:Document)
+WHERE FT_ENDS_WITH(d.name, '.pdf')
+  AND FT_FUZZY_SEARCH(d.title, 'machine learning') > 0.7
+RETURN d.name, d.title;
+
+-- Find admin users with email domain filtering
+MATCH (u:Person)
+WHERE FT_STARTS_WITH(u.username, 'admin')
+  AND FT_ENDS_WITH(u.email, '@company.com')
+RETURN u.username, u.email;
+
+-- Wildcard pattern with fuzzy content search
+MATCH (d:Document)
+WHERE FT_WILDCARD(d.name, '*.md')
+  AND FT_CONTAINS_FUZZY(d.content, 'documentation', 2)
+RETURN d.name;
+```
+
 ## Summary
 
 GraphLite's text search functions provide powerful, flexible tools for:
@@ -823,6 +1082,7 @@ GraphLite's text search functions provide powerful, flexible tools for:
 - **Similarity Scoring**: Rank by relevance using normalized edit distance
 - **Hybrid Search**: Combine multiple text-matching strategies (exact, fuzzy, similarity) with configurable weights
 - **Keyword Matching**: Boolean logic for filtering
+- **Pattern Matching**: Prefix, suffix, wildcard, regex, and autocomplete operations
 - **Performance**: Optimized algorithms with configurable behavior
 
-All search functions are **text-based** using Levenshtein distance algorithms. Choose the right function for your use case, tune thresholds and weights appropriately, and combine with standard GQL filters for optimal results.
+All search functions are **text-based** using Levenshtein distance and string algorithms. Choose the right function for your use case, tune thresholds and weights appropriately, and combine with standard GQL filters for optimal results.

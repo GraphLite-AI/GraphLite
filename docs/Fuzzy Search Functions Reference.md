@@ -18,7 +18,7 @@ GraphLite provides a suite of text search and fuzzy matching functions built on 
 
 **Functions Covered:**
 - `FUZZY_MATCH` - Boolean threshold-based matching
-- `LEVENSHTEIN_SIMILARITY` - Normalized similarity scoring (best for strings of similar length)
+- `FT_SIMILARITY_SCORE` - Normalized similarity scoring (best for strings of similar length)
 - `FUZZY_SEARCH` - Search relevance ranking
 - `CONTAINS_FUZZY` - Fuzzy substring detection
 - `HYBRID_SEARCH` - Multi-strategy combined search
@@ -32,7 +32,7 @@ GraphLite provides a suite of text search and fuzzy matching functions built on 
 
 1. [Core Algorithm: Levenshtein Distance](#core-algorithm-levenshtein-distance)
 2. [FUZZY_MATCH Function](#fuzzy_match-function)
-3. [LEVENSHTEIN_SIMILARITY Function](#levenshtein_similarity-function)
+3. [FT_SIMILARITY_SCORE Function](#levenshtein_similarity-function)
 4. [FUZZY_SEARCH Function](#fuzzy_search-function)
 5. [CONTAINS_FUZZY Function](#contains_fuzzy-function)
 6. [Advanced Search Functions](#advanced-search-functions)
@@ -247,11 +247,11 @@ FT_FUZZY_MATCH('test', 'test', null) -- Returns: false
 
 ---
 
-## LEVENSHTEIN_SIMILARITY Function
+## FT_SIMILARITY_SCORE Function
 
 ### Overview
 
-**Signature:** `LEVENSHTEIN_SIMILARITY(str1, str2)`
+**Signature:** `FT_SIMILARITY_SCORE(str1, str2)`
 
 **Purpose:** Returns a normalized similarity score from 0.0 (completely different) to 1.0 (identical) based on Levenshtein edit distance.
 
@@ -274,12 +274,12 @@ similarity = 1.0 - (levenshtein_distance / max(length(str1), length(str2)))
 
 **Length Sensitivity Example:**
 ```
-LEVENSHTEIN_SIMILARITY('cat', 'catastrophe') = 0.27
+FT_SIMILARITY_SCORE('cat', 'catastrophe') = 0.27
   - Edit distance: 8
   - Max length: 11 (catastrophe)
   - Score: 1.0 - (8/11) = 0.27 (low despite perfect prefix match)
 
-LEVENSHTEIN_SIMILARITY('cat', 'bat') = 0.67
+FT_SIMILARITY_SCORE('cat', 'bat') = 0.67
   - Edit distance: 1
   - Max length: 3
   - Score: 1.0 - (1/3) = 0.67 (high, strings have similar length)
@@ -312,7 +312,7 @@ MATCH (p:Product)
 WHERE abs(length(p.name) - length('iPhone')) < 5  -- Filter to similar lengths
 RETURN
     p.name,
-    LEVENSHTEIN_SIMILARITY(p.name, 'iPhone') AS similarity
+    FT_SIMILARITY_SCORE(p.name, 'iPhone') AS similarity
 ORDER BY similarity DESC
 LIMIT 10
 ```
@@ -333,11 +333,11 @@ Samsung        | 0.143  (6 char diff, 7 total)
 MATCH (c1:Customer), (c2:Customer)
 WHERE c1.id < c2.id
   AND abs(length(c1.name) - length(c2.name)) < 5  -- Similar name lengths
-  AND LEVENSHTEIN_SIMILARITY(c1.name, c2.name) > 0.8
+  AND FT_SIMILARITY_SCORE(c1.name, c2.name) > 0.8
 RETURN
     c1.name AS name1,
     c2.name AS name2,
-    LEVENSHTEIN_SIMILARITY(c1.name, c2.name) AS similarity
+    FT_SIMILARITY_SCORE(c1.name, c2.name) AS similarity
 
 -- Finds potential duplicates with >80% similarity
 ```
@@ -346,7 +346,7 @@ RETURN
 ```sql
 MATCH (tag:Tag)
 WHERE abs(length(tag.name) - length('machine-learning')) < 8
-WITH tag, LEVENSHTEIN_SIMILARITY(tag.name, 'machine-learning') AS sim
+WITH tag, FT_SIMILARITY_SCORE(tag.name, 'machine-learning') AS sim
 WHERE sim > 0.7
 RETURN tag.name, sim
 ORDER BY sim DESC
@@ -358,25 +358,25 @@ ORDER BY sim DESC
 
 **Symmetry:**
 ```sql
-LEVENSHTEIN_SIMILARITY(a, b) = LEVENSHTEIN_SIMILARITY(b, a)
+FT_SIMILARITY_SCORE(a, b) = FT_SIMILARITY_SCORE(b, a)
 ```
 
 **Identity:**
 ```sql
-LEVENSHTEIN_SIMILARITY(a, a) = 1.0
+FT_SIMILARITY_SCORE(a, a) = 1.0
 ```
 
 **Range:**
 ```sql
-0.0 <= LEVENSHTEIN_SIMILARITY(a, b) <= 1.0
+0.0 <= FT_SIMILARITY_SCORE(a, b) <= 1.0
 ```
 
 ### Null Handling
 
 ```sql
-LEVENSHTEIN_SIMILARITY(null, 'test')  -- Returns: null
-LEVENSHTEIN_SIMILARITY('test', null)  -- Returns: null
-LEVENSHTEIN_SIMILARITY(null, null)    -- Returns: null
+FT_SIMILARITY_SCORE(null, 'test')  -- Returns: null
+FT_SIMILARITY_SCORE('test', null)  -- Returns: null
+FT_SIMILARITY_SCORE(null, null)    -- Returns: null
 ```
 
 ### Interpretation Guide
@@ -409,11 +409,11 @@ LEVENSHTEIN_SIMILARITY(null, null)    -- Returns: null
 2. **Sliding window search:** Tries matching query at every position in the text
 3. **Best match selection:** Returns the highest similarity score found
 
-### Key Difference from LEVENSHTEIN_SIMILARITY
+### Key Difference from FT_SIMILARITY_SCORE
 
 | Function | Comparison | Use Case |
 |----------|------------|----------|
-| `LEVENSHTEIN_SIMILARITY` | Whole string vs whole string | "How similar are these two complete strings (of similar length)?" |
+| `FT_SIMILARITY_SCORE` | Whole string vs whole string | "How similar are these two complete strings (of similar length)?" |
 | `FUZZY_SEARCH` | Query within text (substring) | "How well does this query appear within this text?" |
 
 ### Implementation
@@ -495,7 +495,7 @@ ORDER BY total_score DESC
 -- Text: "The quick brown fox jumps over the lazy dog"
 -- Query: "brown fox"
 
-LEVENSHTEIN_SIMILARITY(text, query)
+FT_SIMILARITY_SCORE(text, query)
 -- Compares entire strings
 -- Result: ~0.20 (low - different lengths, many unmatched chars)
 
@@ -751,7 +751,7 @@ RETURN product.name
 | Function | Best Case | Average Case | Worst Case |
 |----------|-----------|--------------|------------|
 | `FUZZY_MATCH` | O(m×n) | O(m×n) | O(m×n) |
-| `LEVENSHTEIN_SIMILARITY` | O(m×n) | O(m×n) | O(m×n) |
+| `FT_SIMILARITY_SCORE` | O(m×n) | O(m×n) | O(m×n) |
 | `FUZZY_SEARCH` | O(t) | O(t×q²) | O(t×q²) |
 | `CONTAINS_FUZZY` | O(t) | O(t×q²) | O(t×q²) |
 | `HYBRID_SEARCH` | O(t) | O(t×q²) | O(t×q²) |
@@ -804,7 +804,7 @@ WHERE FT_FUZZY_SEARCH(title, 'GraphLite')  -- Fast (early exit)
 **Moderate Performance:**
 ```sql
 -- Medium strings of similar length
-WHERE LEVENSHTEIN_SIMILARITY(description, query_string) > 0.7
+WHERE FT_SIMILARITY_SCORE(description, query_string) > 0.7
 
 -- Moderate-length sliding window
 WHERE FT_FUZZY_SEARCH(paragraph, 'search query')
@@ -817,7 +817,7 @@ WHERE FT_FUZZY_SEARCH(entire_book_content, 'query')  -- O(millions)
 
 -- Many comparisons (all-pairs)
 MATCH (a:Article), (b:Article)
-WHERE LEVENSHTEIN_SIMILARITY(a.content, b.content) > 0.8  -- O(n²)
+WHERE FT_SIMILARITY_SCORE(a.content, b.content) > 0.8  -- O(n²)
 ```
 
 ---
@@ -851,15 +851,15 @@ MATCH (c1:Customer), (c2:Customer)
 WHERE c1.id < c2.id
   AND abs(length(c1.name) - length(c2.name)) < 5  -- Similar name lengths
   AND abs(length(c1.email) - length(c2.email)) < 10  -- Similar email lengths
-  AND LEVENSHTEIN_SIMILARITY(c1.name, c2.name) > 0.85
-  AND LEVENSHTEIN_SIMILARITY(c1.email, c2.email) > 0.70
+  AND FT_SIMILARITY_SCORE(c1.name, c2.name) > 0.85
+  AND FT_SIMILARITY_SCORE(c1.email, c2.email) > 0.70
 RETURN
     c1.name AS name1,
     c2.name AS name2,
-    LEVENSHTEIN_SIMILARITY(c1.name, c2.name) AS name_similarity,
+    FT_SIMILARITY_SCORE(c1.name, c2.name) AS name_similarity,
     c1.email AS email1,
     c2.email AS email2,
-    LEVENSHTEIN_SIMILARITY(c1.email, c2.email) AS email_similarity
+    FT_SIMILARITY_SCORE(c1.email, c2.email) AS email_similarity
 ORDER BY name_similarity DESC
 
 -- Finds potential duplicate accounts with similar-length names and emails
@@ -899,7 +899,7 @@ WHERE user.id <> other.id
 RETURN
     other.name,
     other.id,
-    LEVENSHTEIN_SIMILARITY(user.name, other.name) AS similarity
+    FT_SIMILARITY_SCORE(user.name, other.name) AS similarity
 ORDER BY similarity DESC
 LIMIT 10
 
@@ -919,7 +919,7 @@ WHERE FT_FUZZY_MATCH(city_variant, standard.name, 2)
 RETURN
     city_variant AS original,
     standard.name AS standardized,
-    LEVENSHTEIN_SIMILARITY(city_variant, standard.name) AS confidence
+    FT_SIMILARITY_SCORE(city_variant, standard.name) AS confidence
 ORDER BY city_variant, confidence DESC
 
 -- Maps variations to standard names (works best for similar-length variations):
@@ -944,7 +944,7 @@ let query_lower = query.to_lowercase();
 **Example:**
 ```sql
 FT_FUZZY_MATCH('iPhone', 'IPHONE', 0)  -- Returns: true
-LEVENSHTEIN_SIMILARITY('GraphLite', 'graphlite')  -- Returns: 1.0
+FT_SIMILARITY_SCORE('GraphLite', 'graphlite')  -- Returns: 1.0
 ```
 
 ### Unicode Support
@@ -963,7 +963,7 @@ let s2_chars: Vec<char> = s2.chars().collect();
 
 **Example:**
 ```sql
-LEVENSHTEIN_SIMILARITY('café', 'cafe')  -- Correctly handles é
+FT_SIMILARITY_SCORE('café', 'cafe')  -- Correctly handles é
 FT_FUZZY_SEARCH('Hello World!', 'World')  -- Handles special characters
 ```
 
@@ -972,7 +972,7 @@ FT_FUZZY_SEARCH('Hello World!', 'World')  -- Handles special characters
 | Function | Null Behavior |
 |----------|---------------|
 | `FUZZY_MATCH` | Returns `false` if any input is null |
-| `LEVENSHTEIN_SIMILARITY` | Returns `null` if any input is null |
+| `FT_SIMILARITY_SCORE` | Returns `null` if any input is null |
 | `FUZZY_SEARCH` | Returns `null` if any input is null |
 | `CONTAINS_FUZZY` | Returns `false` if any input is null |
 | `HYBRID_SEARCH` | Returns `null` if text or query is null |
@@ -989,25 +989,25 @@ FT_FUZZY_SEARCH('Hello World!', 'World')  -- Handles special characters
 ```rust
 // Register fuzzy matching functions
 registry.register(
-    "FUZZY_MATCH",
+    "FT_FUZZY_MATCH",
     Box::new(text_search_functions::FuzzyMatchFunction::new()),
 );
 registry.register(
-    "SIMILARITY_SCORE",  // Internal name, exposed as LEVENSHTEIN_SIMILARITY
+    "FT_SIMILARITY_SCORE",
     Box::new(text_search_functions::SimilarityScoreFunction::new()),
 );
 registry.register(
-    "CONTAINS_FUZZY",
+    "FT_CONTAINS_FUZZY",
     Box::new(text_search_functions::ContainsFuzzyFunction::new()),
 );
 registry.register(
-    "FUZZY_SEARCH",
+    "FT_FUZZY_SEARCH",
     Box::new(text_search_functions::FuzzySearchFunction::new()),
 );
 // ... additional functions
 ```
 
-**Note:** In the current implementation, the function is registered internally as `SIMILARITY_SCORE`. For clarity in user-facing documentation, we refer to it as `LEVENSHTEIN_SIMILARITY` to better describe its behavior and limitations.
+**Note:** All fuzzy search functions use the `FT_` prefix to distinguish them from ISO GQL standard string functions.
 
 ### Error Handling
 
@@ -1081,7 +1081,7 @@ if context.argument_count() < expected {
 - You have a specific distance threshold
 - Filtering records
 
-**Use `LEVENSHTEIN_SIMILARITY` when:**
+**Use `FT_SIMILARITY_SCORE` when:**
 - You need to rank results
 - Comparing complete strings **of similar length**
 - Finding near-duplicates with similar-length strings
@@ -1100,7 +1100,7 @@ if context.argument_count() < expected {
 - 3-4: Moderate tolerance
 - 5+: Permissive (may have false positives)
 
-**LEVENSHTEIN_SIMILARITY threshold:**
+**FT_SIMILARITY_SCORE threshold:**
 - 0.9-1.0: Near duplicates (strings of similar length)
 - 0.7-0.9: Similar items (strings of similar length)
 - 0.5-0.7: Loosely related (strings of similar length)
@@ -1130,13 +1130,13 @@ RETURN p
 ```sql
 -- BAD: Compares all pairs (O(n²))
 MATCH (a:Article), (b:Article)
-WHERE LEVENSHTEIN_SIMILARITY(a.title, b.title) > 0.8
+WHERE FT_SIMILARITY_SCORE(a.title, b.title) > 0.8
 
 -- GOOD: Pre-filter by category and length
 MATCH (a:Article {category: 'tech'}), (b:Article {category: 'tech'})
 WHERE a.id < b.id
   AND abs(length(a.title) - length(b.title)) < 10  -- Similar lengths
-  AND LEVENSHTEIN_SIMILARITY(a.title, b.title) > 0.8
+  AND FT_SIMILARITY_SCORE(a.title, b.title) > 0.8
 ```
 
 **Use exact matches for early filtering:**
@@ -1176,7 +1176,7 @@ ORDER BY total_score DESC
 2. Pre-filter with exact matches or category filters
 3. Use `FUZZY_MATCH` with low threshold instead of `FUZZY_SEARCH`
 4. Limit the number of comparisons (avoid Cartesian products)
-5. For `LEVENSHTEIN_SIMILARITY`, pre-filter by length difference
+5. For `FT_SIMILARITY_SCORE`, pre-filter by length difference
 
 ### Issue: Too Many/Few Results
 
@@ -1185,8 +1185,8 @@ ORDER BY total_score DESC
 **Solutions:**
 1. Adjust threshold based on actual data
 2. Test with sample queries to calibrate
-3. Use LEVENSHTEIN_SIMILARITY to understand score distribution
-4. **For LEVENSHTEIN_SIMILARITY:** Always pre-filter by length difference
+3. Use FT_SIMILARITY_SCORE to understand score distribution
+4. **For FT_SIMILARITY_SCORE:** Always pre-filter by length difference
 5. Consider string length when setting thresholds
 
 ### Issue: Case Sensitivity Problems
