@@ -735,6 +735,24 @@ mod tests {
     }
 
     #[test]
+    fn should_return_nothing_for_an_expired_subquery_cache_key() {
+        let max_memory_bytes = 1024;
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(0));
+        let cache_key = SubqueryCacheKey {
+            subquery_hash: 10,
+            outer_variables: vec![],
+            graph_version: 1,
+            schema_version: 1,
+            subquery_type: SubqueryType::Scalar,
+        };
+        let result = SubqueryResult::Scalar(Some(Value::Boolean(true)));
+        cache.insert(cache_key.clone(), result, Duration::from_secs(2), 0.50);
+
+        let result = cache.get(&any_subquery_cache_key());
+        assert_eq!(result.is_none(), true);
+    }
+
+    #[test]
     fn should_return_cache_result() {
         let max_memory_bytes = 1024;
         let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(100));
@@ -813,6 +831,50 @@ mod tests {
 
         let stats_guard = cache.stats.read().unwrap();
         assert_eq!(1, stats_guard.hits);
+    }
+
+    #[test]
+    fn should_update_boolean_index() {
+        let max_memory_bytes = 1024;
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(100));
+
+        let cache_key = SubqueryCacheKey {
+            subquery_hash: 100,
+            outer_variables: vec![],
+            graph_version: 1,
+            schema_version: 1,
+            subquery_type: SubqueryType::Exists,
+        };
+        let result = SubqueryResult::Boolean(true);
+        cache.insert(cache_key.clone(), result, Duration::from_secs(0), 0.50);
+
+        let boolean_index_guard = cache.boolean_index.write().unwrap();
+        let subquery_cache_keys = boolean_index_guard.get(&cache_key.subquery_hash).unwrap();
+
+        assert_eq!(1, subquery_cache_keys.len());
+        assert_eq!(subquery_cache_keys.first().unwrap().subquery_hash, cache_key.subquery_hash);
+    }
+
+    #[test]
+    fn should_update_scalar_index() {
+        let max_memory_bytes = 1024;
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(100));
+
+        let cache_key = SubqueryCacheKey {
+            subquery_hash: 100,
+            outer_variables: vec![],
+            graph_version: 1,
+            schema_version: 1,
+            subquery_type: SubqueryType::Scalar,
+        };
+        let result = SubqueryResult::Scalar(Some(Value::Boolean(true)));
+        cache.insert(cache_key.clone(), result, Duration::from_secs(0), 0.50);
+
+        let scalar_index_guard = cache.scalar_index.write().unwrap();
+        let subquery_cache_keys = scalar_index_guard.get(&cache_key.subquery_hash).unwrap();
+
+        assert_eq!(1, subquery_cache_keys.len());
+        assert_eq!(subquery_cache_keys.first().unwrap().subquery_hash, cache_key.subquery_hash);
     }
 
     #[test]
