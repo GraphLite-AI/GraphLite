@@ -394,6 +394,32 @@ mod tests {
     }
 
     #[test]
+    fn should_return_nothing_for_an_expired_subquery_cache_key() {
+        let max_memory_bytes = 1024;
+        let cache = PlanCache::new(1, max_memory_bytes, Duration::from_millis(0));
+
+        let cache_key = PlanCacheKey {
+            query_structure_hash: 10,
+            schema_hash: 10,
+            optimization_level: "Basic".to_string(),
+            hints: vec![],
+        };
+        cache.insert(
+            cache_key.clone(),
+            LogicalPlan::new(LogicalNode::SingleRow),
+            PhysicalPlan::new(PhysicalNode::SingleRow {
+                estimated_rows: 100,
+                estimated_cost: 10.0,
+            }),
+            None,
+            Duration::from_millis(1),
+        );
+
+        let result = cache.get(&cache_key);
+        assert_eq!(result.is_none(), true);
+    }
+
+    #[test]
     fn should_return_cache_result() {
         let max_memory_bytes = 1024;
         let cache = PlanCache::new(1, max_memory_bytes, Duration::from_millis(100));
