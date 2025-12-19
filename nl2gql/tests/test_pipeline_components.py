@@ -72,6 +72,18 @@ class ISOQueryIRTests(unittest.TestCase):
         self.assertIn("RETURN c.name, count(p) AS headcount", rendered)
         self.assertEqual(ir.validate_bindings(), [])
 
+class PlanParsingTests(unittest.TestCase):
+    def test_plan_rejects_truncated_match(self):
+        from nl2gql.pipeline.generator import Plan
+
+        plan = Plan.from_raw(
+            {
+                "match": ["(n1:Library)-[:"],
+                "return": ["n1.name"],
+            }
+        )
+        self.assertIsNone(plan)
+
 
 class RefinerIntegrationTests(unittest.TestCase):
     def test_refiner_accepts_deterministic_candidate(self):
@@ -209,6 +221,103 @@ class RefinerGroupingTests(unittest.TestCase):
         )
         self.assertEqual([r.expr for r in ir.returns], ["company_name", "company_id", "headcount", "avg_salary"])
         self.assertEqual([o.expr for o in ir.order_by], ["headcount", "avg_salary"])
+
+class RefinerDistinctFilterTests(unittest.TestCase):
+    def test_existing_distinct_filter_is_recorded_for_coverage(self):
+        graph = SchemaGraph.from_text(SCHEMA_TEXT)
+
+        dummy_runner = types.SimpleNamespace(validate=lambda _query: SyntaxResult(ok=True, rows=[]))
+        dummy_logic = types.SimpleNamespace(validate=lambda *_args, **_kwargs: (True, None))
+        intent_stub = types.SimpleNamespace(
+            evaluate=lambda *_args, **_kwargs: IntentJudgeResult(valid=True, reasons=[], missing_requirements=[])
+        )
+        refiner = Refiner(
+            graph,
+            generator=types.SimpleNamespace(),
+            logic_validator=dummy_logic,
+            runner=dummy_runner,
+            intent_judge=intent_stub,
+        )
+
+        ir = ISOQueryIR(
+            nodes={
+                "n3": IRNode(alias="n3", label="City"),
+                "ci": IRNode(alias="ci", label="City"),
+            },
+            filters=[
+                IRFilter(alias="n3", prop="id", op="<>", value={"ref_alias": "ci", "ref_property": "id"}),
+            ],
+            returns=[IRReturn(expr="n3.name")],
+        )
+
+        contract = RequirementContract(
+            role_constraints={
+                "n3": types.SimpleNamespace(label="City", distinct_from=["city_distinct_2"]),
+                "city_distinct_2": types.SimpleNamespace(label="City", distinct_from=["n3"]),
+            }
+        )
+        # Patch in real RoleConstraint objects to match contract type.
+        from nl2gql.pipeline.requirements import RoleConstraint as RC
+
+        contract.role_constraints = {
+            "n3": RC(label="City", distinct_from=["city_distinct_2"]),
+            "city_distinct_2": RC(label="City", distinct_from=["n3"]),
+        }
+
+        refiner._enforce_contract_structure(ir, contract)
+        self.assertIn(("ci", "n3"), contract.role_distinct_filters)
+
+
+class RefinerDistinctRelRoleTests(unittest.TestCase):
+    def test_required_distinct_roles_use_distinct_aliases(self):
+        schema_text = "\n".join(
+            [
+                "- Flight: id",
+                "- Airport: id, code",
+                "- (Flight)-[:ORIGIN]->(Airport)",
+                "- (Flight)-[:DESTINATION]->(Airport)",
+            ]
+        )
+        graph = SchemaGraph.from_text(schema_text)
+
+        dummy_runner = types.SimpleNamespace(validate=lambda _query: SyntaxResult(ok=True, rows=[]))
+        dummy_logic = types.SimpleNamespace(validate=lambda *_args, **_kwargs: (True, None))
+        intent_stub = types.SimpleNamespace(
+            evaluate=lambda *_args, **_kwargs: IntentJudgeResult(valid=True, reasons=[], missing_requirements=[])
+        )
+        refiner = Refiner(
+            graph,
+            generator=types.SimpleNamespace(),
+            logic_validator=dummy_logic,
+            runner=dummy_runner,
+            intent_judge=intent_stub,
+        )
+
+        ir = ISOQueryIR(
+            nodes={
+                "f": IRNode(alias="f", label="Flight"),
+                "a": IRNode(alias="a", label="Airport"),
+            },
+            edges=[
+                IREdge(left_alias="f", rel="ORIGIN", right_alias="a"),
+            ],
+            returns=[IRReturn(expr="a.code")],
+        )
+
+        contract = RequirementContract(
+            required_labels={"Flight", "Airport"},
+            required_edges={
+                ("Flight", "ORIGIN", "Airport"),
+                ("Flight", "DESTINATION", "Airport"),
+            },
+            required_distinct_roles={("Flight", "ORIGIN", "DESTINATION", "Airport")},
+        )
+
+        refiner._enforce_contract_structure(ir, contract)
+        origins = [e.right_alias for e in ir.edges if e.rel == "ORIGIN"]
+        dests = [e.right_alias for e in ir.edges if e.rel == "DESTINATION"]
+        self.assertTrue(origins and dests)
+        self.assertNotEqual(origins[0], dests[0])
 
 
 class CoverageNormalizationTests(unittest.TestCase):

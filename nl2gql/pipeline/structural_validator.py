@@ -11,21 +11,51 @@ Identifier = str
 
 def _aliases_in_expr(expr: str) -> Set[Identifier]:
     """
-    Extract aliases referenced in an expression. We treat the token before a dot
-    as an alias reference; bare identifiers that look like function calls are
-    ignored.
+    Extract aliases and bare identifiers referenced in an expression.
+    - token before a dot is treated as an alias reference
+    - bare identifiers are collected when they are not obviously function calls
     """
     if not expr:
         return set()
     aliases: Set[str] = set()
-    for alias, _prop in re.findall(r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)", expr):
+    prop_tokens: Set[str] = set()
+    for alias, prop in re.findall(r"([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)", expr):
         aliases.add(alias)
-    # Pick up bare identifiers when they are not function calls (best-effort).
+        prop_tokens.add(prop)
+    reserved = {
+        "match",
+        "where",
+        "return",
+        "with",
+        "group",
+        "order",
+        "limit",
+        "asc",
+        "desc",
+        "and",
+        "or",
+        "not",
+        "count",
+        "sum",
+        "avg",
+        "average",
+        "min",
+        "max",
+        "collect",
+        "distinct",
+        "having",
+    }
     tokens = re.findall(r"([A-Za-z_][A-Za-z0-9_]*)", expr)
     for tok in tokens:
-        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*\s*\(", expr):
-            # Likely a function at the start; skip.
-            break
+        lower = tok.lower()
+        if lower in reserved:
+            continue
+        if re.search(rf"\b{re.escape(tok)}\s*\(", expr):
+            # Likely a function call; skip as a reference.
+            continue
+        if tok in prop_tokens:
+            continue
+        aliases.add(tok)
     return aliases
 
 
@@ -35,19 +65,19 @@ def _produced_aliases_from_with(items: Iterable[str]) -> Tuple[Set[Identifier], 
     for item in items:
         if not item:
             continue
-        if " AS " in item.upper():
-            parts = re.split(r"\\s+AS\\s+", item, flags=re.IGNORECASE)
-            if len(parts) == 2:
-                alias = parts[1].strip()
-                if "." in alias:
-                    errors.append(f"invalid identifier in WITH alias: {alias}")
+        segments = [seg.strip() for seg in item.split(",") if seg.strip()]
+        for seg in segments:
+            if " AS " in seg.upper():
+                parts = re.split(r"\s+AS\s+", seg, flags=re.IGNORECASE)
+                if len(parts) == 2:
+                    alias = parts[1].strip()
+                    if "." in alias:
+                        errors.append(f"invalid identifier in WITH alias: {alias}")
+                        continue
+                    produced.add(alias)
                     continue
-                produced.add(alias)
-                continue
-        # If no AS, a bare identifier keeps that name in scope.
-        bare = item.strip()
-        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", bare):
-            produced.add(bare)
+            if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", seg):
+                produced.add(seg)
     return produced, errors
 
 
@@ -80,7 +110,7 @@ def validate_structure(query: str, ir: ISOQueryIR) -> List[str]:
     for item in ir.with_items:
         expr = item
         if " AS " in item.upper():
-            expr = re.split(r"\\s+AS\\s+", item, flags=re.IGNORECASE)[0]
+            expr = re.split(r"\s+AS\s+", item, flags=re.IGNORECASE)[0]
         refs = _aliases_in_expr(expr)
         missing = refs - scope_before_with
         if missing:
@@ -107,6 +137,12 @@ def validate_structure(query: str, ir: ISOQueryIR) -> List[str]:
         if ret.alias and "." in ret.alias:
             errors.append(f"invalid RETURN alias identifier: {ret.alias}")
 
+    for having_expr in ir.having_filters:
+        refs = _aliases_in_expr(having_expr)
+        missing = refs - return_scope
+        if missing:
+            errors.append(f"HAVING references unknown aliases: {', '.join(sorted(missing))}")
+
     # ORDER BY scope
     for order in ir.order_by:
         refs = _aliases_in_expr(order.expr)
@@ -118,4 +154,3 @@ def validate_structure(query: str, ir: ISOQueryIR) -> List[str]:
 
 
 __all__ = ["validate_structure"]
-

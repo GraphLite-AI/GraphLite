@@ -109,6 +109,12 @@ class StageProgress:
     errors: List[str] = field(default_factory=list)
     fixes: List[str] = field(default_factory=list)
     nl_query: str = ""
+    contract_outputs: List[str] = field(default_factory=list)
+    contract_order: List[str] = field(default_factory=list)
+    contract_edges: List[str] = field(default_factory=list)
+    candidate_required_outputs: List[str] = field(default_factory=list)
+    candidate_role_bindings: Dict[str, str] = field(default_factory=dict)
+    logic_mode: str = ""
     
     def __post_init__(self):
         if not self.stages:
@@ -139,6 +145,33 @@ class StageProgress:
     def clear_errors(self) -> None:
         self.errors = []
         self.fixes = []
+
+    def set_contract(self, contract_view: Optional[Dict[str, object]]) -> None:
+        if not contract_view:
+            return
+        outs = contract_view.get("required_outputs") or []
+        self.contract_outputs = [str(o) for o in outs if str(o).strip()][:4]
+        order = contract_view.get("required_order") or []
+        self.contract_order = [str(o) for o in order if str(o).strip()][:2]
+        edges = contract_view.get("required_edges") or []
+        edge_strs: List[str] = []
+        for e in edges:
+            if isinstance(e, (list, tuple)) and len(e) == 3:
+                edge_strs.append(f"{e[0]}-[:{e[1]}]->{e[2]}")
+        self.contract_edges = edge_strs[:3]
+
+    def set_candidate_metadata(self, metadata: Optional[Dict[str, object]]) -> None:
+        if not metadata:
+            self.candidate_required_outputs = []
+            self.candidate_role_bindings = {}
+            return
+        required_alias = metadata.get("required_alias_outputs") or []
+        self.candidate_required_outputs = [str(o) for o in required_alias if str(o).strip()][:4]
+        role_bindings = metadata.get("role_bindings") or {}
+        if isinstance(role_bindings, dict):
+            self.candidate_role_bindings = {str(k): str(v) for k, v in role_bindings.items()}
+        else:
+            self.candidate_role_bindings = {}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -204,6 +237,18 @@ class Spinner:
         """Add a fix to display."""
         with self._lock:
             self.progress.add_fix(fix)
+
+    def set_contract(self, contract_view: Optional[Dict[str, object]]) -> None:
+        with self._lock:
+            self.progress.set_contract(contract_view)
+
+    def set_candidate(self, metadata: Optional[Dict[str, object]]) -> None:
+        with self._lock:
+            self.progress.set_candidate_metadata(metadata)
+
+    def set_logic_mode(self, mode: str) -> None:
+        with self._lock:
+            self.progress.logic_mode = mode or ""
     
     def stop(self, final: Optional[str] = None, color: Optional[str] = None) -> None:
         if self.enabled:
@@ -273,6 +318,13 @@ class Spinner:
         attempt_str = style(f"ATTEMPT {self.progress.attempt}", "mauve", self.enabled, bold=True)
         header = f"  {spin} {attempt_str}"
         lines.append(header)
+
+        # Contract snapshot (optional, compact).
+        if self.progress.contract_outputs:
+            outs = ", ".join(self.progress.contract_outputs)
+            lines.append(style(f"  outputs: {outs}", "dim", self.enabled))
+        if self.progress.logic_mode:
+            lines.append(style(f"  logic: {self.progress.logic_mode}", "dim", self.enabled))
         
         # Stage progress visualization
         lines.append("")

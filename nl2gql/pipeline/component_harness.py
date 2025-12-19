@@ -160,8 +160,8 @@ def run_ir_validation(
         syntax: SyntaxResult = runner.validate(rendered)
 
     errors = parse_errors + schema_errors + coverage_errors
-    if not syntax.ok and syntax.error:
-        errors.append(f"syntax: {syntax.error}")
+    if not syntax.ok:
+        errors.append(f"syntax: {syntax.error or 'unspecified syntax error'}")
     if not logic_ok and logic_reason:
         errors.append(f"logic: {logic_reason}")
 
@@ -176,13 +176,14 @@ def run_ir_validation(
             "rendered": rendered,
             "parse_errors": parse_errors,
             "schema_errors": schema_errors,
-            "coverage_errors": coverage_errors,
-            "syntax_ok": syntax.ok,
-            "logic_ok": logic_ok,
-            "logic_reason": logic_reason,
-            "contract": contract_view(contract),
-        },
-        duration_ms=_duration_ms(start),
+        "coverage_errors": coverage_errors,
+        "syntax_ok": syntax.ok,
+        "syntax_error": syntax.error,
+        "logic_ok": logic_ok,
+        "logic_reason": logic_reason,
+        "contract": contract_view(contract),
+    },
+    duration_ms=_duration_ms(start),
     )
 
 

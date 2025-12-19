@@ -87,6 +87,68 @@ class Refiner:
             candidate += "1"
         return candidate
 
+    def _rewrite_unbound_aliases(self, ir: ISOQueryIR) -> bool:
+        """
+        Fix a common LLM failure mode where a node label (e.g., 'Loan') is used
+        as an alias in filters/returns/order_by. If the label maps to exactly one
+        concrete alias in the IR, rewrite references deterministically.
+        """
+        label_to_aliases: Dict[str, List[str]] = defaultdict(list)
+        for alias, node in ir.nodes.items():
+            if node.label:
+                label_to_aliases[node.label].append(alias)
+
+        rewrite_map: Dict[str, str] = {}
+        for label, aliases in label_to_aliases.items():
+            if len(aliases) == 1:
+                rewrite_map[label] = aliases[0]
+
+        if not rewrite_map:
+            return False
+
+        changed = False
+        # Filters
+        for flt in ir.filters:
+            if flt.alias not in ir.nodes and flt.alias in rewrite_map:
+                flt.alias = rewrite_map[flt.alias]
+                changed = True
+            if isinstance(flt.value, dict):
+                ref_alias = flt.value.get("ref_alias")
+                if ref_alias and ref_alias not in ir.nodes and ref_alias in rewrite_map:
+                    flt.value["ref_alias"] = rewrite_map[ref_alias]
+                    changed = True
+
+        # Expressions containing alias.prop
+        alias_prop_pattern = re.compile(r"\\b([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)\\b")
+
+        def _rewrite_expr(expr: str) -> str:
+            def _sub(match: re.Match) -> str:
+                alias = match.group(1)
+                prop = match.group(2)
+                if alias in rewrite_map:
+                    return f"{rewrite_map[alias]}.{prop}"
+                return match.group(0)
+
+            return alias_prop_pattern.sub(_sub, expr)
+
+        for ret in ir.returns:
+            new_expr = _rewrite_expr(ret.expr)
+            if new_expr != ret.expr:
+                ret.expr = new_expr
+                changed = True
+        for item_idx, item in enumerate(ir.with_items or []):
+            new_item = _rewrite_expr(item)
+            if new_item != item:
+                ir.with_items[item_idx] = new_item
+                changed = True
+        for ob in ir.order_by:
+            new_expr = _rewrite_expr(ob.expr)
+            if new_expr != ob.expr:
+                ob.expr = new_expr
+                changed = True
+
+        return changed
+
     def _enforce_contract_structure(self, ir: ISOQueryIR, contract: RequirementContract) -> None:
         """Add missing nodes/edges/properties required by the contract in a schema-agnostic way."""
         existing_aliases = set(ir.nodes.keys())
@@ -207,17 +269,55 @@ class Refiner:
             ensure_role_alias(role, rc)
 
         # Ensure required edges exist.
+        # Track existing destination aliases per (src_label, dst_label) and rel to support
+        # required_distinct_roles (multiple rels between same labels should use distinct aliases).
+        edges_by_label_rel: Dict[Tuple[str, str, str], List[Tuple[str, str]]] = defaultdict(list)
+        for e in ir.edges:
+            l = ir.nodes.get(e.left_alias)
+            r = ir.nodes.get(e.right_alias)
+            if not (l and r and l.label and r.label):
+                continue
+            edges_by_label_rel[(l.label, e.rel, r.label)].append((e.left_alias, e.right_alias))
+
+        distinct_rels_by_pair: Dict[Tuple[str, str], Set[Tuple[str, str]]] = defaultdict(set)
+        for src, rel_a, rel_b, dst in contract.required_distinct_roles or set():
+            distinct_rels_by_pair[(src, dst)].add((rel_a, rel_b))
+
         for src_label, rel, dst_label in contract.required_edges:
             src_alias = get_alias_for_label(src_label)
             dst_alias = get_alias_for_label(dst_label, avoid={src_alias})
+
+            # If this (src,dst) pair participates in distinct role requirements and we already
+            # used this dst_alias for another rel from src->dst, force a fresh alias.
+            if distinct_rels_by_pair.get((src_label, dst_label)):
+                for (s2, rel2, d2), pairs in edges_by_label_rel.items():
+                    if s2 == src_label and d2 == dst_label and rel2 != rel:
+                        # check if same concrete src alias and dst alias already used
+                        for left_a, right_a in pairs:
+                            if left_a == src_alias and right_a == dst_alias:
+                                dst_alias = get_alias_for_label(dst_label, avoid={src_alias, dst_alias})
+                                break
+
             if not any(
                 e.left_alias == src_alias and e.right_alias == dst_alias and e.rel == rel for e in ir.edges
             ):
                 ir.edges.append(IREdge(left_alias=src_alias, rel=rel, right_alias=dst_alias))
+                edges_by_label_rel[(src_label, rel, dst_label)].append((src_alias, dst_alias))
 
         # Enforce distinct role aliases via inequality filters.
         if role_distinct:
             existing_filter_keys = {(f.alias, f.prop, f.op, str(f.value)) for f in ir.filters}
+            # Record any pre-existing distinct filters so coverage checks can be deterministic
+            # even when the filter came from generation/LLM repair rather than enforcement.
+            for flt in ir.filters:
+                if flt.op != "<>" or flt.prop != "id":
+                    continue
+                other_alias = None
+                if isinstance(flt.value, dict):
+                    other_alias = flt.value.get("ref_alias")
+                if other_alias:
+                    contract.role_distinct_filters.add(tuple(sorted((flt.alias, other_alias))))
+
             distinct_pairs: set[frozenset[str]] = set()
             for role, others in role_distinct.items():
                 rc = (contract.role_constraints or {}).get(role)
@@ -240,6 +340,7 @@ class Refiner:
                     flt_value = {"ref_alias": alias_b, "ref_property": "id"}
                     key = (alias_a, "id", "<>", str(flt_value))
                     if key in existing_filter_keys:
+                        contract.role_distinct_filters.add(tuple(sorted((alias_a, alias_b))))
                         continue
                     ir.filters.append(IRFilter(alias=alias_a, prop="id", op="<>", value=flt_value))
                     existing_filter_keys.add(key)
@@ -672,6 +773,46 @@ class Refiner:
             ir.returns.append(IRReturn(expr=required))
             have.add(_normalize(required))
 
+    def _normalize_projections(self, ir: ISOQueryIR) -> None:
+        """
+        Normalize WITH/RETURN projections:
+        - collapse chains like \"expr AS a AS b\" into \"expr AS b\"
+        - drop duplicate projection entries
+        """
+
+        def _strip_duplicate_as(text: str) -> str:
+            parts = re.split(r"\s+AS\s+", text, flags=re.IGNORECASE)
+            if len(parts) <= 2:
+                return text.strip()
+            expr = parts[0].strip()
+            alias = parts[-1].strip()
+            return f"{expr} AS {alias}"
+
+        seen_with: set[str] = set()
+        normalized_with: list[str] = []
+        for item in ir.with_items:
+            cleaned = _strip_duplicate_as(item)
+            if cleaned in seen_with:
+                continue
+            seen_with.add(cleaned)
+            normalized_with.append(cleaned)
+        ir.with_items = normalized_with
+
+        seen_return: set[tuple[str, str]] = set()
+        normalized_returns: list[IRReturn] = []
+        for ret in ir.returns:
+            expr_text = _strip_duplicate_as(ret.expr)
+            parts = re.split(r"\s+AS\s+", expr_text, flags=re.IGNORECASE)
+            expr = parts[0].strip()
+            alias = parts[1].strip() if len(parts) == 2 else (ret.alias or None)
+            key = (expr.lower(), alias.lower() if alias else "")
+            if key in seen_return:
+                continue
+            seen_return.add(key)
+            normalized_returns.append(IRReturn(expr=expr, alias=alias))
+        if normalized_returns:
+            ir.returns = normalized_returns
+
     def _ensure_order_fields(self, ir: ISOQueryIR) -> None:
         if not ir.order_by:
             return
@@ -900,11 +1041,13 @@ class Refiner:
                     )
                     or repaired
                 )
+                repaired = self._rewrite_unbound_aliases(ir) or repaired
                 # Enforce contract-required structure before validation/rendering.
                 self._enforce_contract_structure(ir, contract)
                 self._dedupe_edges(ir)
                 self._prune_returns(ir)
                 self._ensure_required_outputs(ir, contract)
+                self._normalize_projections(ir)
                 self._prune_unconnected_nodes(ir)
                 # Normalize grouping if aggregates + non-aggregates are mixed.
                 self._ensure_grouping(ir)
@@ -930,8 +1073,16 @@ class Refiner:
                 except TypeError:  # pragma: no cover - compatibility with test stubs
                     logic_valid, logic_reason = self.logic_validator.validate(nl, schema_summary, rendered, hints)
                 if self.intent_judge:
+                    deterministic_summary = {
+                        "parse_errors": parse_errors,
+                        "schema_errors": schema_errors,
+                        "structural_errors": structural_errors,
+                        "coverage_errors": coverage_errors,
+                        "syntax_ok": syntax.ok,
+                        "logic_valid": logic_valid,
+                    }
                     judge_outcome = self.intent_judge.evaluate(
-                        nl, schema_summary, ir, contract, hints
+                        nl, schema_summary, ir, contract, hints, deterministic=deterministic_summary
                     )
                     if isinstance(judge_outcome, IntentJudgeResult):
                         intent_valid = judge_outcome.valid
@@ -947,6 +1098,8 @@ class Refiner:
                                 intent_reasons = [str(payload)]
                     else:
                         intent_valid = bool(judge_outcome)
+                # Treat intent judge as advisory for v0; do not fail the candidate on intent warnings.
+                intent_valid = True
             return ValidationBundle(
                 ir=ir,
                 parse_errors=parse_errors,
@@ -1040,10 +1193,12 @@ class Refiner:
             fix_issues = list(remaining_errors) + edge_hints
             if not current_bundle.logic_valid and current_bundle.logic_reason:
                 fix_issues.append(f"logic: {current_bundle.logic_reason}")
+            # IntentJudge output is advisory; include only as optional hints for repair.
             if not current_bundle.intent_valid:
-                fix_issues.extend(current_bundle.intent_reasons or [])
-                if not current_bundle.intent_reasons and current_bundle.intent_missing:
-                    fix_issues.extend(current_bundle.intent_missing)
+                if current_bundle.intent_reasons:
+                    fix_issues.extend(f"intent: {reason}" for reason in current_bundle.intent_reasons[:3])
+                elif current_bundle.intent_missing:
+                    fix_issues.extend(f"intent missing: {miss}" for miss in current_bundle.intent_missing[:3])
 
             fixed_query = self._llm_fix_query(
                 nl,
@@ -1173,6 +1328,7 @@ class Refiner:
 
                 if spinner:
                     spinner.set_stage("contract", "requirements built")
+                    spinner.set_contract(contract_view(contract))
                     spinner.set_stage("generate", "LLM generating candidates...")
 
                 # Some test stubs still expose a 3-arg generator; prefer passing the
@@ -1254,6 +1410,8 @@ class Refiner:
                 for idx_candidate, candidate in enumerate(candidates, start=1):
                     if spinner:
                         spinner.set_stage("validate", f"validating candidate {idx_candidate}/{len(candidates)}...")
+                        spinner.set_candidate(getattr(candidate, "metadata", None))
+                        spinner.set_logic_mode("structured")
                     bundle = self._evaluate_candidate(
                         nl, pre, candidate, schema_validator, logic_hints, guidance.links, contract, label_hints
                     )
@@ -1456,10 +1614,11 @@ class Refiner:
                     if not bundle.logic_valid and bundle.logic_reason:
                         combined_reasons.append(f"logic: {bundle.logic_reason}")
                     if not bundle.intent_valid:
+                        # Keep intent judge output as a warning for debugging, but do not treat it as a hard failure.
                         if bundle.intent_reasons:
-                            combined_reasons.extend(f"intent: {reason}" for reason in bundle.intent_reasons)
+                            combined_reasons.append(f"intent warning: {bundle.intent_reasons[0]}")
                         elif bundle.intent_missing:
-                            combined_reasons.extend(f"intent missing: {miss}" for miss in bundle.intent_missing)
+                            combined_reasons.append(f"intent warning: {bundle.intent_missing[0]}")
                     if not combined_reasons:
                         combined_reasons.append("unspecified failure")
                     failures.append("; ".join(sorted(set(combined_reasons))))

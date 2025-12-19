@@ -125,10 +125,13 @@ def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementCon
 
     frame = guidance.frame or {}
     targets = frame.get("targets") or []
+    metrics = frame.get("metrics") or []
     order_by = frame.get("order_by") or []
     limit = frame.get("limit")
 
-    contract.required_outputs = [str(t).strip() for t in targets if str(t).strip()]
+    contract.required_outputs = [
+        _canonicalize_expr(str(t).strip()) for t in (targets + metrics) if str(t).strip()
+    ]
     contract.required_order = [_canonicalize_expr(str(o).strip()) for o in order_by if str(o).strip()]
     if isinstance(limit, int) and limit > 0:
         contract.limit = limit
@@ -199,6 +202,8 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
 
     def _normalize(expr: str, alias_sources: Dict[str, str]) -> str:
         expr = expr.replace("`", "").strip()
+        # Drop trailing alias definitions for comparison.
+        expr = re.split(r"\s+AS\s+", expr, flags=re.IGNORECASE)[0].strip()
         for _ in range(5):
             src = alias_sources.get(expr.lower())
             if not src:
@@ -364,6 +369,7 @@ def resolve_required_output_forms(contract: RequirementContract, ir: Optional["I
 
     alias_forms: List[str] = []
     canonical_forms: List[str] = []
+    canonical_nodistinct_forms: List[str] = []
 
     for expr in contract.required_outputs:
         alias_expr = expr
@@ -373,10 +379,13 @@ def resolve_required_output_forms(contract: RequirementContract, ir: Optional["I
             pattern_word = re.compile(rf"(?i)\b{re.escape(label)}\b")
             alias_expr = pattern_word.sub(alias, alias_expr)
         alias_forms.append(alias_expr)
-        canonical_forms.append(_canonicalize_expr(alias_expr))
+        canonical = _canonicalize_expr(alias_expr)
+        canonical_forms.append(canonical)
+        canonical_nodistinct_forms.append(re.sub(r"(?i)\bdistinct\s+", "", canonical).strip())
 
     return {
         "original": list(contract.required_outputs),
         "alias": alias_forms,
         "alias_canonical": canonical_forms,
+        "alias_canonical_nodistinct": canonical_nodistinct_forms,
     }

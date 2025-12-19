@@ -72,6 +72,7 @@ def run_sample_suite(
     verbose: bool = False,
     db_path: Optional[str] = None,
     workers: Optional[int] = None,
+    trace_path: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     max_iterations = min(max_iterations, 3)
     suites = _load_sample_suite(suite_path)
@@ -100,7 +101,7 @@ def run_sample_suite(
         reset_usage_log()
         pipeline = NL2GQLPipeline(task["schema_text"], max_refinements=max_iterations, db_path=db_path)
         try:
-            query, timeline = pipeline.run(task["nl"], spinner=None)
+            query, timeline = pipeline.run(task["nl"], spinner=None, trace_path=trace_path)
             usage = usage_totals()
             if pipeline.last_run_logger:
                 pipeline.last_run_logger.log_usage(usage)
@@ -161,5 +162,4 @@ def run_sample_suite(
 
 
 __all__ = ["run_sample_suite", "_extract_queries_from_file", "_load_sample_suite"]
-
 

@@ -30,6 +30,7 @@ def _error_summary(bundle: Dict[str, Any]) -> str:
     coverage = bundle.get("coverage_errors", [])
     syntax_ok = bundle.get("syntax_ok", True)
     logic_valid = bundle.get("logic_valid", True)
+    intent_valid = bundle.get("intent_valid", True)
 
     if parse:
         parts.append(f"{len(parse)} parse")
@@ -43,6 +44,8 @@ def _error_summary(bundle: Dict[str, Any]) -> str:
         parts.append("syntax")
     if not logic_valid:
         parts.append("logic")
+    if not intent_valid:
+        parts.append("intent")
 
     return ", ".join(parts) if parts else "none"
 
@@ -56,6 +59,7 @@ def _is_clean(bundle: Dict[str, Any]) -> bool:
         and not bundle.get("coverage_errors")
         and bundle.get("syntax_ok", True)
         and bundle.get("logic_valid", True)
+        and bundle.get("intent_valid", True)
     )
 
 
@@ -120,12 +124,16 @@ def format_timeline(nl_query: str, validation_log: List[Dict[str, Any]], max_att
             reqs = contract_entry.get("requirements", {})
             labels = reqs.get("required_labels", [])
             edges = reqs.get("required_edges", [])
+            outputs = reqs.get("required_outputs", [])
             order = reqs.get("required_order", [])
             limit = reqs.get("limit")
             lines.append(f"│  Required labels: {', '.join(labels)}")
             if edges:
                 edge_strs = [f"{e[0]}-[:{e[1]}]->{e[2]}" for e in edges[:3]]
                 lines.append(f"│  Required edges: {', '.join(edge_strs)}{'...' if len(edges) > 3 else ''}")
+            if outputs:
+                out_str = ", ".join(str(o) for o in outputs[:4])
+                lines.append(f"│  Required outputs: {out_str}{'...' if len(outputs) > 4 else ''}")
             if order:
                 lines.append(f"│  Required order: {', '.join(order)}")
             if limit:
@@ -138,7 +146,16 @@ def format_timeline(nl_query: str, validation_log: List[Dict[str, Any]], max_att
             lines.append("")
             lines.append("┌─ STAGE 3: GENERATION")
             candidates = gen_entry.get("candidates", [])
+            metadata = gen_entry.get("candidate_metadata", []) or []
             lines.append(f"│  Generated {len(candidates)} candidate(s)")
+            # Show resolved outputs from candidate metadata when available.
+            if metadata and isinstance(metadata, list):
+                first = metadata[0] if metadata else None
+                if isinstance(first, dict):
+                    req_alias = first.get("required_alias_outputs") or []
+                    if req_alias:
+                        out_str = ", ".join(str(o) for o in req_alias[:4])
+                        lines.append(f"│  Resolved outputs: {out_str}{'...' if len(req_alias) > 4 else ''}")
             lines.append("└─ ✓ Generation complete")
 
         # Stage 4-6: Validation & Repair
@@ -165,6 +182,20 @@ def format_timeline(nl_query: str, validation_log: List[Dict[str, Any]], max_att
                     if len(reason) > 80:
                         reason = reason[:77] + "..."
                     lines.append(f"│    - Logic: {reason}")
+                # IntentJudge is advisory; show as a warning only when present.
+                if not pre_bundle.get("intent_valid", True):
+                    missing = pre_bundle.get("intent_missing", []) or []
+                    reasons = pre_bundle.get("intent_reasons", []) or []
+                    if missing:
+                        miss = str(missing[0])
+                        if len(miss) > 80:
+                            miss = miss[:77] + "..."
+                        lines.append(f"│    - Intent warning: {miss}")
+                    elif reasons:
+                        msg = str(reasons[0])
+                        if len(msg) > 80:
+                            msg = msg[:77] + "..."
+                        lines.append(f"│    - Intent warning: {msg}")
             lines.append(f"└─ {_status_icon(pre_clean)} Initial validation {'passed' if pre_clean else 'needs repair'}")
 
             # Stage 5: Repair (only if there were errors)

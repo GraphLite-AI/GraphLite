@@ -95,6 +95,7 @@ class LogicValidator:
                 "required_outputs_original": output_forms["original"],
                 "required_outputs_alias": output_forms["alias"],
                 "required_outputs_canonical": output_forms["alias_canonical"],
+                "required_outputs_canonical_nodistinct": output_forms["alias_canonical_nodistinct"],
                 "ast": query_or_ir.describe(),
             }
             user = json.dumps(payload, indent=2)
@@ -152,4 +153,3 @@ class LogicValidator:
 
 
 __all__ = ["SchemaGroundingValidator", "LogicValidator"]
-

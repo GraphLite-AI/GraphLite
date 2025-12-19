@@ -83,6 +83,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 verbose=args.verbose,
                 db_path=args.db_path or DEFAULT_DB_PATH,
                 workers=args.suite_workers,
+                trace_path=args.trace_json,
             )
         except Exception as exc:
             print(f"error: failed to run sample suite - {exc}", file=sys.stderr)
@@ -211,5 +212,4 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(main())
-
 

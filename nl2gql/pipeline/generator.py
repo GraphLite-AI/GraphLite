@@ -107,9 +107,43 @@ class Plan:
                 cleaned.append(val)
             return cleaned
 
+        def _balanced(text: str, open_ch: str, close_ch: str) -> bool:
+            depth = 0
+            for ch in text:
+                if ch == open_ch:
+                    depth += 1
+                elif ch == close_ch:
+                    depth -= 1
+                    if depth < 0:
+                        return False
+            return depth == 0
+
+        def _looks_like_complete_match(expr: str) -> bool:
+            if "\n" in expr or "\r" in expr:
+                return False
+            # Must contain at least one node pattern.
+            if "(" not in expr or ")" not in expr:
+                return False
+            if not _balanced(expr, "(", ")"):
+                return False
+            if not _balanced(expr, "[", "]"):
+                return False
+            if not _balanced(expr, "{", "}"):
+                return False
+            # Reject common truncation endings.
+            bad_suffixes = ("-[:", "-[", "[:", "->", "<-", "-", ",", ":", "|")
+            if expr.strip().endswith(bad_suffixes):
+                return False
+            # Relationship brackets should not be opened without closing.
+            if expr.count("[:") > expr.count("]"):
+                return False
+            return True
+
         match = _clean_list("match")
         returns = _clean_list("return")
         if not match or not returns:
+            return None
+        if any(not _looks_like_complete_match(m) for m in match):
             return None
 
         where = _clean_list("where")
@@ -429,6 +463,10 @@ Emit JSON:
   "limit": 5,
   "reason": "primary plan"
 }}
+Rules:
+- Use each JSON key once; never emit duplicate \"with\" fields.
+- Define aggregates in WITH once, then reuse the aliases in RETURN/ORDER/HAVING.
+- Keep every identifier you project defined upstream; no bare identifiers without a WITH or MATCH origin.
 """
 
     def __init__(self, model: str = DEFAULT_OPENAI_MODEL_GEN) -> None:
@@ -479,7 +517,7 @@ Emit JSON:
         )
         if trace is not None:
             trace["raw"] = raw
-        data = safe_json_loads(raw) or {}
+        data = safe_json_loads(raw, merge_duplicate_keys=True) or {}
 
         candidates: List[CandidateQuery] = []
         plan = Plan.from_raw(data, contract) if isinstance(data, dict) else None

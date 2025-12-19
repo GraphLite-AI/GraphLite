@@ -119,10 +119,20 @@ class GraphLiteRunner:
     def validate(self, query: str) -> SyntaxResult:
         if not query.strip():
             return SyntaxResult(ok=False, error="empty query")
+        # Wrap relationship names in backticks to avoid reserved-word collisions (e.g., FOR_PRODUCT).
+        import re
+
+        def _wrap_rel(match: re.Match) -> str:
+            rel = match.group(1)
+            if rel.startswith("`") and rel.endswith("`"):
+                return match.group(0)
+            return f"-[:`{rel}`]"
+
+        query_text = re.sub(r"-\[:([A-Za-z0-9_]+)\]", _wrap_rel, query.strip())
         try:
             self._ensure_ready()
             assert self._db is not None and self._session is not None
-            rows = self._db.query(self._session, query.strip())
+            rows = self._db.query(self._session, query_text)
             return SyntaxResult(ok=True, rows=rows)
         except Exception as exc:  # pragma: no cover
             message = getattr(exc, "message", None) or str(exc)
@@ -130,6 +140,5 @@ class GraphLiteRunner:
 
 
 __all__ = ["GraphLiteRunner", "SyntaxResult"]
-
 
 
