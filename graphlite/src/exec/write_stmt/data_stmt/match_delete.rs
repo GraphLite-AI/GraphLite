@@ -174,12 +174,28 @@ impl DataStatementExecutor for MatchDeleteExecutor {
             ));
         }
 
-        // Step 3: Collect all nodes to delete from bindings
+        // Step 3: Collect nodes to delete based on DELETE expressions
         let mut nodes_to_delete: Vec<String> = Vec::new();
+
+        // Extract variable names from DELETE expressions
+        let delete_vars: Vec<String> = self.statement.expressions
+            .iter()
+            .filter_map(|expr| {
+                if let Expression::Variable(var) = expr {
+                    Some(var.name.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Collect nodes for the specified variables
         for binding in &variable_bindings {
-            for node in binding.values() {
-                if !nodes_to_delete.contains(&node.id) {
-                    nodes_to_delete.push(node.id.clone());
+            for var_name in &delete_vars {
+                if let Some(node) = binding.get(var_name) {
+                    if !nodes_to_delete.contains(&node.id) {
+                        nodes_to_delete.push(node.id.clone());
+                    }
                 }
             }
         }

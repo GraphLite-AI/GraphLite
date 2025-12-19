@@ -21,7 +21,7 @@ use crate::exec::write_stmt::data_stmt::DataStatementExecutor;
 use crate::exec::write_stmt::{ExecutionContext, StatementExecutor};
 use crate::exec::ExecutionError;
 use crate::plan::unified_query_planner::UnifiedQueryPlanner;
-use crate::plan::physical::PhysicalPlan;
+use crate::plan::physical_executor::PhysicalExecutor;
 use crate::storage::{GraphCache, Node, Value};
 use crate::txn::{state::OperationType, UndoOperation};
 
@@ -135,21 +135,8 @@ impl DataStatementExecutor for MatchInsertExecutor {
             let physical_plan = PhysicalPlan::from_logical(&logical_plan);
             let execution_result = physical_plan.execute(graph)?;
 
-            // Convert execution result (HashMap<String, Value>) to HashMap<String, Node>
+            // execution_result is already Vec<HashMap<String, Value>> which we can use directly
             execution_result
-                .into_iter()
-                .map(|row| {
-                    row.into_iter()
-                        .filter_map(|(key, value)| {
-                            if let crate::storage::Value::Node(node) = value {
-                                Some((key, node))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect()
-                })
-                .collect()
         } else {
             // No MATCH clause - use empty bindings
             log::debug!("No MATCH clause, using empty bindings");
@@ -172,24 +159,42 @@ impl DataStatementExecutor for MatchInsertExecutor {
         // Step 3: For each binding, execute INSERT patterns
         for (binding_idx, binding) in variable_bindings.iter().enumerate() {
             log::debug!("Processing binding {} with {} variables", binding_idx, binding.len());
+            log::debug!("Binding variables: {:?}", binding.keys().collect::<Vec<_>>());
 
             // Process each INSERT pattern
             for pattern in &self.statement.insert_graph_patterns {
                 log::debug!("Processing INSERT pattern with {} elements", pattern.elements.len());
 
-                // Process nodes and edges in the pattern
+                // Track node identifiers for edge creation
+                let mut node_id_map: HashMap<String, String> = HashMap::new();
+
+                // First pass: Process nodes and build node ID map
+                for element in &pattern.elements {
+                    if let PatternElement::Node(node_pattern) = element {
+                        if let Some(ref identifier) = node_pattern.identifier {
+                            // Determine node ID
+                            let node_id = if let Some(bound_value) = binding.get(identifier) {
+                                // Extract node ID from bound value
+                                if let Value::Node(node) = bound_value {
+                                    node.id.clone()
+                                } else {
+                                    Uuid::new_v4().to_string()
+                                }
+                            } else {
+                                Uuid::new_v4().to_string()
+                            };
+                            node_id_map.insert(identifier.clone(), node_id);
+                        }
+                    }
+                }
+
+                // Second pass: Process nodes and edges in the pattern
                 for element in &pattern.elements {
                     match element {
                         PatternElement::Node(node_pattern) => {
-                            // Create node
+                            // Get node ID from map or generate new one
                             let node_id = if let Some(ref identifier) = node_pattern.identifier {
-                                // Check if variable is bound from MATCH
-                                if let Some(bound_node) = binding.get(identifier) {
-                                    bound_node.id.clone()
-                                } else {
-                                    // New node - generate ID
-                                    Uuid::new_v4().to_string()
-                                }
+                                node_id_map.get(identifier).cloned().unwrap_or_else(|| Uuid::new_v4().to_string())
                             } else {
                                 Uuid::new_v4().to_string()
                             };
@@ -204,8 +209,8 @@ impl DataStatementExecutor for MatchInsertExecutor {
                                     let value = if let Expression::Literal(literal) = &property.value {
                                         Self::literal_to_value(literal)
                                     } else {
-                                        // Evaluate expression with bindings
-                                        context.evaluate_simple_expression(&property.value)?
+                                        // Evaluate expression with bindings using PhysicalExecutor
+                                        PhysicalExecutor::evaluate_expression(&property.value, binding)?
                                     };
                                     properties.insert(property.key.clone(), value);
                                 }
@@ -233,10 +238,114 @@ impl DataStatementExecutor for MatchInsertExecutor {
                                 log::debug!("Inserted node {} with labels {:?}", node_id, labels);
                             }
                         }
-                        PatternElement::Edge(_edge_pattern) => {
-                            // Edge creation requires knowing source and target nodes
-                            // This is handled in the pattern processing logic
-                            log::debug!("Edge pattern processing - will be handled in path context");
+                        PatternElement::Edge(edge_pattern) => {
+                            // Edge creation requires finding adjacent nodes in the pattern
+                            // Pattern should be: Node - Edge - Node
+                            let element_idx = pattern.elements.iter().position(|e| {
+                                matches!(e, PatternElement::Edge(_))
+                            });
+
+                            if let Some(idx) = element_idx {
+                                // Get source and target nodes
+                                let (from_node_id, to_node_id) = match edge_pattern.direction {
+                                    crate::ast::EdgeDirection::Outgoing => {
+                                        // Pattern: (from)-[edge]->(to)
+                                        let from_id = if idx > 0 {
+                                            if let PatternElement::Node(from_node) = &pattern.elements[idx - 1] {
+                                                from_node.identifier.as_ref().and_then(|id| node_id_map.get(id).cloned())
+                                            } else {
+                                                None
+                                            }
+                                        } else {
+                                            None
+                                        };
+
+                                        let to_id = if idx + 1 < pattern.elements.len() {
+                                            if let PatternElement::Node(to_node) = &pattern.elements[idx + 1] {
+                                                to_node.identifier.as_ref().and_then(|id| node_id_map.get(id).cloned())
+                                            } else {
+                                                None
+                                            }
+                                        } else {
+                                            None
+                                        };
+
+                                        (from_id, to_id)
+                                    }
+                                    crate::ast::EdgeDirection::Incoming => {
+                                        // Pattern: (to)<-[edge]-(from)
+                                        let to_id = if idx > 0 {
+                                            if let PatternElement::Node(to_node) = &pattern.elements[idx - 1] {
+                                                to_node.identifier.as_ref().and_then(|id| node_id_map.get(id).cloned())
+                                            } else {
+                                                None
+                                            }
+                                        } else {
+                                            None
+                                        };
+
+                                        let from_id = if idx + 1 < pattern.elements.len() {
+                                            if let PatternElement::Node(from_node) = &pattern.elements[idx + 1] {
+                                                from_node.identifier.as_ref().and_then(|id| node_id_map.get(id).cloned())
+                                            } else {
+                                                None
+                                            }
+                                        } else {
+                                            None
+                                        };
+
+                                        (from_id, to_id)
+                                    }
+                                    _ => {
+                                        log::warn!("Unsupported edge direction: {:?}", edge_pattern.direction);
+                                        (None, None)
+                                    }
+                                };
+
+                                if let (Some(from_id), Some(to_id)) = (from_node_id, to_node_id) {
+                                    // Get edge label
+                                    let label = edge_pattern.labels.first().cloned().unwrap_or_else(|| "EDGE".to_string());
+
+                                    // Collect edge properties
+                                    let mut properties = HashMap::new();
+                                    if let Some(ref prop_map) = edge_pattern.properties {
+                                        for property in &prop_map.properties {
+                                            let value = if let Expression::Literal(literal) = &property.value {
+                                                Self::literal_to_value(literal)
+                                            } else {
+                                                // Evaluate expression with bindings
+                                                PhysicalExecutor::evaluate_expression(&property.value, binding)?
+                                            };
+                                            properties.insert(property.key.clone(), value);
+                                        }
+                                    }
+
+                                    // Create edge
+                                    let edge_id = Uuid::new_v4().to_string();
+                                    let edge = crate::storage::Edge {
+                                        id: edge_id.clone(),
+                                        from_node: from_id.clone(),
+                                        to_node: to_id.clone(),
+                                        label: label.clone(),
+                                        properties,
+                                    };
+
+                                    graph.add_edge(edge).map_err(|e| {
+                                        ExecutionError::StorageError(format!("Failed to insert edge: {}", e))
+                                    })?;
+
+                                    inserted_count += 1;
+
+                                    undo_operations.push(UndoOperation::InsertEdge {
+                                        graph_path: graph_name.clone(),
+                                        edge_id: edge_id.clone(),
+                                    });
+
+                                    log::debug!("Inserted edge {} with label {:?}", edge_id, label);
+                                } else {
+                                    log::warn!("Could not find source/target nodes for edge pattern");
+                                }
+                            }
                         }
                     }
                 }

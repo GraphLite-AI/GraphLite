@@ -475,7 +475,10 @@ impl PhysicalPlan {
 
     /// Convert logical plan to physical plan
     pub fn from_logical(logical: &LogicalPlan) -> Self {
+        log::debug!("Converting logical plan to physical plan...");
+        log::debug!("Logical root: {:#?}", logical.root);
         let root = Self::convert_logical_node(&logical.root);
+        log::debug!("Physical root: {:#?}", root);
         Self::new(root)
     }
 

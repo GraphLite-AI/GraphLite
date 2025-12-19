@@ -287,6 +287,7 @@ impl UnifiedQueryPlanner {
     ) -> Result<Option<LogicalNode>, PlanningError> {
         if let Some(match_clause) = match_clause {
             let plan = Self::plan_match_where_with(match_clause, where_condition, with_clause)?;
+            log::debug!("UnifiedQueryPlanner generated logical plan: {:#?}", plan);
             Ok(Some(plan))
         } else {
             // Standalone operation (no MATCH clause)

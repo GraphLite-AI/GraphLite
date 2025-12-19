@@ -154,6 +154,16 @@ impl<'a> PhysicalExecutor<'a> {
 
             PhysicalNode::Distinct { input, .. } => self.execute_distinct(input),
 
+            PhysicalNode::HashJoin {
+                join_type,
+                condition,
+                build_keys,
+                probe_keys,
+                build,
+                probe,
+                ..
+            } => self.execute_hash_join(join_type, condition, build_keys, probe_keys, build, probe),
+
             PhysicalNode::NestedLoopJoin {
                 join_type,
                 condition,
@@ -443,10 +453,14 @@ impl<'a> PhysicalExecutor<'a> {
 
             for proj_item in expressions {
                 let value = Self::evaluate_expression(&proj_item.expression, &row)?;
-                let alias = proj_item
-                    .alias
-                    .clone()
-                    .unwrap_or_else(|| format!("col_{}", new_row.len()));
+                let alias = proj_item.alias.clone().unwrap_or_else(|| {
+                    // If no alias, try to use the variable name if expression is a Variable
+                    if let Expression::Variable(var) = &proj_item.expression {
+                        var.name.clone()
+                    } else {
+                        format!("col_{}", new_row.len())
+                    }
+                });
                 new_row.insert(alias, value);
             }
 
@@ -600,7 +614,27 @@ impl<'a> PhysicalExecutor<'a> {
         Ok(results)
     }
 
-    /// Execute nested loop join
+    /// Execute hash join operator
+    fn execute_hash_join(
+        &self,
+        join_type: &crate::plan::logical::JoinType,
+        condition: &Option<Expression>,
+        _build_keys: &[Expression],
+        _probe_keys: &[Expression],
+        build: &PhysicalNode,
+        probe: &PhysicalNode,
+    ) -> Result<ExecutionResult, ExecutionError> {
+        // For now, implement hash join as nested loop join
+        // A full hash join implementation would:
+        // 1. Build a hash table from the build side using build_keys
+        // 2. Probe the hash table with probe side using probe_keys
+        // 3. Join matching rows
+        //
+        // Since we need this working now, we'll use the simpler nested loop approach
+        self.execute_nested_loop_join(join_type, condition, build, probe)
+    }
+
+    /// Execute nested loop join operator
     fn execute_nested_loop_join(
         &self,
         _join_type: &crate::plan::logical::JoinType,
@@ -648,7 +682,7 @@ impl<'a> PhysicalExecutor<'a> {
     }
 
     /// Evaluate an expression against a binding row
-    fn evaluate_expression(
+    pub fn evaluate_expression(
         expr: &Expression,
         row: &BindingRow,
     ) -> Result<Value, ExecutionError> {
@@ -749,6 +783,31 @@ impl<'a> PhysicalExecutor<'a> {
                     _ => Err(ExecutionError::UnsupportedOperator(format!(
                         "Unary operator {:?} not supported",
                         unary_expr.operator
+                    ))),
+                }
+            }
+
+            Expression::FunctionCall(func_call) => {
+                // Handle scalar functions
+                match func_call.name.to_uppercase().as_str() {
+                    "SIZE" => {
+                        // SIZE function - returns length of a list
+                        if func_call.arguments.len() != 1 {
+                            return Err(ExecutionError::RuntimeError(
+                                "SIZE function requires exactly 1 argument".to_string(),
+                            ));
+                        }
+                        let arg_value = Self::evaluate_expression(&func_call.arguments[0], row)?;
+                        match arg_value {
+                            Value::List(list) => Ok(Value::Number(list.len() as f64)),
+                            _ => Err(ExecutionError::RuntimeError(
+                                "SIZE function requires a list argument".to_string(),
+                            )),
+                        }
+                    }
+                    _ => Err(ExecutionError::UnsupportedOperator(format!(
+                        "Function '{}' not yet supported",
+                        func_call.name
                     ))),
                 }
             }
