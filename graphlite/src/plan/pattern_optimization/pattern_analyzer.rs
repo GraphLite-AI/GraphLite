@@ -452,6 +452,7 @@ mod tests {
             } else {
                 vec![label.to_string()]
             },
+            label_expression: None,
             properties: None,
             location: Location::default(),
         })
@@ -461,6 +462,7 @@ mod tests {
         PatternElement::Edge(Edge {
             identifier: id.map(|s| s.to_string()),
             labels: vec![label.to_string()],
+            label_expression: None,
             properties: None,
             direction: EdgeDirection::Outgoing,
             quantifier: None,

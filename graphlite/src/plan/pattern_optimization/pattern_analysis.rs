@@ -349,12 +349,14 @@ mod tests {
                 PatternElement::Node(Node {
                     identifier: Some("a".to_string()),
                     labels: vec![],
+                    label_expression: None,
                     properties: None,
                     location: Location::default(),
                 }),
                 PatternElement::Edge(Edge {
                     identifier: Some("r".to_string()),
                     labels: vec!["R".to_string()],
+                    label_expression: None,
                     properties: None,
                     direction: crate::ast::EdgeDirection::Outgoing,
                     quantifier: None,
@@ -363,6 +365,7 @@ mod tests {
                 PatternElement::Node(Node {
                     identifier: Some("b".to_string()),
                     labels: vec![],
+                    label_expression: None,
                     properties: None,
                     location: Location::default(),
                 }),
@@ -375,6 +378,7 @@ mod tests {
             relationship: Edge {
                 identifier: Some("r2".to_string()),
                 labels: vec!["R2".to_string()],
+                label_expression: None,
                 properties: None,
                 direction: crate::ast::EdgeDirection::Outgoing,
                 quantifier: None,
@@ -418,6 +422,7 @@ mod tests {
                 relationship: Edge {
                     identifier: Some("r".to_string()),
                     labels: vec![],
+                    label_expression: None,
                     properties: None,
                     direction: crate::ast::EdgeDirection::Outgoing,
                     quantifier: None,

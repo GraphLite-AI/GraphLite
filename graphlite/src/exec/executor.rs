@@ -3167,6 +3167,7 @@ impl QueryExecutor {
                     elements: vec![crate::ast::PatternElement::Node(crate::ast::Node {
                         identifier: Some("n".to_string()),
                         labels: vec![],
+                        label_expression: None,
                         properties: None,
                         location: crate::ast::Location::default(),
                     })],

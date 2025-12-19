@@ -367,6 +367,8 @@ pub enum PhysicalNode {
         node_creations: Vec<NodeCreation>,
         /// Edge creation operations
         edge_creations: Vec<EdgeCreation>,
+        /// Optional input for MATCH...INSERT operations
+        input: Option<Box<PhysicalNode>>,
         /// Estimated number of operations
         estimated_ops: usize,
         /// Estimated cost
@@ -956,6 +958,7 @@ impl PhysicalPlan {
             LogicalNode::Insert {
                 patterns,
                 identifier_mappings: _,
+                input,
             } => {
                 let mut node_creations = Vec::new();
                 let mut edge_creations = Vec::new();
@@ -994,12 +997,18 @@ impl PhysicalPlan {
                     }
                 }
 
+                // Convert input if present
+                let input_physical = input
+                    .as_ref()
+                    .map(|i| Box::new(Self::convert_logical_node(i)));
+
                 let estimated_ops = node_creations.len() + edge_creations.len();
                 let estimated_cost = estimated_ops as f64 * 2.0; // Base cost per insertion
 
                 PhysicalNode::Insert {
                     node_creations,
                     edge_creations,
+                    input: input_physical,
                     estimated_ops,
                     estimated_cost,
                 }

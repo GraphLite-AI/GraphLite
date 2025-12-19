@@ -249,6 +249,8 @@ pub enum LogicalNode {
         patterns: Vec<InsertPattern>,
         /// Identifier mappings resolved during planning
         identifier_mappings: HashMap<String, NodeIdentifier>,
+        /// Optional input for MATCH...INSERT operations
+        input: Option<Box<LogicalNode>>,
     },
 
     /// UPDATE operation for modifying properties
@@ -952,7 +954,13 @@ impl LogicalNode {
             }
 
             // Data modification operations
-            LogicalNode::Insert { .. } => vec![], // INSERT doesn't produce variables for queries
+            LogicalNode::Insert { input, .. } => {
+                if let Some(input_node) = input {
+                    input_node.get_variables()
+                } else {
+                    vec![]
+                }
+            }
             LogicalNode::Update { .. } => vec![], // UPDATE doesn't produce variables for queries
             LogicalNode::Delete { .. } => vec![], // DELETE doesn't produce variables for queries
             LogicalNode::SingleRow => vec![],     // SingleRow doesn't produce variables
@@ -1054,7 +1062,14 @@ impl LogicalNode {
             }
 
             // Data modification operations
-            LogicalNode::Insert { patterns, .. } => patterns.len(), // Number of patterns being inserted
+            LogicalNode::Insert { patterns, input, .. } => {
+                // If there's an input, cardinality depends on it
+                if let Some(input_node) = input {
+                    input_node.estimate_cardinality() * patterns.len()
+                } else {
+                    patterns.len() // Standalone INSERT
+                }
+            }
             LogicalNode::Update { .. } => 1, // UPDATE operations typically affect a specific number of entities
             LogicalNode::Delete { .. } => 1, // DELETE operations typically affect a specific number of entities
             LogicalNode::SingleRow => 1,     // SingleRow always produces exactly 1 row

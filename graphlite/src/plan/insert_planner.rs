@@ -79,6 +79,7 @@ impl InsertPlanner {
         let root = LogicalNode::Insert {
             patterns,
             identifier_mappings: self.identifier_mappings.clone(),
+            input: None,
         };
 
         Ok(LogicalPlan { root, variables })
@@ -108,8 +109,11 @@ impl InsertPlanner {
             HashMap::new()
         };
 
+        // Extract labels (supports both simple labels and label expressions)
+        let labels = Self::extract_node_labels(node_pattern);
+
         // Generate content-based storage ID
-        let storage_id = Self::generate_node_content_id(&node_pattern.labels, &properties);
+        let storage_id = Self::generate_node_content_id(&labels, &properties);
 
         // If there's an identifier, add it to our mappings and mark as defined
         if let Some(ref identifier) = node_pattern.identifier {
@@ -117,7 +121,7 @@ impl InsertPlanner {
                 identifier.clone(),
                 NodeIdentifier {
                     storage_id: storage_id.clone(),
-                    labels: node_pattern.labels.clone(),
+                    labels: labels.clone(),
                     is_reference: false,
                 },
             );
@@ -129,17 +133,17 @@ impl InsertPlanner {
                 VariableInfo {
                     name: identifier.clone(),
                     entity_type: EntityType::Node,
-                    labels: node_pattern.labels.clone(),
+                    labels: labels.clone(),
                     required_properties: properties.keys().cloned().collect(),
                 },
             );
         }
 
-        log::debug!("Creating node pattern with storage_id: {}", storage_id);
+        log::debug!("Creating node pattern with storage_id: {} and labels: {:?}", storage_id, labels);
 
         Ok(Some(InsertPattern::CreateNode {
             storage_id,
-            labels: node_pattern.labels.clone(),
+            labels,
             properties,
             original_identifier: node_pattern.identifier.clone(),
         }))
@@ -164,8 +168,9 @@ impl InsertPlanner {
             HashMap::new()
         };
 
-        let edge_label = edge_pattern
-            .labels
+        // Extract labels (supports both simple labels and label expressions)
+        let edge_labels = Self::extract_edge_labels(edge_pattern);
+        let edge_label = edge_labels
             .first()
             .cloned()
             .unwrap_or_else(|| "CONNECTED".to_string());
@@ -185,27 +190,83 @@ impl InsertPlanner {
                 VariableInfo {
                     name: identifier.clone(),
                     entity_type: EntityType::Edge,
-                    labels: edge_pattern.labels.clone(),
+                    labels: edge_labels.clone(),
                     required_properties: properties.keys().cloned().collect(),
                 },
             );
         }
 
         log::debug!(
-            "Creating edge pattern: {} -[{}]-> {}",
+            "Creating edge pattern: {} -[{}]-> {} (direction: {:?})",
             source_node_id,
             edge_label,
-            target_node_id
+            target_node_id,
+            edge_pattern.direction
         );
 
-        Ok(vec![InsertPattern::CreateEdge {
-            storage_id: edge_storage_id,
-            from_node_id: source_node_id,
-            to_node_id: target_node_id,
-            label: edge_label,
-            properties,
-            original_identifier: edge_pattern.identifier.clone(),
-        }])
+        // Handle different edge directions
+        use crate::ast::EdgeDirection;
+        match edge_pattern.direction {
+            EdgeDirection::Outgoing | EdgeDirection::Incoming => {
+                // Standard directed edge (Outgoing: ->, Incoming: <-)
+                // Note: Incoming edges are already swapped by parser
+                Ok(vec![InsertPattern::CreateEdge {
+                    storage_id: edge_storage_id,
+                    from_node_id: source_node_id,
+                    to_node_id: target_node_id,
+                    label: edge_label,
+                    properties,
+                    original_identifier: edge_pattern.identifier.clone(),
+                }])
+            }
+            EdgeDirection::Undirected => {
+                // Undirected edge: ~[label]~
+                // Create a single undirected edge
+                log::debug!("Creating undirected edge (grammar compliance feature)");
+                Ok(vec![InsertPattern::CreateEdge {
+                    storage_id: edge_storage_id,
+                    from_node_id: source_node_id,
+                    to_node_id: target_node_id,
+                    label: edge_label,
+                    properties,
+                    original_identifier: edge_pattern.identifier.clone(),
+                }])
+            }
+            EdgeDirection::Both => {
+                // Bidirectional edge: <-[label]->
+                // Create TWO directed edges (both directions)
+                log::debug!("Creating bidirectional edges (grammar compliance feature)");
+
+                let edge_storage_id_forward = edge_storage_id.clone();
+                let edge_storage_id_backward = Self::generate_edge_content_id(
+                    &target_node_id,  // Reversed
+                    &source_node_id,  // Reversed
+                    &edge_label,
+                    &properties,
+                );
+
+                Ok(vec![
+                    // Forward edge: source -> target
+                    InsertPattern::CreateEdge {
+                        storage_id: edge_storage_id_forward,
+                        from_node_id: source_node_id.clone(),
+                        to_node_id: target_node_id.clone(),
+                        label: edge_label.clone(),
+                        properties: properties.clone(),
+                        original_identifier: edge_pattern.identifier.clone(),
+                    },
+                    // Backward edge: target -> source
+                    InsertPattern::CreateEdge {
+                        storage_id: edge_storage_id_backward,
+                        from_node_id: target_node_id,
+                        to_node_id: source_node_id,
+                        label: edge_label,
+                        properties,
+                        original_identifier: None, // Only the forward edge gets the identifier
+                    },
+                ])
+            }
+        }
     }
 
     /// Resolve the node adjacent to an edge pattern
@@ -248,14 +309,17 @@ impl InsertPlanner {
                         HashMap::new()
                     };
 
-                    if node_pattern.labels.is_empty() && properties.is_empty() {
+                    // Extract labels (supports both simple labels and label expressions)
+                    let labels = Self::extract_node_labels(node_pattern);
+
+                    if labels.is_empty() && properties.is_empty() {
                         return Err(PlanningError::InvalidPattern(
                             "Cannot use empty anonymous node in edge pattern".to_string(),
                         ));
                     }
 
                     Ok(Self::generate_node_content_id(
-                        &node_pattern.labels,
+                        &labels,
                         &properties,
                     ))
                 }
@@ -332,6 +396,59 @@ impl InsertPlanner {
         let hash = hasher.finish();
         format!("edge_{:x}", hash)
     }
+
+    /// Extract labels from a Node pattern, supporting both simple labels and label expressions
+    ///
+    /// This handles the grammar compliance feature for label conjunction (e.g., :Person&Employee)
+    /// Returns a Vec of all labels that should be applied to the node.
+    fn extract_node_labels(node: &crate::ast::Node) -> Vec<String> {
+        if let Some(ref label_expr) = node.label_expression {
+            // Label expression takes precedence (grammar compliance)
+            Self::flatten_label_expression(label_expr)
+        } else {
+            // Fallback to simple labels
+            node.labels.clone()
+        }
+    }
+
+    /// Extract labels from an Edge pattern, supporting both simple labels and label expressions
+    fn extract_edge_labels(edge: &crate::ast::Edge) -> Vec<String> {
+        if let Some(ref label_expr) = edge.label_expression {
+            // Label expression takes precedence (grammar compliance)
+            Self::flatten_label_expression(label_expr)
+        } else {
+            // Fallback to simple labels
+            edge.labels.clone()
+        }
+    }
+
+    /// Flatten a LabelExpression into a list of label strings
+    ///
+    /// For conjunction (e.g., :Person&Employee), this returns ["Person", "Employee"]
+    /// This enables proper matching where ALL labels must be present.
+    fn flatten_label_expression(expr: &crate::ast::LabelExpression) -> Vec<String> {
+        let mut labels = Vec::new();
+
+        for term in &expr.terms {
+            for factor in &term.factors {
+                match factor {
+                    crate::ast::LabelFactor::Identifier(name) => {
+                        labels.push(name.clone());
+                    }
+                    crate::ast::LabelFactor::Wildcard => {
+                        // Wildcard matches any label - for now, we'll ignore it
+                        // TODO: Implement wildcard semantics when needed
+                    }
+                    crate::ast::LabelFactor::Parenthesized(nested_expr) => {
+                        // Recursively flatten nested expressions
+                        labels.extend(Self::flatten_label_expression(nested_expr));
+                    }
+                }
+            }
+        }
+
+        labels
+    }
 }
 
 /// Planning errors specific to INSERT operations
@@ -342,4 +459,7 @@ pub enum PlanningError {
 
     #[error("Identifier not found: {0}")]
     IdentifierNotFound(String),
+
+    #[error("Not implemented: {0}")]
+    NotImplemented(String),
 }

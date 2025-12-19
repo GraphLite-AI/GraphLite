@@ -1257,6 +1257,7 @@ fn node_pattern(tokens: &[Token]) -> IResult<&[Token], Node> {
         |(_, identifier, labels, properties, _)| Node {
             identifier,
             labels: labels.unwrap_or_default(),
+            label_expression: None, // TODO: Parse label conjunction when grammar support is added
             properties,
             location: Location::default(),
         },
@@ -1305,6 +1306,7 @@ fn edge_pattern(tokens: &[Token]) -> IResult<&[Token], Edge> {
             Edge {
                 identifier,
                 labels: labels.unwrap_or_default(),
+                label_expression: None, // TODO: Parse label conjunction when grammar support is added
                 properties,
                 direction,
                 quantifier, // ISO GQL: quantifier parsed after ] but before final direction

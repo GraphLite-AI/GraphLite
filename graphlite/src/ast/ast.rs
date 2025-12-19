@@ -328,6 +328,10 @@ pub enum PatternElement {
 pub struct Node {
     pub identifier: Option<String>,
     pub labels: Vec<String>,
+    /// Label expression for conjunction support (e.g., :Person&Employee)
+    /// Only one of `labels` or `label_expression` should be set.
+    /// This field enables grammar compliance with ISO GQL labelSetSpecification.
+    pub label_expression: Option<LabelExpression>,
     pub properties: Option<PropertyMap>,
     pub location: Location,
 }
@@ -337,6 +341,10 @@ pub struct Node {
 pub struct Edge {
     pub identifier: Option<String>,
     pub labels: Vec<String>,
+    /// Label expression for conjunction support (e.g., :KNOWS&LIKES)
+    /// Only one of `labels` or `label_expression` should be set.
+    /// This field enables grammar compliance with ISO GQL labelSetSpecification.
+    pub label_expression: Option<LabelExpression>,
     pub properties: Option<PropertyMap>,
     pub direction: EdgeDirection,
     pub quantifier: Option<PathQuantifier>,

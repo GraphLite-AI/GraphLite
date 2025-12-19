@@ -13,4 +13,6 @@ pub mod logical;
 pub mod optimizer;
 pub mod pattern_optimization;
 pub mod physical;
+pub mod physical_executor;
 pub mod trace;
+pub mod unified_query_planner;
