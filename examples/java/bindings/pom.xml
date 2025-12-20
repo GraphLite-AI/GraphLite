@@ -5,7 +5,7 @@
          http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.deepgraph.examples</groupId>
+    <groupId>io.graphlite.examples</groupId>
     <artifactId>graphlite-examples</artifactId>
     <version>0.1.0</version>
     <packaging>jar</packaging>
@@ -52,6 +52,12 @@
                 <version>3.1.0</version>
                 <configuration>
                     <mainClass>BasicUsage</mainClass>
+                    <systemProperties>
+                        <systemProperty>
+                            <key>jna.library.path</key>
+                            <value>${project.basedir}/../../../target/release</value>
+                        </systemProperty>
+                    </systemProperties>
                 </configuration>
             </plugin>
         </plugins>
@@ -68,6 +74,12 @@
                         <artifactId>exec-maven-plugin</artifactId>
                         <configuration>
                             <mainClass>BasicUsage</mainClass>
+                            <systemProperties>
+                                <systemProperty>
+                                    <key>jna.library.path</key>
+                                    <value>${project.basedir}/../../../target/release</value>
+                                </systemProperty>
+                            </systemProperties>
                         </configuration>
                     </plugin>
                 </plugins>
