@@ -1,4 +1,4 @@
-package com.deepgraph.graphlite;
+package io.graphlite;
 
 import org.json.JSONArray;
 import org.json.JSONObject;

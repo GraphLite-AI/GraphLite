@@ -1,4 +1,4 @@
-package com.deepgraph.graphlite;
+package io.graphlite;
 
 import com.sun.jna.*;
 import com.sun.jna.ptr.IntByReference;

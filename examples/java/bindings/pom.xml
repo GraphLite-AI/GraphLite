@@ -22,7 +22,7 @@
     <dependencies>
         <!-- GraphLite Java Bindings (install first: cd bindings/java && mvn install -DskipTests -Dmaven.javadoc.skip=true) -->
         <dependency>
-            <groupId>com.deepgraph</groupId>
+            <groupId>io.graphlite</groupId>
             <artifactId>graphlite</artifactId>
             <version>0.1.0</version>
         </dependency>

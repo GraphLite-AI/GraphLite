@@ -1,6 +1,6 @@
-import com.deepgraph.graphlite.GraphLite;
-import com.deepgraph.graphlite.GraphLite.GraphLiteException;
-import com.deepgraph.graphlite.QueryResult;
+import io.graphlite.GraphLite;
+import io.graphlite.GraphLite.GraphLiteException;
+import io.graphlite.QueryResult;
 
 import java.io.IOException;
 import java.nio.file.Files;
