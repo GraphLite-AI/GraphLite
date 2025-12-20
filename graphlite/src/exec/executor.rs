@@ -907,7 +907,7 @@ impl QueryExecutor {
                 })?;
 
                 // Direct synchronous call
-                crate::exec::write_stmt::ddl_stmt::IndexStatementCoordinator::execute_index_statement(
+                crate::exec::schema_engine::operations::types::IndexStatementCoordinator::execute_index_statement(
                     index_stmt,
                     self.storage.clone(),
                     &mut catalog_manager,

@@ -8,9 +8,16 @@
 //! physical plan optimization, and cost estimation.
 
 pub mod cost;
-pub mod insert_planner;
-pub mod logical;
 pub mod optimizer;
 pub mod pattern_optimization;
-pub mod physical;
 pub mod trace;
+
+// Phase 2 refactoring: New module structure
+pub mod operators;    // Logical and physical operators (organized)
+pub mod builders;     // Plan builders (AST→Logical, Logical→Physical)
+pub mod optimizers;   // Optimization rules (logical and physical) - TODO: extract from optimizer.rs
+
+// Re-export for backward compatibility
+pub use operators::logical;      // logical.rs moved to operators/
+pub use operators::physical;     // physical.rs moved to operators/
+pub use builders::insert_builder as insert_planner;  // insert_planner.rs moved to builders/
