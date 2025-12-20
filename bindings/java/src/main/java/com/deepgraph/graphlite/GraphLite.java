@@ -273,7 +273,8 @@ public class GraphLite implements Closeable {
     public static String version() {
         Pointer versionPtr = GraphLiteNative.INSTANCE.graphlite_version();
         if (versionPtr != null) {
-            // Note: version returns a static string, do NOT free it
+            // graphlite_version returns a pointer to a static string that must NOT be freed.
+            // Freeing it causes undefined behavior (SIGBUS).
             return versionPtr.getString(0);
         }
         return "unknown";
