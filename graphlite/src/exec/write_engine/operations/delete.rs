@@ -352,3 +352,382 @@ impl DataStatementExecutor for DeleteExecutor {
         Ok((undo_op, deleted_count))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::{Literal, Location, Property, PropertyMap};
+    use std::collections::HashMap;
+
+    // Helper to create a dummy location for tests
+    fn dummy_location() -> Location {
+        Location {
+            line: 1,
+            column: 1,
+            offset: 0,
+        }
+    }
+
+    // Test node_matches_pattern function
+
+    #[test]
+    fn test_node_matches_pattern_empty_pattern() {
+        // Empty pattern should match any node
+        let node = Node {
+            id: "n1".to_string(),
+            labels: vec!["Person".to_string()],
+            properties: HashMap::new(),
+        };
+
+        let pattern = crate::ast::Node {
+            identifier: None,
+            labels: vec![],
+            properties: None,
+            location: dummy_location(),
+        };
+
+        assert!(DeleteExecutor::node_matches_pattern(&node, &pattern));
+    }
+
+    #[test]
+    fn test_node_matches_pattern_label_match() {
+        // Node with matching label
+        let node = Node {
+            id: "n1".to_string(),
+            labels: vec!["Person".to_string()],
+            properties: HashMap::new(),
+        };
+
+        let pattern = crate::ast::Node {
+            identifier: None,
+            labels: vec!["Person".to_string()],
+            properties: None,
+            location: dummy_location(),
+        };
+
+        assert!(DeleteExecutor::node_matches_pattern(&node, &pattern));
+    }
+
+    #[test]
+    fn test_node_matches_pattern_label_no_match() {
+        // Node with non-matching label
+        let node = Node {
+            id: "n1".to_string(),
+            labels: vec!["Person".to_string()],
+            properties: HashMap::new(),
+        };
+
+        let pattern = crate::ast::Node {
+            identifier: None,
+            labels: vec!["Company".to_string()],
+            properties: None,
+            location: dummy_location(),
+        };
+
+        assert!(!DeleteExecutor::node_matches_pattern(&node, &pattern));
+    }
+
+    #[test]
+    fn test_node_matches_pattern_multiple_labels() {
+        // Node with multiple labels, all must match
+        let node = Node {
+            id: "n1".to_string(),
+            labels: vec!["Person".to_string(), "Employee".to_string()],
+            properties: HashMap::new(),
+        };
+
+        let pattern = crate::ast::Node {
+            identifier: None,
+            labels: vec!["Person".to_string(), "Employee".to_string()],
+            properties: None,
+            location: dummy_location(),
+        };
+
+        assert!(DeleteExecutor::node_matches_pattern(&node, &pattern));
+    }
+
+    #[test]
+    fn test_node_matches_pattern_subset_labels() {
+        // Pattern requires subset of node's labels
+        let node = Node {
+            id: "n1".to_string(),
+            labels: vec!["Person".to_string(), "Employee".to_string(), "Manager".to_string()],
+            properties: HashMap::new(),
+        };
+
+        let pattern = crate::ast::Node {
+            identifier: None,
+            labels: vec!["Person".to_string(), "Employee".to_string()],
+            properties: None,
+            location: dummy_location(),
+        };
+
+        assert!(DeleteExecutor::node_matches_pattern(&node, &pattern));
+    }
+
+    #[test]
+    fn test_node_matches_pattern_property_string_match() {
+        // Node with matching string property
+        let mut properties = HashMap::new();
+        properties.insert("name".to_string(), Value::String("Alice".to_string()));
+
+        let node = Node {
+            id: "n1".to_string(),
+            labels: vec!["Person".to_string()],
+            properties,
+        };
+
+        let pattern = crate::ast::Node {
+            identifier: None,
+            labels: vec!["Person".to_string()],
+            properties: Some(PropertyMap {
+                properties: vec![Property {
+                    key: "name".to_string(),
+                    value: Expression::Literal(Literal::String("Alice".to_string())),
+                    location: dummy_location(),
+                }],
+                location: dummy_location(),
+            }),
+            location: dummy_location(),
+        };
+
+        assert!(DeleteExecutor::node_matches_pattern(&node, &pattern));
+    }
+
+    #[test]
+    fn test_node_matches_pattern_property_string_no_match() {
+        // Node with non-matching string property
+        let mut properties = HashMap::new();
+        properties.insert("name".to_string(), Value::String("Alice".to_string()));
+
+        let node = Node {
+            id: "n1".to_string(),
+            labels: vec!["Person".to_string()],
+            properties,
+        };
+
+        let pattern = crate::ast::Node {
+            identifier: None,
+            labels: vec!["Person".to_string()],
+            properties: Some(PropertyMap {
+                properties: vec![Property {
+                    key: "name".to_string(),
+                    value: Expression::Literal(Literal::String("Bob".to_string())),
+                    location: dummy_location(),
+                }],
+                location: dummy_location(),
+            }),
+            location: dummy_location(),
+        };
+
+        assert!(!DeleteExecutor::node_matches_pattern(&node, &pattern));
+    }
+
+    #[test]
+    fn test_node_matches_pattern_property_integer() {
+        // Node with matching integer property
+        let mut properties = HashMap::new();
+        properties.insert("age".to_string(), Value::Number(30.0));
+
+        let node = Node {
+            id: "n1".to_string(),
+            labels: vec!["Person".to_string()],
+            properties,
+        };
+
+        let pattern = crate::ast::Node {
+            identifier: None,
+            labels: vec!["Person".to_string()],
+            properties: Some(PropertyMap {
+                properties: vec![Property {
+                    key: "age".to_string(),
+                    value: Expression::Literal(Literal::Integer(30)),
+                    location: dummy_location(),
+                }],
+                location: dummy_location(),
+            }),
+            location: dummy_location(),
+        };
+
+        assert!(DeleteExecutor::node_matches_pattern(&node, &pattern));
+    }
+
+    #[test]
+    fn test_node_matches_pattern_property_float() {
+        // Node with matching float property
+        let mut properties = HashMap::new();
+        properties.insert("score".to_string(), Value::Number(99.5));
+
+        let node = Node {
+            id: "n1".to_string(),
+            labels: vec!["Student".to_string()],
+            properties,
+        };
+
+        let pattern = crate::ast::Node {
+            identifier: None,
+            labels: vec!["Student".to_string()],
+            properties: Some(PropertyMap {
+                properties: vec![Property {
+                    key: "score".to_string(),
+                    value: Expression::Literal(Literal::Float(99.5)),
+                    location: dummy_location(),
+                }],
+                location: dummy_location(),
+            }),
+            location: dummy_location(),
+        };
+
+        assert!(DeleteExecutor::node_matches_pattern(&node, &pattern));
+    }
+
+    #[test]
+    fn test_node_matches_pattern_property_boolean() {
+        // Node with matching boolean property
+        let mut properties = HashMap::new();
+        properties.insert("active".to_string(), Value::Boolean(true));
+
+        let node = Node {
+            id: "n1".to_string(),
+            labels: vec!["User".to_string()],
+            properties,
+        };
+
+        let pattern = crate::ast::Node {
+            identifier: None,
+            labels: vec!["User".to_string()],
+            properties: Some(PropertyMap {
+                properties: vec![Property {
+                    key: "active".to_string(),
+                    value: Expression::Literal(Literal::Boolean(true)),
+                    location: dummy_location(),
+                }],
+                location: dummy_location(),
+            }),
+            location: dummy_location(),
+        };
+
+        assert!(DeleteExecutor::node_matches_pattern(&node, &pattern));
+    }
+
+    #[test]
+    fn test_node_matches_pattern_property_null() {
+        // Node with matching null property
+        let mut properties = HashMap::new();
+        properties.insert("middle_name".to_string(), Value::Null);
+
+        let node = Node {
+            id: "n1".to_string(),
+            labels: vec!["Person".to_string()],
+            properties,
+        };
+
+        let pattern = crate::ast::Node {
+            identifier: None,
+            labels: vec!["Person".to_string()],
+            properties: Some(PropertyMap {
+                properties: vec![Property {
+                    key: "middle_name".to_string(),
+                    value: Expression::Literal(Literal::Null),
+                    location: dummy_location(),
+                }],
+                location: dummy_location(),
+            }),
+            location: dummy_location(),
+        };
+
+        assert!(DeleteExecutor::node_matches_pattern(&node, &pattern));
+    }
+
+    #[test]
+    fn test_node_matches_pattern_missing_property() {
+        // Node missing a required property
+        let node = Node {
+            id: "n1".to_string(),
+            labels: vec!["Person".to_string()],
+            properties: HashMap::new(),
+        };
+
+        let pattern = crate::ast::Node {
+            identifier: None,
+            labels: vec!["Person".to_string()],
+            properties: Some(PropertyMap {
+                properties: vec![Property {
+                    key: "name".to_string(),
+                    value: Expression::Literal(Literal::String("Alice".to_string())),
+                    location: dummy_location(),
+                }],
+                location: dummy_location(),
+            }),
+            location: dummy_location(),
+        };
+
+        assert!(!DeleteExecutor::node_matches_pattern(&node, &pattern));
+    }
+
+    #[test]
+    fn test_node_matches_pattern_multiple_properties() {
+        // Node with multiple matching properties
+        let mut properties = HashMap::new();
+        properties.insert("name".to_string(), Value::String("Alice".to_string()));
+        properties.insert("age".to_string(), Value::Number(30.0));
+
+        let node = Node {
+            id: "n1".to_string(),
+            labels: vec!["Person".to_string()],
+            properties,
+        };
+
+        let pattern = crate::ast::Node {
+            identifier: None,
+            labels: vec!["Person".to_string()],
+            properties: Some(PropertyMap {
+                properties: vec![
+                    Property {
+                        key: "name".to_string(),
+                        value: Expression::Literal(Literal::String("Alice".to_string())),
+                        location: dummy_location(),
+                    },
+                    Property {
+                        key: "age".to_string(),
+                        value: Expression::Literal(Literal::Integer(30)),
+                        location: dummy_location(),
+                    },
+                ],
+                location: dummy_location(),
+            }),
+            location: dummy_location(),
+        };
+
+        assert!(DeleteExecutor::node_matches_pattern(&node, &pattern));
+    }
+
+    #[test]
+    fn test_node_matches_pattern_labels_and_properties() {
+        // Node with both matching labels and properties
+        let mut properties = HashMap::new();
+        properties.insert("name".to_string(), Value::String("Alice".to_string()));
+
+        let node = Node {
+            id: "n1".to_string(),
+            labels: vec!["Person".to_string(), "Employee".to_string()],
+            properties,
+        };
+
+        let pattern = crate::ast::Node {
+            identifier: None,
+            labels: vec!["Person".to_string()],
+            properties: Some(PropertyMap {
+                properties: vec![Property {
+                    key: "name".to_string(),
+                    value: Expression::Literal(Literal::String("Alice".to_string())),
+                    location: dummy_location(),
+                }],
+                location: dummy_location(),
+            }),
+            location: dummy_location(),
+        };
+
+        assert!(DeleteExecutor::node_matches_pattern(&node, &pattern));
+    }
+}

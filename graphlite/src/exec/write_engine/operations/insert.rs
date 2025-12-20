@@ -596,3 +596,270 @@ impl DataStatementExecutor for InsertExecutor {
         Ok((undo_op, total_inserted))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::{Literal, Location, Property, PropertyMap};
+
+    // Helper to create a dummy location for tests
+    fn dummy_location() -> Location {
+        Location {
+            line: 1,
+            column: 1,
+            offset: 0,
+        }
+    }
+
+    #[test]
+    fn test_literal_to_value_string() {
+        let literal = Literal::String("test".to_string());
+        let value = InsertExecutor::literal_to_value(&literal);
+        assert_eq!(value, Value::String("test".to_string()));
+    }
+
+    #[test]
+    fn test_literal_to_value_integer() {
+        let literal = Literal::Integer(42);
+        let value = InsertExecutor::literal_to_value(&literal);
+        assert_eq!(value, Value::Number(42.0));
+    }
+
+    #[test]
+    fn test_literal_to_value_float() {
+        let literal = Literal::Float(3.14);
+        let value = InsertExecutor::literal_to_value(&literal);
+        assert_eq!(value, Value::Number(3.14));
+    }
+
+    #[test]
+    fn test_literal_to_value_boolean() {
+        let literal = Literal::Boolean(true);
+        let value = InsertExecutor::literal_to_value(&literal);
+        assert_eq!(value, Value::Boolean(true));
+    }
+
+    #[test]
+    fn test_literal_to_value_null() {
+        let literal = Literal::Null;
+        let value = InsertExecutor::literal_to_value(&literal);
+        assert_eq!(value, Value::Null);
+    }
+
+    #[test]
+    fn test_literal_to_value_list() {
+        let literal = Literal::List(vec![
+            Literal::Integer(1),
+            Literal::Integer(2),
+            Literal::Integer(3),
+        ]);
+        let value = InsertExecutor::literal_to_value(&literal);
+        match value {
+            Value::List(list) => {
+                assert_eq!(list.len(), 3);
+                assert_eq!(list[0], Value::Number(1.0));
+                assert_eq!(list[1], Value::Number(2.0));
+                assert_eq!(list[2], Value::Number(3.0));
+            }
+            _ => panic!("Expected Value::List"),
+        }
+    }
+
+    #[test]
+    fn test_literal_to_value_vector() {
+        let literal = Literal::Vector(vec![1.0, 2.0, 3.0]);
+        let value = InsertExecutor::literal_to_value(&literal);
+        match value {
+            Value::Vector(vec) => {
+                assert_eq!(vec.len(), 3);
+                assert_eq!(vec[0], 1.0f32);
+                assert_eq!(vec[1], 2.0f32);
+                assert_eq!(vec[2], 3.0f32);
+            }
+            _ => panic!("Expected Value::Vector"),
+        }
+    }
+
+    #[test]
+    fn test_extract_properties_single_property() {
+        let prop_map = PropertyMap {
+            properties: vec![Property {
+                key: "name".to_string(),
+                value: crate::ast::Expression::Literal(Literal::String("Alice".to_string())),
+                location: dummy_location(),
+            }],
+            location: dummy_location(),
+        };
+
+        let properties = InsertExecutor::extract_properties(&prop_map);
+        assert_eq!(properties.len(), 1);
+        assert_eq!(
+            properties.get("name"),
+            Some(&Value::String("Alice".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_extract_properties_multiple_properties() {
+        let prop_map = PropertyMap {
+            properties: vec![
+                Property {
+                    key: "name".to_string(),
+                    value: crate::ast::Expression::Literal(Literal::String("Bob".to_string())),
+                    location: dummy_location(),
+                },
+                Property {
+                    key: "age".to_string(),
+                    value: crate::ast::Expression::Literal(Literal::Integer(30)),
+                    location: dummy_location(),
+                },
+                Property {
+                    key: "active".to_string(),
+                    value: crate::ast::Expression::Literal(Literal::Boolean(true)),
+                    location: dummy_location(),
+                },
+            ],
+            location: dummy_location(),
+        };
+
+        let properties = InsertExecutor::extract_properties(&prop_map);
+        assert_eq!(properties.len(), 3);
+        assert_eq!(
+            properties.get("name"),
+            Some(&Value::String("Bob".to_string()))
+        );
+        assert_eq!(properties.get("age"), Some(&Value::Number(30.0)));
+        assert_eq!(properties.get("active"), Some(&Value::Boolean(true)));
+    }
+
+    #[test]
+    fn test_extract_properties_empty() {
+        let prop_map = PropertyMap {
+            properties: vec![],
+            location: dummy_location(),
+        };
+
+        let properties = InsertExecutor::extract_properties(&prop_map);
+        assert_eq!(properties.len(), 0);
+    }
+
+    #[test]
+    fn test_generate_node_content_id_consistency() {
+        let labels = vec!["Person".to_string(), "Employee".to_string()];
+        let mut properties = HashMap::new();
+        properties.insert("name".to_string(), Value::String("Alice".to_string()));
+        properties.insert("age".to_string(), Value::Number(30.0));
+
+        let id1 = InsertExecutor::generate_node_content_id(&labels, &properties);
+        let id2 = InsertExecutor::generate_node_content_id(&labels, &properties);
+
+        // Same inputs should produce same ID
+        assert_eq!(id1, id2);
+    }
+
+    #[test]
+    fn test_generate_node_content_id_label_order_independence() {
+        let labels1 = vec!["Person".to_string(), "Employee".to_string()];
+        let labels2 = vec!["Employee".to_string(), "Person".to_string()];
+        let properties = HashMap::new();
+
+        let id1 = InsertExecutor::generate_node_content_id(&labels1, &properties);
+        let id2 = InsertExecutor::generate_node_content_id(&labels2, &properties);
+
+        // Label order shouldn't matter
+        assert_eq!(id1, id2);
+    }
+
+    #[test]
+    fn test_generate_node_content_id_different_labels_different_id() {
+        let labels1 = vec!["Person".to_string()];
+        let labels2 = vec!["Employee".to_string()];
+        let properties = HashMap::new();
+
+        let id1 = InsertExecutor::generate_node_content_id(&labels1, &properties);
+        let id2 = InsertExecutor::generate_node_content_id(&labels2, &properties);
+
+        // Different labels should produce different IDs
+        assert_ne!(id1, id2);
+    }
+
+    #[test]
+    fn test_generate_node_content_id_different_properties_different_id() {
+        let labels = vec!["Person".to_string()];
+        let mut props1 = HashMap::new();
+        props1.insert("name".to_string(), Value::String("Alice".to_string()));
+
+        let mut props2 = HashMap::new();
+        props2.insert("name".to_string(), Value::String("Bob".to_string()));
+
+        let id1 = InsertExecutor::generate_node_content_id(&labels, &props1);
+        let id2 = InsertExecutor::generate_node_content_id(&labels, &props2);
+
+        // Different properties should produce different IDs
+        assert_ne!(id1, id2);
+    }
+
+    #[test]
+    fn test_generate_edge_content_id_consistency() {
+        let mut properties = HashMap::new();
+        properties.insert("since".to_string(), Value::String("2020".to_string()));
+
+        let id1 = InsertExecutor::generate_edge_content_id(
+            "node1",
+            "node2",
+            "KNOWS",
+            &properties,
+        );
+        let id2 = InsertExecutor::generate_edge_content_id(
+            "node1",
+            "node2",
+            "KNOWS",
+            &properties,
+        );
+
+        // Same inputs should produce same ID
+        assert_eq!(id1, id2);
+    }
+
+    #[test]
+    fn test_generate_edge_content_id_different_nodes_different_id() {
+        let properties = HashMap::new();
+
+        let id1 = InsertExecutor::generate_edge_content_id(
+            "node1",
+            "node2",
+            "KNOWS",
+            &properties,
+        );
+        let id2 = InsertExecutor::generate_edge_content_id(
+            "node2",
+            "node3",
+            "KNOWS",
+            &properties,
+        );
+
+        // Different nodes should produce different IDs
+        assert_ne!(id1, id2);
+    }
+
+    #[test]
+    fn test_generate_edge_content_id_different_label_different_id() {
+        let properties = HashMap::new();
+
+        let id1 = InsertExecutor::generate_edge_content_id(
+            "node1",
+            "node2",
+            "KNOWS",
+            &properties,
+        );
+        let id2 = InsertExecutor::generate_edge_content_id(
+            "node1",
+            "node2",
+            "LIKES",
+            &properties,
+        );
+
+        // Different labels should produce different IDs
+        assert_ne!(id1, id2);
+    }
+}
