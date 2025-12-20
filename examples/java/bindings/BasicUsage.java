@@ -116,7 +116,8 @@ public class BasicUsage {
             if (!result.isEmpty()) {
                 Map<String, Object> row = result.first();
                 System.out.println("   Total persons: " + row.get("total"));
-                System.out.println("   Average age: " + String.format("%.1f", row.get("avg_age")));
+                Object avgAge = row.get("avg_age");
+                System.out.println("   Average age: " + (avgAge instanceof Number ? ((Number) avgAge).doubleValue() : avgAge));
             }
             System.out.println();
 

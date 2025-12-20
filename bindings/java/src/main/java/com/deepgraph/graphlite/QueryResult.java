@@ -36,23 +36,78 @@ public class QueryResult {
     }
 
     private List<Map<String, Object>> parseRows() {
-        List<Map<String, Object>> rowList = new ArrayList<>();
         JSONArray rowsArray = data.optJSONArray("rows");
-
-        if (rowsArray != null) {
-            for (int i = 0; i < rowsArray.length(); i++) {
-                JSONObject rowObj = rowsArray.getJSONObject(i);
-                Map<String, Object> row = new HashMap<>();
-
-                for (String key : rowObj.keySet()) {
-                    row.put(key, rowObj.get(key));
-                }
-
-                rowList.add(Collections.unmodifiableMap(row));
-            }
+        if (rowsArray == null) {
+            return List.of();
         }
 
-        return Collections.unmodifiableList(rowList);
+        List<Map<String, Object>> rows = new ArrayList<>(rowsArray.length());
+
+        for (int i = 0; i < rowsArray.length(); i++) {
+            JSONObject values = rowsArray
+                    .getJSONObject(i)
+                    .optJSONObject("values");
+
+            if (values == null) continue;
+
+            Map<String, Object> row = new HashMap<>();
+            for (String key : values.keySet()) {
+                row.put(key, unwrap(values.get(key)));
+            }
+
+            rows.add(Map.copyOf(row));
+        }
+
+        return List.copyOf(rows);
+    }
+
+    /**
+     * Unwrap type-tagged values from Rust serde JSON format.
+     * Handles: {"String": "value"}, {"Number": 123}, {"Boolean": true}, etc.
+     */
+    private Object unwrap(Object value) {
+        if (!(value instanceof JSONObject)) {
+            return toJavaNumber(value);
+        }
+
+        JSONObject obj = (JSONObject) value;
+
+        // Serde enum encoding: exactly one key
+        if (obj.length() == 1) {
+            String tag = obj.keys().next();
+            Object inner = obj.get(tag);
+
+            if (inner instanceof JSONArray) {
+                JSONArray arr = (JSONArray) inner;
+                List<Object> list = new ArrayList<>(arr.length());
+                for (int i = 0; i < arr.length(); i++) {
+                    list.add(unwrap(arr.get(i)));
+                }
+                return list;
+            }
+
+            return unwrap(inner);
+        }
+
+        // Complex objects (Node, Edge, Path, etc.)
+        return obj;
+    }
+
+    /**
+     * Convert Double/BigDecimal to Integer/Long for whole numbers.
+     */
+    private Object toJavaNumber(Object value) {
+        if (value instanceof Number) {
+            double d = ((Number) value).doubleValue();
+            if (d == Math.floor(d) && !Double.isInfinite(d)) {
+                if (d >= Integer.MIN_VALUE && d <= Integer.MAX_VALUE) {
+                    return (int) d;
+                }
+                return (long) d;
+            }
+            return d;
+        }
+        return value;
     }
 
     /**
