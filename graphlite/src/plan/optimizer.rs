@@ -15,10 +15,12 @@ use crate::ast::{
     OrderClause, OrderDirection, PathPattern, PatternElement, Query, ReturnClause, SetOperation,
     SetOperationType, Variable,
 };
+use crate::plan::builders::{LogicalBuilder, PhysicalBuilder};
 use crate::plan::cost::{CostEstimate, CostModel, Statistics};
 use crate::plan::logical::{
     EntityType, JoinType, LogicalNode, LogicalPlan, ProjectExpression, SortExpression, VariableInfo,
 };
+use crate::plan::optimizers::{LogicalOptimizer, PhysicalOptimizer};
 use crate::plan::pattern_optimization::integration::PatternOptimizationPipeline;
 use crate::plan::physical::{PhysicalNode, PhysicalPlan};
 use crate::plan::trace::{PlanTrace, PlanTracer, PlanningPhase, TraceMetadata};
@@ -33,6 +35,14 @@ pub struct QueryPlanner {
     avoid_index_scan: bool,
     /// Pattern optimization pipeline for fixing comma-separated pattern bugs
     pattern_optimizer: PatternOptimizationPipeline,
+    /// Logical plan builder
+    logical_builder: LogicalBuilder,
+    /// Physical plan builder
+    physical_builder: PhysicalBuilder,
+    /// Logical plan optimizer
+    logical_optimizer: LogicalOptimizer,
+    /// Physical plan optimizer
+    physical_optimizer: PhysicalOptimizer,
 }
 
 /// Optimization levels for query planning
@@ -77,24 +87,37 @@ pub struct QueryPlanAlternatives {
 impl QueryPlanner {
     /// Create a new query planner with default settings
     pub fn new() -> Self {
+        let optimization_level = OptimizationLevel::Basic;
+        let avoid_index_scan = true;
+
         Self {
             cost_model: CostModel::new(),
             statistics: Statistics::new(),
-            optimization_level: OptimizationLevel::Basic,
-            avoid_index_scan: true, // Default to avoiding index scans
+            optimization_level: optimization_level.clone(),
+            avoid_index_scan,
             pattern_optimizer: PatternOptimizationPipeline::new(),
+            logical_builder: LogicalBuilder::new(),
+            physical_builder: PhysicalBuilder::new(),
+            logical_optimizer: LogicalOptimizer::new(optimization_level),
+            physical_optimizer: PhysicalOptimizer::new(avoid_index_scan),
         }
     }
 
     /// Create a query planner with specific optimization level
     #[allow(dead_code)] // ROADMAP v0.5.0 - Multi-level optimization strategies (None, Basic, Aggressive)
     pub fn with_optimization_level(level: OptimizationLevel) -> Self {
+        let avoid_index_scan = true;
+
         Self {
             cost_model: CostModel::new(),
             statistics: Statistics::new(),
-            optimization_level: level,
-            avoid_index_scan: true, // Default to avoiding index scans
+            optimization_level: level.clone(),
+            avoid_index_scan,
             pattern_optimizer: PatternOptimizationPipeline::new(),
+            logical_builder: LogicalBuilder::new(),
+            physical_builder: PhysicalBuilder::new(),
+            logical_optimizer: LogicalOptimizer::new(level),
+            physical_optimizer: PhysicalOptimizer::new(avoid_index_scan),
         }
     }
 
@@ -142,12 +165,18 @@ impl QueryPlanner {
     /// Create a query planner with index scan avoidance setting
     #[allow(dead_code)] // ROADMAP v0.4.0 - Configuration for index scan behavior
     pub fn with_index_scan_setting(avoid_index_scan: bool) -> Self {
+        let optimization_level = OptimizationLevel::Basic;
+
         Self {
             cost_model: CostModel::new(),
             statistics: Statistics::new(),
-            optimization_level: OptimizationLevel::Basic,
+            optimization_level: optimization_level.clone(),
             avoid_index_scan,
             pattern_optimizer: PatternOptimizationPipeline::new(),
+            logical_builder: LogicalBuilder::new(),
+            physical_builder: PhysicalBuilder::new(),
+            logical_optimizer: LogicalOptimizer::new(optimization_level),
+            physical_optimizer: PhysicalOptimizer::new(avoid_index_scan),
         }
     }
 
@@ -364,6 +393,13 @@ impl QueryPlanner {
 
     /// Create logical plan from query AST
     fn create_logical_plan(&mut self, query: &Query) -> Result<LogicalPlan, PlanningError> {
+        // Delegate to LogicalBuilder
+        self.logical_builder.build(query)
+    }
+
+    // Legacy method - now redirects to LogicalBuilder
+    #[allow(dead_code)]
+    fn create_logical_plan_legacy(&mut self, query: &Query) -> Result<LogicalPlan, PlanningError> {
         match query {
             Query::Basic(basic_query) => self.create_basic_logical_plan(basic_query),
             Query::SetOperation(set_op) => self.create_set_operation_plan(set_op),
@@ -1467,7 +1503,14 @@ impl QueryPlanner {
     }
 
     /// Optimize logical plan
-    fn optimize_logical_plan(&self, mut plan: LogicalPlan) -> Result<LogicalPlan, PlanningError> {
+    fn optimize_logical_plan(&self, plan: LogicalPlan) -> Result<LogicalPlan, PlanningError> {
+        // Delegate to LogicalOptimizer
+        self.logical_optimizer.optimize(plan)
+    }
+
+    // Legacy method - now redirects to LogicalOptimizer
+    #[allow(dead_code)]
+    fn optimize_logical_plan_legacy(&self, mut plan: LogicalPlan) -> Result<LogicalPlan, PlanningError> {
         match self.optimization_level {
             OptimizationLevel::None => Ok(plan),
 
@@ -2115,11 +2158,19 @@ impl QueryPlanner {
         &self,
         logical_plan: LogicalPlan,
     ) -> Result<PhysicalPlan, PlanningError> {
-        Ok(PhysicalPlan::from_logical(&logical_plan))
+        // Delegate to PhysicalBuilder
+        self.physical_builder.build(logical_plan)
     }
 
     /// Optimize physical plan
     fn optimize_physical_plan(&self, plan: PhysicalPlan) -> Result<PhysicalPlan, PlanningError> {
+        // Delegate to PhysicalOptimizer
+        self.physical_optimizer.optimize(plan)
+    }
+
+    // Legacy method - now redirects to PhysicalOptimizer
+    #[allow(dead_code)]
+    fn optimize_physical_plan_legacy(&self, plan: PhysicalPlan) -> Result<PhysicalPlan, PlanningError> {
         let mut optimized_plan = plan;
 
         // Apply index scan optimization based on setting
