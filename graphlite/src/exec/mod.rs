@@ -12,13 +12,21 @@ pub mod executor;
 pub mod lock_tracker;
 pub mod result;
 pub mod row_iterator;
-pub mod unwind_preprocessor;
-pub mod with_clause_processor;
 pub mod write_stmt; // Phase 4: Week 6.5 - Memory Optimization
                     // Text search not supported in GraphLite
                     // pub mod text_search_iterator; // Phase 4: Week 6.5 - Lazy text search
 pub mod memory_budget;
 pub mod streaming_topk; // Phase 4: Week 6.5 - Streaming top-K // Phase 4: Week 6.5 - Memory limit enforcement
+
+// Execution engines (architecture refactoring - Phase 1)
+pub mod read_engine;
+pub mod write_engine;
+pub mod schema_engine;
+pub mod transaction_engine;
+
+// Re-export processors for backward compatibility (moved to read_engine)
+pub use read_engine::processors::unwind_preprocessor;
+pub use read_engine::processors::with_clause_processor;
 
 // Re-export the main types for convenience
 pub use context::ExecutionContext;
