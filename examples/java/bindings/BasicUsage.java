@@ -89,7 +89,7 @@ public class BasicUsage {
             System.out.println("   [OK] Inserted 3 persons\n");
 
             // 5. Query data
-            System.out.println("5. Querying data...");
+            System.out.println("5. Querying: All persons' age and name)");
             QueryResult result = db.query(session,
                 "MATCH (p:Person) RETURN p.name as name, p.age as age");
             System.out.println("   Found " + result.getRowCount() + " persons:");
@@ -99,10 +99,10 @@ public class BasicUsage {
             System.out.println();
 
             // 6. Filter with WHERE
-            System.out.println("6. Filtering with WHERE clause...");
+            System.out.println("6. Filtering: Persons older than 25 years in the ascending order of age");
             result = db.query(session,
                 "MATCH (p:Person) WHERE p.age > 25 " +
-                "RETURN p.name as name, p.age as age ORDER BY p.age DESC");
+                "RETURN p.name as name, p.age as age ORDER BY p.age ASC");
             System.out.println("   Found " + result.getRowCount() + " persons over 25:");
             for (Map<String, Object> row : result.getRows()) {
                 System.out.println("   - " + row.get("name") + ": " + row.get("age") + " years old");
