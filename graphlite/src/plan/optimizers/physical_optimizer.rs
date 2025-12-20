@@ -10,7 +10,6 @@
 //!
 //! Extracted from optimizer.rs as part of Phase 3 refactoring.
 
-use crate::ast::Expression;
 use crate::plan::optimizer::PlanningError;
 use crate::plan::physical::{PhysicalNode, PhysicalPlan};
 
@@ -528,8 +527,8 @@ impl Default for PhysicalOptimizer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::Expression;
     use crate::plan::physical::{PhysicalNode, PhysicalPlan};
-    use std::collections::HashMap;
 
     #[test]
     fn test_physical_optimizer_creation() {

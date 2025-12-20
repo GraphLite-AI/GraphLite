@@ -13,6 +13,5 @@ pub mod logical_builder;
 pub mod physical_builder;
 
 // Re-export for convenience
-pub use insert_builder::InsertPlanner;
-pub use logical_builder::{LogicalBuilder, PlanningContext};
+pub use logical_builder::LogicalBuilder;
 pub use physical_builder::PhysicalBuilder;

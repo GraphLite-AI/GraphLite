@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 
 use crate::ast::{
-    BasicQuery, BinaryExpression, Expression, LetStatement, MatchClause, Operator,
+    BasicQuery, BinaryExpression, Expression, LetStatement, MatchClause,
     OrderClause, OrderDirection, PathPattern, PatternElement, Query, ReturnClause,
     SetOperation, SetOperationType, Variable,
 };
