@@ -524,3 +524,254 @@ impl Default for PhysicalOptimizer {
         Self::new(true) // By default, avoid index scans
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::plan::physical::{PhysicalNode, PhysicalPlan};
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_physical_optimizer_creation() {
+        let optimizer = PhysicalOptimizer::new(true);
+        assert_eq!(
+            std::mem::size_of_val(&optimizer),
+            std::mem::size_of::<PhysicalOptimizer>()
+        );
+    }
+
+    #[test]
+    fn test_physical_optimizer_default() {
+        let optimizer = PhysicalOptimizer::default();
+        assert_eq!(
+            std::mem::size_of_val(&optimizer),
+            std::mem::size_of::<PhysicalOptimizer>()
+        );
+    }
+
+    #[test]
+    fn test_optimize_without_index_scan_avoidance() {
+        let optimizer = PhysicalOptimizer::new(false);
+
+        let plan = PhysicalPlan::new(PhysicalNode::NodeSeqScan {
+            variable: "n".to_string(),
+            labels: vec!["Person".to_string()],
+            properties: None,
+            estimated_rows: 100,
+            estimated_cost: 10.0,
+        });
+
+        let result = optimizer.optimize(plan);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_optimize_with_index_scan_avoidance() {
+        let optimizer = PhysicalOptimizer::new(true);
+
+        let plan = PhysicalPlan::new(PhysicalNode::NodeIndexScan {
+                variable: "n".to_string(),
+                labels: vec!["Person".to_string()],
+                properties: None,
+                estimated_rows: 100,
+                estimated_cost: 5.0,
+        });
+
+        let result = optimizer.optimize(plan);
+        assert!(result.is_ok());
+
+        // Should convert NodeIndexScan to NodeSeqScan
+        let optimized = result.unwrap();
+        match optimized.root {
+            PhysicalNode::NodeSeqScan { .. } => {
+                // Expected - index scan was disabled
+            }
+            _ => panic!("Expected NodeIndexScan to be converted to NodeSeqScan"),
+        }
+    }
+
+    #[test]
+    fn test_disable_index_scans_converts_node_index_scan() {
+        let optimizer = PhysicalOptimizer::new(true);
+
+        let plan = PhysicalPlan::new(PhysicalNode::NodeIndexScan {
+                variable: "n".to_string(),
+                labels: vec!["Person".to_string()],
+                properties: None,
+                estimated_rows: 100,
+                estimated_cost: 5.0,
+        });
+
+        let result = optimizer.disable_index_scans(plan);
+        assert!(result.is_ok());
+
+        let transformed = result.unwrap();
+        match transformed.root {
+            PhysicalNode::NodeSeqScan { variable, labels, .. } => {
+                assert_eq!(variable, "n");
+                assert_eq!(labels, vec!["Person"]);
+            }
+            _ => panic!("Expected NodeSeqScan after disabling index scans"),
+        }
+    }
+
+    #[test]
+    fn test_disable_index_scans_converts_indexed_expand() {
+        let optimizer = PhysicalOptimizer::new(true);
+
+        let plan = PhysicalPlan::new(PhysicalNode::IndexedExpand {
+                from_variable: "n".to_string(),
+                edge_variable: Some("e".to_string()),
+                to_variable: "m".to_string(),
+                edge_labels: vec!["KNOWS".to_string()],
+                direction: crate::ast::EdgeDirection::Outgoing,
+                properties: None,
+                input: Box::new(PhysicalNode::NodeSeqScan {
+                    variable: "n".to_string(),
+                    labels: vec![],
+                    properties: None,
+                    estimated_rows: 10,
+                    estimated_cost: 1.0,
+                }),
+                estimated_rows: 100,
+                estimated_cost: 10.0,
+        });
+
+        let result = optimizer.disable_index_scans(plan);
+        assert!(result.is_ok());
+
+        let transformed = result.unwrap();
+        match transformed.root {
+            PhysicalNode::HashExpand { from_variable, edge_variable, to_variable, .. } => {
+                assert_eq!(from_variable, "n");
+                assert_eq!(edge_variable, Some("e".to_string()));
+                assert_eq!(to_variable, "m");
+            }
+            _ => panic!("Expected HashExpand after disabling index scans"),
+        }
+    }
+
+    #[test]
+    fn test_disable_index_scans_preserves_seq_scan() {
+        let optimizer = PhysicalOptimizer::new(true);
+
+        let plan = PhysicalPlan::new(PhysicalNode::NodeSeqScan {
+                variable: "n".to_string(),
+                labels: vec!["Person".to_string()],
+                properties: None,
+                estimated_rows: 100,
+                estimated_cost: 10.0,
+        });
+
+        let result = optimizer.disable_index_scans(plan);
+        assert!(result.is_ok());
+
+        let transformed = result.unwrap();
+        match transformed.root {
+            PhysicalNode::NodeSeqScan { .. } => {
+                // Expected - seq scan is already non-indexed
+            }
+            _ => panic!("Expected NodeSeqScan to be preserved"),
+        }
+    }
+
+    #[test]
+    fn test_disable_index_scans_processes_filter_recursively() {
+        let optimizer = PhysicalOptimizer::new(true);
+
+        let plan = PhysicalPlan::new(PhysicalNode::Filter {
+                condition: Expression::Literal(crate::ast::Literal::Boolean(true)),
+                input: Box::new(PhysicalNode::NodeIndexScan {
+                    variable: "n".to_string(),
+                    labels: vec![],
+                    properties: None,
+                    estimated_rows: 100,
+                    estimated_cost: 5.0,
+                }),
+                selectivity: 0.5,
+                estimated_rows: 50,
+                estimated_cost: 5.0,
+        });
+
+        let result = optimizer.disable_index_scans(plan);
+        assert!(result.is_ok());
+
+        // Verify the nested NodeIndexScan was converted
+        let transformed = result.unwrap();
+        match transformed.root {
+            PhysicalNode::Filter { input, .. } => match *input {
+                PhysicalNode::NodeSeqScan { .. } => {
+                    // Expected - nested index scan was converted
+                }
+                _ => panic!("Expected nested NodeSeqScan"),
+            },
+            _ => panic!("Expected Filter node at root"),
+        }
+    }
+
+    #[test]
+    fn test_disable_index_scans_processes_join_recursively() {
+        let optimizer = PhysicalOptimizer::new(true);
+
+        let plan = PhysicalPlan::new(PhysicalNode::HashJoin {
+                join_type: crate::plan::logical::JoinType::Inner,
+                condition: None,
+                build_keys: vec![],
+                probe_keys: vec![],
+                build: Box::new(PhysicalNode::NodeIndexScan {
+                    variable: "n".to_string(),
+                    labels: vec![],
+                    properties: None,
+                    estimated_rows: 100,
+                    estimated_cost: 5.0,
+                }),
+                probe: Box::new(PhysicalNode::NodeIndexScan {
+                    variable: "m".to_string(),
+                    labels: vec![],
+                    properties: None,
+                    estimated_rows: 100,
+                    estimated_cost: 5.0,
+                }),
+                estimated_rows: 1000,
+                estimated_cost: 100.0,
+        });
+
+        let result = optimizer.disable_index_scans(plan);
+        assert!(result.is_ok());
+
+        // Verify both sides of the join were converted
+        let transformed = result.unwrap();
+        match transformed.root {
+            PhysicalNode::HashJoin { build, probe, .. } => {
+                match (*build, *probe) {
+                    (PhysicalNode::NodeSeqScan { .. }, PhysicalNode::NodeSeqScan { .. }) => {
+                        // Expected - both sides converted
+                    }
+                    _ => panic!("Expected both join sides to have NodeSeqScan"),
+                }
+            }
+            _ => panic!("Expected HashJoin node at root"),
+        }
+    }
+
+    #[test]
+    fn test_disable_index_scans_preserves_single_row() {
+        let optimizer = PhysicalOptimizer::new(true);
+
+        let plan = PhysicalPlan::new(PhysicalNode::SingleRow {
+                estimated_rows: 1,
+                estimated_cost: 0.0,
+        });
+
+        let result = optimizer.disable_index_scans(plan);
+        assert!(result.is_ok());
+
+        let transformed = result.unwrap();
+        match transformed.root {
+            PhysicalNode::SingleRow { .. } => {
+                // Expected - SingleRow is preserved
+            }
+            _ => panic!("Expected SingleRow to be preserved"),
+        }
+    }
+}

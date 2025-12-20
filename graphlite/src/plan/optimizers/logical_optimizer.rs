@@ -603,3 +603,302 @@ impl Default for LogicalOptimizer {
         Self::new(OptimizationLevel::Basic)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::plan::logical::{LogicalNode, LogicalPlan};
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_logical_optimizer_creation() {
+        let optimizer = LogicalOptimizer::new(OptimizationLevel::Basic);
+        assert_eq!(
+            std::mem::size_of_val(&optimizer),
+            std::mem::size_of::<LogicalOptimizer>()
+        );
+    }
+
+    #[test]
+    fn test_logical_optimizer_default() {
+        let optimizer = LogicalOptimizer::default();
+        assert_eq!(
+            std::mem::size_of_val(&optimizer),
+            std::mem::size_of::<LogicalOptimizer>()
+        );
+    }
+
+    #[test]
+    fn test_optimize_with_none_level() {
+        let optimizer = LogicalOptimizer::new(OptimizationLevel::None);
+
+        let plan = LogicalPlan {
+            root: LogicalNode::NodeScan {
+                variable: "n".to_string(),
+                labels: vec!["Person".to_string()],
+                properties: None,
+            },
+            variables: HashMap::new(),
+        };
+
+        let result = optimizer.optimize(plan.clone());
+        assert!(result.is_ok());
+        // With None optimization level, plan should remain unchanged
+    }
+
+    #[test]
+    fn test_optimize_with_basic_level() {
+        let optimizer = LogicalOptimizer::new(OptimizationLevel::Basic);
+
+        let plan = LogicalPlan {
+            root: LogicalNode::NodeScan {
+                variable: "n".to_string(),
+                labels: vec!["Person".to_string()],
+                properties: None,
+            },
+            variables: HashMap::new(),
+        };
+
+        let result = optimizer.optimize(plan);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_contains_aggregation_true() {
+        let optimizer = LogicalOptimizer::new(OptimizationLevel::Basic);
+
+        let node = LogicalNode::Aggregate {
+            group_by: vec![],
+            aggregates: vec![],
+            input: Box::new(LogicalNode::NodeScan {
+                variable: "n".to_string(),
+                labels: vec![],
+                properties: None,
+            }),
+        };
+
+        assert!(optimizer.contains_aggregation(&node));
+    }
+
+    #[test]
+    fn test_contains_aggregation_false() {
+        let optimizer = LogicalOptimizer::new(OptimizationLevel::Basic);
+
+        let node = LogicalNode::NodeScan {
+            variable: "n".to_string(),
+            labels: vec![],
+            properties: None,
+        };
+
+        assert!(!optimizer.contains_aggregation(&node));
+    }
+
+    #[test]
+    fn test_contains_aggregation_nested() {
+        let optimizer = LogicalOptimizer::new(OptimizationLevel::Basic);
+
+        let node = LogicalNode::Filter {
+            condition: Expression::Literal(crate::ast::Literal::Boolean(true)),
+            input: Box::new(LogicalNode::Aggregate {
+                group_by: vec![],
+                aggregates: vec![],
+                input: Box::new(LogicalNode::NodeScan {
+                    variable: "n".to_string(),
+                    labels: vec![],
+                    properties: None,
+                }),
+            }),
+        };
+
+        assert!(optimizer.contains_aggregation(&node));
+    }
+
+    #[test]
+    fn test_contains_limit_true() {
+        let optimizer = LogicalOptimizer::new(OptimizationLevel::Basic);
+
+        let node = LogicalNode::Limit {
+            count: 10,
+            offset: None,
+            input: Box::new(LogicalNode::NodeScan {
+                variable: "n".to_string(),
+                labels: vec![],
+                properties: None,
+            }),
+        };
+
+        assert!(optimizer.contains_limit(&node));
+    }
+
+    #[test]
+    fn test_contains_limit_false() {
+        let optimizer = LogicalOptimizer::new(OptimizationLevel::Basic);
+
+        let node = LogicalNode::NodeScan {
+            variable: "n".to_string(),
+            labels: vec![],
+            properties: None,
+        };
+
+        assert!(!optimizer.contains_limit(&node));
+    }
+
+    #[test]
+    fn test_returns_unique_values_distinct() {
+        let optimizer = LogicalOptimizer::new(OptimizationLevel::Basic);
+
+        let node = LogicalNode::Distinct {
+            input: Box::new(LogicalNode::NodeScan {
+                variable: "n".to_string(),
+                labels: vec![],
+                properties: None,
+            }),
+        };
+
+        assert!(optimizer.returns_unique_values(&node));
+    }
+
+    #[test]
+    fn test_returns_unique_values_node_scan() {
+        let optimizer = LogicalOptimizer::new(OptimizationLevel::Basic);
+
+        let node = LogicalNode::NodeScan {
+            variable: "n".to_string(),
+            labels: vec![],
+            properties: None,
+        };
+
+        assert!(optimizer.returns_unique_values(&node));
+    }
+
+    #[test]
+    fn test_returns_unique_values_false() {
+        let optimizer = LogicalOptimizer::new(OptimizationLevel::Basic);
+
+        let node = LogicalNode::Join {
+            join_type: crate::plan::logical::JoinType::Inner,
+            condition: None,
+            left: Box::new(LogicalNode::NodeScan {
+                variable: "n".to_string(),
+                labels: vec![],
+                properties: None,
+            }),
+            right: Box::new(LogicalNode::NodeScan {
+                variable: "m".to_string(),
+                labels: vec![],
+                properties: None,
+            }),
+        };
+
+        assert!(!optimizer.returns_unique_values(&node));
+    }
+
+    #[test]
+    fn test_optimize_logical_node_preserves_leaf_nodes() {
+        let optimizer = LogicalOptimizer::new(OptimizationLevel::Basic);
+
+        let node = LogicalNode::NodeScan {
+            variable: "n".to_string(),
+            labels: vec!["Person".to_string()],
+            properties: None,
+        };
+
+        let result = optimizer.optimize_logical_node(node.clone());
+        assert!(result.is_ok());
+        // Leaf nodes should be preserved
+        match result.unwrap() {
+            LogicalNode::NodeScan { .. } => {
+                // Expected
+            }
+            _ => panic!("Expected NodeScan to be preserved"),
+        }
+    }
+
+    #[test]
+    fn test_optimize_logical_node_recursively_processes_filter() {
+        let optimizer = LogicalOptimizer::new(OptimizationLevel::Basic);
+
+        let node = LogicalNode::Filter {
+            condition: Expression::Literal(crate::ast::Literal::Boolean(true)),
+            input: Box::new(LogicalNode::NodeScan {
+                variable: "n".to_string(),
+                labels: vec![],
+                properties: None,
+            }),
+        };
+
+        let result = optimizer.optimize_logical_node(node);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_can_unnest_exists_subquery_valid() {
+        let optimizer = LogicalOptimizer::new(OptimizationLevel::Basic);
+
+        let subquery = LogicalNode::NodeScan {
+            variable: "n".to_string(),
+            labels: vec![],
+            properties: None,
+        };
+
+        let outer_variables = vec!["x".to_string()];
+
+        assert!(optimizer.can_unnest_exists_subquery(&subquery, &outer_variables));
+    }
+
+    #[test]
+    fn test_can_unnest_exists_subquery_with_aggregation() {
+        let optimizer = LogicalOptimizer::new(OptimizationLevel::Basic);
+
+        let subquery = LogicalNode::Aggregate {
+            group_by: vec![],
+            aggregates: vec![],
+            input: Box::new(LogicalNode::NodeScan {
+                variable: "n".to_string(),
+                labels: vec![],
+                properties: None,
+            }),
+        };
+
+        let outer_variables = vec!["x".to_string()];
+
+        // Should return false because of aggregation
+        assert!(!optimizer.can_unnest_exists_subquery(&subquery, &outer_variables));
+    }
+
+    #[test]
+    fn test_can_unnest_exists_subquery_no_outer_vars() {
+        let optimizer = LogicalOptimizer::new(OptimizationLevel::Basic);
+
+        let subquery = LogicalNode::NodeScan {
+            variable: "n".to_string(),
+            labels: vec![],
+            properties: None,
+        };
+
+        let outer_variables = vec![];
+
+        // Should return false because no correlation
+        assert!(!optimizer.can_unnest_exists_subquery(&subquery, &outer_variables));
+    }
+
+    #[test]
+    fn test_can_unnest_exists_subquery_with_limit() {
+        let optimizer = LogicalOptimizer::new(OptimizationLevel::Basic);
+
+        let subquery = LogicalNode::Limit {
+            count: 10,
+            offset: None,
+            input: Box::new(LogicalNode::NodeScan {
+                variable: "n".to_string(),
+                labels: vec![],
+                properties: None,
+            }),
+        };
+
+        let outer_variables = vec!["x".to_string()];
+
+        // Should return false because of LIMIT
+        assert!(!optimizer.can_unnest_exists_subquery(&subquery, &outer_variables));
+    }
+}

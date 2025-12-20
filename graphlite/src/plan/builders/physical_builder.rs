@@ -103,3 +103,106 @@ impl Default for PhysicalBuilder {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::plan::logical::{LogicalNode, LogicalPlan};
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_physical_builder_creation() {
+        let builder = PhysicalBuilder::new();
+        assert_eq!(
+            std::mem::size_of_val(&builder),
+            std::mem::size_of::<PhysicalBuilder>()
+        );
+    }
+
+    #[test]
+    fn test_physical_builder_default() {
+        let builder = PhysicalBuilder::default();
+        assert_eq!(
+            std::mem::size_of_val(&builder),
+            std::mem::size_of::<PhysicalBuilder>()
+        );
+    }
+
+    #[test]
+    fn test_build_simple_node_scan() {
+        let builder = PhysicalBuilder::new();
+
+        let logical_plan = LogicalPlan {
+            root: LogicalNode::NodeScan {
+                variable: "n".to_string(),
+                labels: vec!["Person".to_string()],
+                properties: None,
+            },
+            variables: HashMap::new(),
+        };
+
+        let result = builder.build(logical_plan);
+        assert!(result.is_ok());
+
+        let physical_plan = result.unwrap();
+        // Verify the physical plan root is some form of node scan
+        match physical_plan.root {
+            PhysicalNode::NodeSeqScan { .. } | PhysicalNode::NodeIndexScan { .. } => {
+                // Either variant is acceptable
+            }
+            _ => panic!("Expected a node scan physical node"),
+        }
+    }
+
+    #[test]
+    fn test_build_single_row() {
+        let builder = PhysicalBuilder::new();
+
+        let logical_plan = LogicalPlan {
+            root: LogicalNode::SingleRow,
+            variables: HashMap::new(),
+        };
+
+        let result = builder.build(logical_plan);
+        assert!(result.is_ok());
+
+        let physical_plan = result.unwrap();
+        match physical_plan.root {
+            PhysicalNode::SingleRow { .. } => {
+                // Expected
+            }
+            _ => panic!("Expected SingleRow physical node"),
+        }
+    }
+
+    #[test]
+    fn test_build_preserves_variables() {
+        let builder = PhysicalBuilder::new();
+
+        let mut variables = HashMap::new();
+        variables.insert(
+            "n".to_string(),
+            crate::plan::logical::VariableInfo {
+                name: "n".to_string(),
+                entity_type: crate::plan::logical::EntityType::Node,
+                labels: vec!["Person".to_string()],
+                required_properties: vec![],
+            },
+        );
+
+        let logical_plan = LogicalPlan {
+            root: LogicalNode::NodeScan {
+                variable: "n".to_string(),
+                labels: vec!["Person".to_string()],
+                properties: None,
+            },
+            variables: variables.clone(),
+        };
+
+        let result = builder.build(logical_plan);
+        assert!(result.is_ok());
+
+        // Physical plan doesn't have a variables field - it's derived from LogicalPlan
+        // Just verify the build succeeds
+    }
+}

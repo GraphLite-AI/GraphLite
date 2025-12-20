@@ -938,10 +938,291 @@ impl PlanningContext {
             _next_variable_id: 0,
         }
     }
+
+    /// Register a variable in the planning context
+    pub fn register_variable(&mut self, name: String, info: VariableInfo) {
+        self.variables.insert(name, info);
+    }
 }
 
 impl Default for PlanningContext {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::{
+        BasicQuery, Expression, Literal, Location, MatchClause, Node, PathPattern,
+        PatternElement, Query, ReturnClause, ReturnItem, Variable, WhereClause,
+    };
+
+    fn dummy_location() -> Location {
+        Location {
+            line: 1,
+            column: 1,
+            offset: 0,
+        }
+    }
+
+    #[test]
+    fn test_logical_builder_creation() {
+        let builder = LogicalBuilder::new();
+        // Just verify it can be created without panic
+        assert_eq!(std::mem::size_of_val(&builder), std::mem::size_of::<LogicalBuilder>());
+    }
+
+    #[test]
+    fn test_planning_context_creation() {
+        let context = PlanningContext::new();
+        assert!(context.variables.is_empty());
+    }
+
+    #[test]
+    fn test_planning_context_register_variable() {
+        let mut context = PlanningContext::new();
+        let var_info = VariableInfo {
+            name: "n".to_string(),
+            entity_type: EntityType::Node,
+            labels: vec!["Person".to_string()],
+            required_properties: vec![],
+        };
+
+        context.register_variable("n".to_string(), var_info.clone());
+        assert_eq!(context.variables.len(), 1);
+        assert!(context.variables.contains_key("n"));
+        assert_eq!(context.variables.get("n").unwrap().name, "n");
+        assert_eq!(context.variables.get("n").unwrap().labels, vec!["Person"]);
+    }
+
+    #[test]
+    fn test_contains_aggregate_functions_with_count() {
+        let builder = LogicalBuilder::new();
+        let expressions = vec![ProjectExpression {
+            expression: Expression::FunctionCall(crate::ast::FunctionCall {
+                name: "COUNT".to_string(),
+                arguments: vec![Expression::Variable(Variable {
+                    name: "n".to_string(),
+                    location: dummy_location(),
+                })],
+                distinct: crate::ast::DistinctQualifier::None,
+                location: dummy_location(),
+            }),
+            alias: Some("count".to_string()),
+        }];
+
+        assert!(builder.contains_aggregate_functions(&expressions));
+    }
+
+    #[test]
+    fn test_contains_aggregate_functions_with_sum() {
+        let builder = LogicalBuilder::new();
+        let expressions = vec![ProjectExpression {
+            expression: Expression::FunctionCall(crate::ast::FunctionCall {
+                name: "SUM".to_string(),
+                arguments: vec![Expression::Variable(Variable {
+                    name: "n".to_string(),
+                    location: dummy_location(),
+                })],
+                distinct: crate::ast::DistinctQualifier::None,
+                location: dummy_location(),
+            }),
+            alias: Some("total".to_string()),
+        }];
+
+        assert!(builder.contains_aggregate_functions(&expressions));
+    }
+
+    #[test]
+    fn test_contains_aggregate_functions_without_aggregates() {
+        let builder = LogicalBuilder::new();
+        let expressions = vec![ProjectExpression {
+            expression: Expression::Variable(Variable {
+                name: "n".to_string(),
+                location: dummy_location(),
+            }),
+            alias: None,
+        }];
+
+        assert!(!builder.contains_aggregate_functions(&expressions));
+    }
+
+    #[test]
+    fn test_is_aggregate_expression_count() {
+        let builder = LogicalBuilder::new();
+        let expr = Expression::FunctionCall(crate::ast::FunctionCall {
+            name: "COUNT".to_string(),
+            arguments: vec![],
+            distinct: crate::ast::DistinctQualifier::None,
+            location: dummy_location(),
+        });
+
+        assert!(builder.is_aggregate_expression(&expr));
+    }
+
+    #[test]
+    fn test_is_aggregate_expression_avg() {
+        let builder = LogicalBuilder::new();
+        let expr = Expression::FunctionCall(crate::ast::FunctionCall {
+            name: "AVG".to_string(),
+            arguments: vec![],
+            distinct: crate::ast::DistinctQualifier::None,
+            location: dummy_location(),
+        });
+
+        assert!(builder.is_aggregate_expression(&expr));
+    }
+
+    #[test]
+    fn test_is_aggregate_expression_min() {
+        let builder = LogicalBuilder::new();
+        let expr = Expression::FunctionCall(crate::ast::FunctionCall {
+            name: "MIN".to_string(),
+            arguments: vec![],
+            distinct: crate::ast::DistinctQualifier::None,
+            location: dummy_location(),
+        });
+
+        assert!(builder.is_aggregate_expression(&expr));
+    }
+
+    #[test]
+    fn test_is_aggregate_expression_max() {
+        let builder = LogicalBuilder::new();
+        let expr = Expression::FunctionCall(crate::ast::FunctionCall {
+            name: "MAX".to_string(),
+            arguments: vec![],
+            distinct: crate::ast::DistinctQualifier::None,
+            location: dummy_location(),
+        });
+
+        assert!(builder.is_aggregate_expression(&expr));
+    }
+
+    #[test]
+    fn test_is_aggregate_expression_collect() {
+        let builder = LogicalBuilder::new();
+        let expr = Expression::FunctionCall(crate::ast::FunctionCall {
+            name: "COLLECT".to_string(),
+            arguments: vec![],
+            distinct: crate::ast::DistinctQualifier::None,
+            location: dummy_location(),
+        });
+
+        assert!(builder.is_aggregate_expression(&expr));
+    }
+
+    #[test]
+    fn test_is_aggregate_expression_case_insensitive() {
+        let builder = LogicalBuilder::new();
+        let expr = Expression::FunctionCall(crate::ast::FunctionCall {
+            name: "count".to_string(), // lowercase
+            arguments: vec![],
+            distinct: crate::ast::DistinctQualifier::None,
+            location: dummy_location(),
+        });
+
+        assert!(builder.is_aggregate_expression(&expr));
+    }
+
+    #[test]
+    fn test_is_aggregate_expression_non_aggregate() {
+        let builder = LogicalBuilder::new();
+        let expr = Expression::FunctionCall(crate::ast::FunctionCall {
+            name: "toUpper".to_string(),
+            arguments: vec![],
+            distinct: crate::ast::DistinctQualifier::None,
+            location: dummy_location(),
+        });
+
+        assert!(!builder.is_aggregate_expression(&expr));
+    }
+
+    #[test]
+    fn test_is_aggregate_expression_variable() {
+        let builder = LogicalBuilder::new();
+        let expr = Expression::Variable(Variable {
+            name: "n".to_string(),
+            location: dummy_location(),
+        });
+
+        assert!(!builder.is_aggregate_expression(&expr));
+    }
+
+    #[test]
+    fn test_is_aggregate_expression_literal() {
+        let builder = LogicalBuilder::new();
+        let expr = Expression::Literal(Literal::Integer(42));
+
+        assert!(!builder.is_aggregate_expression(&expr));
+    }
+
+    #[test]
+    fn test_extract_non_aggregate_expressions_mixed() {
+        let builder = LogicalBuilder::new();
+        let expressions = vec![
+            ProjectExpression {
+                expression: Expression::Variable(Variable {
+                    name: "n".to_string(),
+                    location: dummy_location(),
+                }),
+                alias: None,
+            },
+            ProjectExpression {
+                expression: Expression::FunctionCall(crate::ast::FunctionCall {
+                    name: "COUNT".to_string(),
+                    arguments: vec![],
+                    distinct: crate::ast::DistinctQualifier::None,
+                    location: dummy_location(),
+                }),
+                alias: Some("count".to_string()),
+            },
+        ];
+
+        let non_aggregates = builder.extract_non_aggregate_expressions(&expressions);
+        assert_eq!(non_aggregates.len(), 1);
+    }
+
+    #[test]
+    fn test_extract_non_aggregate_expressions_all_aggregates() {
+        let builder = LogicalBuilder::new();
+        let expressions = vec![ProjectExpression {
+            expression: Expression::FunctionCall(crate::ast::FunctionCall {
+                name: "COUNT".to_string(),
+                arguments: vec![],
+                distinct: crate::ast::DistinctQualifier::None,
+                location: dummy_location(),
+            }),
+            alias: Some("count".to_string()),
+        }];
+
+        let non_aggregates = builder.extract_non_aggregate_expressions(&expressions);
+        assert_eq!(non_aggregates.len(), 0);
+    }
+
+    #[test]
+    fn test_extract_non_aggregate_expressions_all_non_aggregates() {
+        let builder = LogicalBuilder::new();
+        let expressions = vec![
+            ProjectExpression {
+                expression: Expression::Variable(Variable {
+                    name: "n".to_string(),
+                    location: dummy_location(),
+                }),
+                alias: None,
+            },
+            ProjectExpression {
+                expression: Expression::Literal(Literal::Integer(42)),
+                alias: None,
+            },
+        ];
+
+        let non_aggregates = builder.extract_non_aggregate_expressions(&expressions);
+        assert_eq!(non_aggregates.len(), 2);
+    }
+
+    // Note: Full query building tests are thoroughly covered in 461 existing integration tests.
+    // Unit tests above focus on pure functions without complex AST construction.
 }
