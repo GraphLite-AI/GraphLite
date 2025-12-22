@@ -247,15 +247,36 @@ GraphLite includes comprehensive test coverage with **189 unit tests** and **537
 
 **Note**: Tests now run in parallel by default thanks to instance-based session isolation, providing ~10x faster test execution compared to the previous single-threaded approach.
 
-### Quick Testing
+### Prerequisites for Parallel Testing
+
+Install GNU Parallel for fastest test execution (recommended):
+
 ```bash
-# Fast feedback during development (uses optimized release build)
+# macOS
+brew install parallel
+
+# Ubuntu/Debian
+sudo apt install parallel
+```
+
+### Quick Testing (Recommended)
+```bash
+# Fastest: Run all tests in parallel (8 jobs, ~75 seconds)
+./scripts/run_tests_parallel.sh --jobs=8
+
+# Unit tests only (fast feedback during development)
+./scripts/run_unit_tests.sh
+
+# Standard cargo test (slower)
 cargo test --release
 ```
 
 ### Comprehensive Testing
 ```bash
-# Run all integration tests with organized output and summary
+# Parallel integration tests with organized output (fastest)
+./scripts/run_tests_parallel.sh --jobs=8
+
+# Sequential tests with organized output and summary
 ./scripts/run_tests.sh --release
 
 # Include detailed failure analysis for debugging
@@ -270,6 +291,15 @@ cargo test --release --test <test_name>
 # Example: Run aggregation tests
 cargo test --release --test aggregation_tests
 ```
+
+### Test Performance
+
+With parallel execution enabled:
+- **Parallel (8 jobs)**: ~75 seconds for all 169 integration tests
+- **Sequential**: ~10-15 minutes for all tests
+- **Unit tests only**: ~2-3 seconds for all 189 unit tests
+
+The parallel test runner provides detailed progress tracking and a comprehensive summary upon completion.
 
 ** Comprehensive testing documentation (In Progress)**, which will cover:
 - Test configuration and architecture

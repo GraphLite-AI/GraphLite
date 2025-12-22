@@ -85,6 +85,9 @@ Before you begin, ensure you have the following installed:
 - **Rust** (1.70 or higher): Install via [rustup](https://rustup.rs/)
 - **Git**: For version control
 - **Cargo**: Comes with Rust installation
+- **GNU Parallel**: For fast parallel test execution (recommended)
+  - macOS: `brew install parallel`
+  - Ubuntu/Debian: `sudo apt install parallel`
 
 Optional for specific contributions:
 - **Python 3.8+**: For Python binding development
@@ -385,6 +388,36 @@ All contributions must include tests:
 
 ### Running Tests
 
+#### Prerequisites
+
+For parallel test execution (recommended for faster feedback):
+
+```bash
+# macOS
+brew install parallel
+
+# Ubuntu/Debian
+sudo apt install parallel
+
+# Other Linux distributions
+# Check your package manager for 'parallel' or 'gnu-parallel'
+```
+
+#### Quick Testing (Recommended)
+
+```bash
+# Run all tests with parallel execution (8 jobs, ~75 seconds)
+./scripts/run_tests_parallel.sh --jobs=8
+
+# Run unit tests only (fast feedback during development)
+./scripts/run_unit_tests.sh
+
+# Run specific integration test
+cargo test --release --test <test_name>
+```
+
+#### Standard Cargo Tests
+
 ```bash
 # Run all tests
 cargo test --all
@@ -403,6 +436,25 @@ cargo test --test '*'
 
 # Run with logging
 RUST_LOG=debug cargo test
+```
+
+#### Test Scripts
+
+GraphLite provides several test scripts for different use cases:
+
+```bash
+# Parallel integration tests (fastest, recommended)
+./scripts/run_tests_parallel.sh --jobs=8     # 8 parallel jobs (~75s)
+./scripts/run_tests_parallel.sh --jobs=4     # 4 parallel jobs (~120s)
+
+# Unit tests only (fast feedback loop)
+./scripts/run_unit_tests.sh                  # Runs all 189 unit tests
+
+# All tests with organized output
+./scripts/run_tests.sh --release             # Sequential execution with summary
+
+# All tests with failure analysis
+./scripts/run_tests.sh --release --analyze   # Includes detailed error output
 ```
 
 ### Writing Tests
