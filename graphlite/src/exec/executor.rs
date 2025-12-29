@@ -6675,12 +6675,28 @@ impl QueryExecutor {
                 let mut context_a = context.clone();
                 for (k, v) in &a.values {
                     context_a.set_variable(k.clone(), v.clone());
+                    // Also set the prefixed version (e.g., "p.age" in addition to "age")
+                    // This handles ORDER BY expressions that use the original property path
+                    // while rows have aliased column names
+                    if let Expression::PropertyAccess(prop) = &sort_item.expression {
+                        if prop.property == *k {
+                            let prefixed = format!("{}.{}", prop.object, prop.property);
+                            context_a.set_variable(prefixed, v.clone());
+                        }
+                    }
                 }
                 let val_a = self.evaluate_expression(&sort_item.expression, &context_a);
 
                 let mut context_b = context.clone();
                 for (k, v) in &b.values {
                     context_b.set_variable(k.clone(), v.clone());
+                    // Also set the prefixed version for context_b
+                    if let Expression::PropertyAccess(prop) = &sort_item.expression {
+                        if prop.property == *k {
+                            let prefixed = format!("{}.{}", prop.object, prop.property);
+                            context_b.set_variable(prefixed, v.clone());
+                        }
+                    }
                 }
                 let val_b = self.evaluate_expression(&sort_item.expression, &context_b);
 
