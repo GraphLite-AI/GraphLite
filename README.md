@@ -523,3 +523,4 @@ GraphLite is built on top of excellent open source projects. We are grateful to 
 
 ## Security
 
+If you discover a security vulnerability in GraphLite, please report it to **gl@deepgraphai.com**. Do not create public GitHub issues for security vulnerabilities.
