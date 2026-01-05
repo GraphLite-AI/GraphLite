@@ -295,8 +295,6 @@ pub extern "C" fn graphlite_query(
     }
 }
 
-/// Parse a GQL query and return the AST as JSON
-///
 /// Close a session
 ///
 /// # Arguments

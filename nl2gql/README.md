@@ -2,6 +2,8 @@
 
 Schema-grounded NL → ISO GQL generation with staged planning: intent framing, schema linking, constrained AST, syntax/logic validation, and bounded repair loops.
 
+Defaults use `gpt-4o-mini` for generation/repair to keep runs inexpensive, but you can override models via env vars or CLI flags.
+
 ## Setup
 
 - Install deps in a venv: `pip install openai tenacity python-dotenv`.

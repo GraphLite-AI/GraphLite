@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Set, Tuple
 import re
+from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
 
 from .schema_graph import SchemaGraph
+
+if TYPE_CHECKING:
+    from .intent_linker import IntentLinkGuidance
+    from .ir import ISOQueryIR
+    from .preprocess import PreprocessResult
 
 
 @dataclass
@@ -57,12 +62,17 @@ def _canonicalize_expr(expr: str) -> str:
     return expr
 
 
-def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementContract:
+def build_contract(
+    nl: str,
+    pre: "PreprocessResult",
+    guidance: "IntentLinkGuidance",
+    graph: SchemaGraph,
+) -> RequirementContract:
     """Derive structural and metric expectations from intent+linking output (schema-aware)."""
     contract = RequirementContract()
 
     # Token sets for grounding: only tokens present in NL or schema become "hard" constraints.
-    lowered_nl = pre.normalized_nl.lower() if hasattr(pre, "normalized_nl") else nl.lower()
+    lowered_nl = getattr(pre, "normalized_nl", nl).lower()
 
     links = guidance.links or {}
     node_links = links.get("node_links") or []
@@ -83,8 +93,8 @@ def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementCon
                 roles_by_label.setdefault(label, []).append(role_name)
 
     alias_to_label: Dict[str, str] = {}
-    for nl in node_links:
-        alias, label = nl.get("alias"), nl.get("label")
+    for node_link in node_links:
+        alias, label = node_link.get("alias"), node_link.get("label")
         if alias and label and graph.has_node(label):
             alias_to_label[alias] = label
             contract.required_labels.add(label)
@@ -171,14 +181,13 @@ def build_contract(nl: str, pre, guidance, graph: SchemaGraph) -> RequirementCon
     return contract
 
 
-def coverage_violations(contract: RequirementContract, ir, rendered: str) -> List[str]:
+def coverage_violations(contract: RequirementContract, ir: "ISOQueryIR", _rendered: str) -> List[str]:
     """Check if IR/rendered query satisfies structural expectations."""
-    del rendered
     errors: List[str] = []
     if not ir:
         return ["IR missing"]
 
-    label_by_alias: Dict[str, str] = {a: n.label for a, n in ir.nodes.items() if n.label}
+    label_by_alias: Dict[str, str] = {a.lower(): n.label for a, n in ir.nodes.items() if a and n.label}
     alias_def_pattern = re.compile(r"(.+?)\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)$", re.IGNORECASE)
 
     def _alias_sources() -> Dict[str, str]:
@@ -215,19 +224,23 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
         def _swap_alias_prop(match: re.Match) -> str:
             alias = match.group("alias")
             prop = match.group("prop")
-            label = label_by_alias.get(alias, alias).lower()
+            label = label_by_alias.get(alias.lower(), alias).lower()
             return f"{label}.{prop}"
 
-        expr = re.sub(r"(?P<alias>[a-z_][a-z0-9_]*)\.(?P<prop>[a-z0-9_]+)", _swap_alias_prop, expr)
+        expr = re.sub(
+            r"(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\.(?P<prop>[A-Za-z0-9_]+)",
+            _swap_alias_prop,
+            expr,
+        )
 
         def _swap_func_alias(match: re.Match) -> str:
             func = _canonicalize_function_name(match.group("func"))
             alias = match.group("alias")
-            label = label_by_alias.get(alias, alias).lower()
+            label = label_by_alias.get(alias.lower(), alias).lower()
             return f"{func}({label})"
 
         expr = re.sub(
-            r"(?P<func>[A-Za-z_][A-Za-z0-9_]*)\(\s*(?P<alias>[a-z_][a-z0-9_]*)\s*\)",
+            r"(?P<func>[A-Za-z_][A-Za-z0-9_]*)\(\s*(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*\)",
             _swap_func_alias,
             expr,
         )
@@ -237,15 +250,15 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
 
     # Node / label coverage
     for label in contract.required_labels:
-        if label not in label_by_alias.values():
+        if label not in set(label_by_alias.values()):
             errors.append(f"missing required label {label}")
 
     # Edge coverage
     for (src_label, rel, dst_label) in contract.required_edges:
         present = False
         for e in ir.edges:
-            l_label = label_by_alias.get(e.left_alias)
-            r_label = label_by_alias.get(e.right_alias)
+            l_label = label_by_alias.get((e.left_alias or "").lower())
+            r_label = label_by_alias.get((e.right_alias or "").lower())
             if l_label == src_label and r_label == dst_label and e.rel == rel:
                 present = True
                 break
@@ -256,8 +269,8 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
     if contract.required_distinct_roles:
         edges_by_rel: Dict[Tuple[str, str, str], List[Tuple[str, str]]] = {}
         for e in ir.edges:
-            l_label = label_by_alias.get(e.left_alias)
-            r_label = label_by_alias.get(e.right_alias)
+            l_label = label_by_alias.get((e.left_alias or "").lower())
+            r_label = label_by_alias.get((e.right_alias or "").lower())
             if not (l_label and r_label):
                 continue
             edges_by_rel.setdefault((l_label, e.rel, r_label), []).append((e.left_alias, e.right_alias))
@@ -319,17 +332,6 @@ def coverage_violations(contract: RequirementContract, ir, rendered: str) -> Lis
 
     return sorted(set(errors))
 
-
-__all__ = [
-    "RequirementContract",
-    "RoleConstraint",
-    "build_contract",
-    "coverage_violations",
-    "contract_view",
-    "resolve_required_output_forms",
-]
-
-
 def contract_view(contract: RequirementContract) -> Dict[str, object]:
     """JSON-safe projection of a RequirementContract."""
     return {
@@ -389,3 +391,13 @@ def resolve_required_output_forms(contract: RequirementContract, ir: Optional["I
         "alias_canonical": canonical_forms,
         "alias_canonical_nodistinct": canonical_nodistinct_forms,
     }
+
+
+__all__ = [
+    "RequirementContract",
+    "RoleConstraint",
+    "build_contract",
+    "coverage_violations",
+    "contract_view",
+    "resolve_required_output_forms",
+]
