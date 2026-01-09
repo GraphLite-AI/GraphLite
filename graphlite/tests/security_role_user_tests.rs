@@ -200,10 +200,8 @@ fn test_role_assignment() {
         fixture.assert_query_succeeds("CREATE ROLE IF NOT EXISTS 'editor'");
     } else {
         // Try creating the roles, but handle the case where they already exist
-        let admin_result = fixture.query("CREATE ROLE 'admin'");
-        admin_result.is_err();
-        let editor_result = fixture.query("CREATE ROLE 'editor'");
-        if editor_result.is_err() {}
+        let _ = fixture.query("CREATE ROLE 'admin'");
+        let _ = fixture.query("CREATE ROLE 'editor'");
     }
     let if_not_exists_result =
         fixture.query("CREATE USER IF NOT EXISTS 'testuser' PASSWORD 'password'");
@@ -214,7 +212,7 @@ fn test_role_assignment() {
     // Test role assignment (if GRANT ROLE is implemented)
     // Note: This might not be implemented yet, so we'll make it conditional
     let grant_result = fixture.query("GRANT ROLE 'admin' TO 'testuser'");
-    if let Ok(_) = grant_result {
+    if grant_result.is_ok() {
         // Test multiple role assignment
         fixture.assert_query_succeeds("GRANT ROLE 'editor' TO 'testuser'");
 

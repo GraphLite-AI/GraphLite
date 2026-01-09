@@ -14,6 +14,7 @@ use graphlite_sdk::{Error, GraphLite};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)] // Fields are read by Deserialize and Debug derives
 struct Person {
     name: String,
     age: f64,

@@ -242,7 +242,7 @@ fn test_readme_insert_with_functions() {
         Some(&Value::Number(1299.99))
     );
     // warranty is duration in seconds: P2Y = 2 years ≈ 63072000 seconds
-    assert!(result.rows[0].values.get("p.warranty").is_some());
+    assert!(result.rows[0].values.contains_key("p.warranty"));
 }
 
 #[test]

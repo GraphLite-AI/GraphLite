@@ -629,7 +629,7 @@ fn test_dml_error_cases() {
     // This may or may not fail depending on type coercion rules
     let result = fixture.query("MATCH (t:TypeTest) SET t.number_prop = 'string_value'");
 
-    if let Ok(_) = result {}
+    if result.is_ok() {}
 }
 
 #[test]
@@ -658,9 +658,6 @@ fn test_dml_performance() {
                 node_id * 2
             ));
         }
-
-        // Debug: show the first few clauses
-        batch == 0;
 
         insert_query.push_str(&clauses.join(", "));
         fixture.assert_query_succeeds(&insert_query);
