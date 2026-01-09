@@ -19,13 +19,10 @@ use crate::plan::logical::{
     EntityType, JoinType, LogicalNode, LogicalPlan, ProjectExpression, SortExpression, VariableInfo,
 };
 use crate::plan::optimizer::PlanningError;
-use crate::plan::pattern_optimization::integration::PatternOptimizationPipeline;
 
 /// Builder for creating logical plans from AST queries
 #[derive(Debug)]
 pub struct LogicalBuilder {
-    /// Pattern optimization pipeline for fixing comma-separated pattern bugs
-    pattern_optimizer: PatternOptimizationPipeline,
 }
 
 /// Planning context holds state during logical plan building
@@ -38,9 +35,7 @@ pub struct PlanningContext {
 impl LogicalBuilder {
     /// Create a new logical builder
     pub fn new() -> Self {
-        Self {
-            pattern_optimizer: PatternOptimizationPipeline::new(),
-        }
+        Self {}
     }
 
     /// Build a logical plan from a query
@@ -938,11 +933,6 @@ impl PlanningContext {
             _next_variable_id: 0,
         }
     }
-
-    /// Register a variable in the planning context
-    pub fn register_variable(&mut self, name: String, info: VariableInfo) {
-        self.variables.insert(name, info);
-    }
 }
 
 impl Default for PlanningContext {
@@ -955,8 +945,7 @@ impl Default for PlanningContext {
 mod tests {
     use super::*;
     use crate::ast::{
-        BasicQuery, Expression, Literal, Location, MatchClause, Node, PathPattern,
-        PatternElement, Query, ReturnClause, ReturnItem, Variable, WhereClause,
+        Expression, Literal, Location, Variable,
     };
 
     fn dummy_location() -> Location {
@@ -978,23 +967,6 @@ mod tests {
     fn test_planning_context_creation() {
         let context = PlanningContext::new();
         assert!(context.variables.is_empty());
-    }
-
-    #[test]
-    fn test_planning_context_register_variable() {
-        let mut context = PlanningContext::new();
-        let var_info = VariableInfo {
-            name: "n".to_string(),
-            entity_type: EntityType::Node,
-            labels: vec!["Person".to_string()],
-            required_properties: vec![],
-        };
-
-        context.register_variable("n".to_string(), var_info.clone());
-        assert_eq!(context.variables.len(), 1);
-        assert!(context.variables.contains_key("n"));
-        assert_eq!(context.variables.get("n").unwrap().name, "n");
-        assert_eq!(context.variables.get("n").unwrap().labels, vec!["Person"]);
     }
 
     #[test]

@@ -16,10 +16,9 @@ use crate::ast::{
 use crate::plan::builders::{LogicalBuilder, PhysicalBuilder};
 use crate::plan::cost::{CostEstimate, CostModel, Statistics};
 use crate::plan::logical::{
-    LogicalNode, LogicalPlan, VariableInfo,
+    LogicalNode, LogicalPlan,
 };
 use crate::plan::optimizers::{LogicalOptimizer, PhysicalOptimizer};
-use crate::plan::pattern_optimization::integration::PatternOptimizationPipeline;
 use crate::plan::physical::PhysicalPlan;
 use crate::plan::trace::{PlanTrace, PlanTracer, PlanningPhase, TraceMetadata};
 use crate::storage::GraphCache;
@@ -31,8 +30,6 @@ pub struct QueryPlanner {
     statistics: Statistics,
     optimization_level: OptimizationLevel,
     avoid_index_scan: bool,
-    /// Pattern optimization pipeline for fixing comma-separated pattern bugs
-    pattern_optimizer: PatternOptimizationPipeline,
     /// Logical plan builder
     logical_builder: LogicalBuilder,
     /// Physical plan builder
@@ -62,13 +59,6 @@ pub enum PlanningError {
     UnsupportedFeature(String),
 }
 
-/// Planning context holds state during planning
-#[derive(Debug, Clone)]
-struct PlanningContext {
-    variables: HashMap<String, VariableInfo>,
-    _next_variable_id: usize,
-}
-
 /// Query plan with alternatives for cost comparison
 ///
 /// **Planned Feature** - Multiple plan alternatives for cost-based selection
@@ -93,7 +83,6 @@ impl QueryPlanner {
             statistics: Statistics::new(),
             optimization_level: optimization_level.clone(),
             avoid_index_scan,
-            pattern_optimizer: PatternOptimizationPipeline::new(),
             logical_builder: LogicalBuilder::new(),
             physical_builder: PhysicalBuilder::new(),
             logical_optimizer: LogicalOptimizer::new(optimization_level),
@@ -111,7 +100,6 @@ impl QueryPlanner {
             statistics: Statistics::new(),
             optimization_level: level.clone(),
             avoid_index_scan,
-            pattern_optimizer: PatternOptimizationPipeline::new(),
             logical_builder: LogicalBuilder::new(),
             physical_builder: PhysicalBuilder::new(),
             logical_optimizer: LogicalOptimizer::new(level),
@@ -170,7 +158,6 @@ impl QueryPlanner {
             statistics: Statistics::new(),
             optimization_level: optimization_level.clone(),
             avoid_index_scan,
-            pattern_optimizer: PatternOptimizationPipeline::new(),
             logical_builder: LogicalBuilder::new(),
             physical_builder: PhysicalBuilder::new(),
             logical_optimizer: LogicalOptimizer::new(optimization_level),

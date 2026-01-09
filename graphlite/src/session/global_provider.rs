@@ -125,6 +125,7 @@ impl GlobalSessionProvider {
     ///
     /// This method provides backward compatibility and direct access to the
     /// session manager for advanced use cases.
+    #[allow(dead_code)]
     pub fn manager(&self) -> Arc<SessionManager> {
         self.get_manager()
             .expect("Global session manager not initialized")
