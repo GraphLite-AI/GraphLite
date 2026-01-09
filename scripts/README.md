@@ -132,6 +132,49 @@ Validates that code will pass GitHub Actions CI/CD pipeline before pushing.
 ./scripts/validate_ci.sh --full
 ```
 
+### Linting Scripts
+
+#### `clippy_all.sh`
+Runs Clippy linter on the GraphLite project with configurable strictness levels.
+
+```bash
+# Basic clippy check (library and binaries)
+./scripts/clippy_all.sh
+
+# Check all targets (lib, bins, tests, benches, examples)
+./scripts/clippy_all.sh --all
+
+# Strict mode: treat warnings as errors (CI requirement)
+./scripts/clippy_all.sh --strict
+
+# Auto-fix suggestions where possible
+./scripts/clippy_all.sh --fix
+
+# Pedantic mode: extra strict linting
+./scripts/clippy_all.sh --pedantic
+
+# Combined: check all targets with strict mode (CI simulation)
+./scripts/clippy_all.sh --all --strict
+```
+
+**Options:**
+- `--fix` - Automatically apply Clippy suggestions where possible
+- `--strict` - Treat all warnings as errors (required for CI)
+- `--pedantic` - Enable pedantic lints (extra strict)
+- `--all` - Check all targets (lib, bins, tests, benches, examples)
+- `--help` - Show help message
+
+**Modes:**
+- **Default**: Standard lints for main library code (lib + bins)
+- **--all**: Comprehensive check of all targets
+- **--strict**: Fail on any warnings (recommended before committing)
+- **--pedantic**: Additional pedantic lints for code quality
+- **--fix**: Automatically apply safe fixes
+
+**CI Usage:** The GitHub Actions CI pipeline uses `./scripts/clippy_all.sh --all` to ensure consistent linting.
+
+**Note:** Currently ~26 non-critical warnings remain in the codebase (mostly type complexity). Future work will fix these to enable `--strict` mode in CI.
+
 ### Development Scripts
 
 #### `install_hooks.sh`
@@ -176,6 +219,14 @@ Validates code against established patterns and anti-patterns.
 
 # Or run tests separately
 ./scripts/run_tests.sh
+```
+
+### Pre-Commit Workflow
+```bash
+# Format, lint, and validate before committing
+cargo fmt --all
+./scripts/clippy_all.sh --all
+./scripts/validate_ci.sh --quick
 ```
 
 ### Complete Uninstall

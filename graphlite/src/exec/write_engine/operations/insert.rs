@@ -627,9 +627,9 @@ mod tests {
 
     #[test]
     fn test_literal_to_value_float() {
-        let literal = Literal::Float(3.14);
+        let literal = Literal::Float(std::f64::consts::PI);
         let value = InsertExecutor::literal_to_value(&literal);
-        assert_eq!(value, Value::Number(3.14));
+        assert_eq!(value, Value::Number(std::f64::consts::PI));
     }
 
     #[test]

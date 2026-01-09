@@ -50,17 +50,10 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        # TODO: Fix clippy warnings and re-enable -D warnings
-        # Currently allows warnings to prevent CI failures during initial setup
-        # There are ~344 clippy warnings that need to be addressed:
-        #   - Empty lines after doc comments
-        #   - Redundant imports
-        #   - Collapsible if statements
-        #   - Unsafe pointer dereference warnings (FFI layer)
-        #   - Other code style issues
-        # To see all warnings: cargo clippy --all-targets --all-features
-        # To fix and re-enable strict mode, change to: -- -D warnings
-        run: cargo clippy --all-targets --all-features -- -A clippy::not_unsafe_ptr_arg_deref -A clippy::approx_constant
+        # Using clippy_all.sh script for consistent linting across environments
+        # Note: Currently runs without --strict mode due to ~26 remaining warnings
+        # TODO: Fix remaining warnings and add --strict flag
+        run: ./scripts/clippy_all.sh --all
 
   build-and-test:
     name: Build and Test
