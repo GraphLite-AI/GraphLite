@@ -501,6 +501,7 @@ RETURN c.name;
 ## Getting Help
 
 - **Documentation**: See links in [Next Steps](#next-steps) section above
+- **Discord**: [Join our Discord community](https://discord.gg/Kcs2QakHqs) for questions and discussions
 - **Issues**: Report bugs on [GitHub Issues](https://github.com/GraphLite-AI/GraphLite/issues)
 - **Questions**: Check existing issues or open a new one
 - **Contributing**: See [Contribution Guide.md](/CONTRIBUTING.md)

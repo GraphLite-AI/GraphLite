@@ -97,7 +97,7 @@ If you're new to open source, welcome! Here are some good first steps:
 
 1. **Read the documentation**: Start with [README.md](../README.md) and [Quick Start](../Quick%20Start.md)
 2. **Look for "good first issue" labels**: These are beginner-friendly tasks
-3. **Join our Discord**: Get help from the community (link in README)
+3. **[Join our Discord](https://discord.gg/Kcs2QakHqs)**: Get help from the community
 4. **Start small**: Documentation fixes, test improvements, small bug fixes
 
 ## Development Setup
@@ -703,7 +703,7 @@ We appreciate all contributors! Your contributions will be recognized:
 
 - **GitHub Issues**: Bug reports, feature requests
 - **GitHub Discussions**: Questions, ideas, general discussion
-- **Discord**: Real-time chat (link in README)
+- **[Discord](https://discord.gg/Kcs2QakHqs)**: Real-time chat with the community
 - **Twitter**: @graphlite_db (announcements)
 
 ### Getting Help

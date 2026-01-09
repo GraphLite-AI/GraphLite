@@ -474,6 +474,7 @@ GraphLite provides comprehensive documentation for all skill levels:
 - Open an issue for bugs or feature requests
 - Check existing issues before creating new ones
 - Join discussions in open issues and PRs
+- **[Join our Discord](https://discord.gg/Kcs2QakHqs)** - Connect with the community
 - **[Contribution Guidelines](CONTRIBUTING.md)** - How to contribute
 
 ---
