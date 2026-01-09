@@ -674,7 +674,7 @@ fn test_dml_performance() {
                 .values
                 .get("count")
                 .unwrap_or(&Value::Number(0.0));
-        } 
+        }
     }
 
     let insert_duration = start.elapsed();

@@ -240,9 +240,7 @@ impl PatternOptimizationPipeline {
             // Record successful optimization
             self.metrics.record_success(elapsed, &total_improvement);
 
-            Ok(OptimizationPipelineResult::new(
-                optimized_plan,
-            ))
+            Ok(OptimizationPipelineResult::new(optimized_plan))
         } else {
             // Record skipped optimization
             self.metrics.record_skip(elapsed);
@@ -394,9 +392,7 @@ pub struct OptimizationPipelineResult {
 impl OptimizationPipelineResult {
     /// Create result for optimization
     pub fn new(physical_plan: PhysicalNode) -> Self {
-        Self {
-            physical_plan,
-        }
+        Self { physical_plan }
     }
 }
 
@@ -656,9 +652,7 @@ mod tests {
             estimated_cost: 50.0,
         };
 
-        let result = OptimizationPipelineResult::new(
-            physical_plan.clone(),
-        );
+        let result = OptimizationPipelineResult::new(physical_plan.clone());
 
         // Verify the physical plan is properly stored
         match &result.physical_plan {
@@ -668,9 +662,7 @@ mod tests {
             _ => panic!("Expected NodeSeqScan"),
         }
 
-        let no_opt_result = OptimizationPipelineResult::new(
-            physical_plan,
-        );
+        let no_opt_result = OptimizationPipelineResult::new(physical_plan);
 
         // Verify the physical plan is properly stored
         match &no_opt_result.physical_plan {

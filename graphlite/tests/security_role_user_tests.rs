@@ -419,7 +419,7 @@ fn test_transaction_integrity() {
     if role_names_after.contains(&"tx_test_role".to_string()) {
         // Clean up the role that should have been rolled back
         let _cleanup = fixture.query("DROP ROLE 'tx_test_role'");
-    } 
+    }
 
     // Test committed transaction
     fixture.assert_query_succeeds("BEGIN");

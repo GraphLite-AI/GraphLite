@@ -185,11 +185,78 @@ Installs Git hooks for the project.
 ```
 
 #### `check_code_patterns.sh`
-Validates code against established patterns and anti-patterns.
+Enforces GraphLite-specific architectural patterns and coding rules.
 
 ```bash
 ./scripts/check_code_patterns.sh
 ```
+
+**What it checks:**
+- **11 critical architectural rules** specific to GraphLite
+- Custom pattern violations (not covered by standard Rust linting)
+- Ensures singleton patterns are followed (ExecutionContext, StorageManager, CatalogManager)
+- Validates proper lock usage (read locks for reads, write locks for writes)
+- Checks async runtime management patterns
+- Enforces test integrity and API boundary rules
+- Validates documentation standards (no emojis in markdown)
+
+**When to run:**
+- Before committing changes to `src/` or `tests/`
+- When modifying core execution, storage, or catalog code
+- As part of pre-commit workflow
+
+**Example output:**
+```
+Checking critical rules...
+✓ Rule 1: No new ExecutionContext instances
+✓ Rule 2: No new StorageManager instances
+✗ Rule 3: Read vs Write locks - Found 2 violations
+  - src/exec/executor.rs:145: Use read() for read operations
+```
+
+**See also:** CONTRIBUTING.md for complete list of all 11 rules
+
+---
+
+## Script Comparison Guide
+
+### `check_code_patterns.sh` vs `validate_ci.sh`
+
+**Use `check_code_patterns.sh` for:**
+- GraphLite-specific architectural rules
+- Fast local validation (~5 seconds)
+- Before committing code changes
+- Catching pattern violations early
+
+**Use `validate_ci.sh` for:**
+- Simulating what CI will check
+- Standard Rust tooling (fmt, clippy, build, test)
+- Before pushing to GitHub
+- Comprehensive pre-push validation
+
+**Quick reference:**
+
+| Check | check_code_patterns.sh | validate_ci.sh |
+|-------|----------------------|----------------|
+| GraphLite rules | ✅ | ❌ |
+| Code formatting | ❌ | ✅ |
+| Clippy linting | ❌ | ✅ |
+| Build/tests | ❌ | ✅ (--full) |
+| Speed | ~5 seconds | ~30s (quick) / ~10min (full) |
+| When | Before commit | Before push |
+
+**Recommended workflow:**
+```bash
+# Before committing:
+cargo fmt --all
+./scripts/clippy_all.sh --all
+./scripts/check_code_patterns.sh
+
+# Before pushing:
+./scripts/validate_ci.sh --quick
+```
+
+---
 
 ## Common Workflows
 

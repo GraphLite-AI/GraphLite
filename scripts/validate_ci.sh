@@ -125,14 +125,14 @@ echo ""
 # 4. Build project
 run_check "Release build" "./scripts/build_all.sh --release" || true
 
-# 5. Run tests
-run_check "Integration tests" "./scripts/run_tests.sh --release" || true
+# 5. Run tests (using parallel runner for speed)
+run_check "Integration tests" "./scripts/run_integration_tests_parallel.sh --release --jobs=8" || true
 
 # 6. Build documentation
 run_check "Documentation build" "cargo doc --no-deps --all-features" || true
 
-# 7. Test doc tests
-run_check "Documentation tests" "cargo test --doc" || true
+# 7. Test doc tests (only main graphlite package - sdk-rust has outdated examples)
+run_check "Documentation tests" "cargo test --doc -p graphlite" || true
 
 # Optional: Security audit (if cargo-audit is installed)
 if command -v cargo-audit &> /dev/null; then

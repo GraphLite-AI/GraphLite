@@ -41,8 +41,8 @@ pub mod traits;
 pub mod types;
 
 // Driver implementations
-pub mod sled;
 pub mod memory;
+pub mod sled;
 
 // Public API re-exports
 pub use factory::create_storage_driver;

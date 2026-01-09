@@ -804,18 +804,8 @@ mod tests {
         let mut properties = HashMap::new();
         properties.insert("since".to_string(), Value::String("2020".to_string()));
 
-        let id1 = InsertExecutor::generate_edge_content_id(
-            "node1",
-            "node2",
-            "KNOWS",
-            &properties,
-        );
-        let id2 = InsertExecutor::generate_edge_content_id(
-            "node1",
-            "node2",
-            "KNOWS",
-            &properties,
-        );
+        let id1 = InsertExecutor::generate_edge_content_id("node1", "node2", "KNOWS", &properties);
+        let id2 = InsertExecutor::generate_edge_content_id("node1", "node2", "KNOWS", &properties);
 
         // Same inputs should produce same ID
         assert_eq!(id1, id2);
@@ -825,18 +815,8 @@ mod tests {
     fn test_generate_edge_content_id_different_nodes_different_id() {
         let properties = HashMap::new();
 
-        let id1 = InsertExecutor::generate_edge_content_id(
-            "node1",
-            "node2",
-            "KNOWS",
-            &properties,
-        );
-        let id2 = InsertExecutor::generate_edge_content_id(
-            "node2",
-            "node3",
-            "KNOWS",
-            &properties,
-        );
+        let id1 = InsertExecutor::generate_edge_content_id("node1", "node2", "KNOWS", &properties);
+        let id2 = InsertExecutor::generate_edge_content_id("node2", "node3", "KNOWS", &properties);
 
         // Different nodes should produce different IDs
         assert_ne!(id1, id2);
@@ -846,18 +826,8 @@ mod tests {
     fn test_generate_edge_content_id_different_label_different_id() {
         let properties = HashMap::new();
 
-        let id1 = InsertExecutor::generate_edge_content_id(
-            "node1",
-            "node2",
-            "KNOWS",
-            &properties,
-        );
-        let id2 = InsertExecutor::generate_edge_content_id(
-            "node1",
-            "node2",
-            "LIKES",
-            &properties,
-        );
+        let id1 = InsertExecutor::generate_edge_content_id("node1", "node2", "KNOWS", &properties);
+        let id2 = InsertExecutor::generate_edge_content_id("node1", "node2", "LIKES", &properties);
 
         // Different labels should produce different IDs
         assert_ne!(id1, id2);

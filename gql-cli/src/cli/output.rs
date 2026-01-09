@@ -113,7 +113,8 @@ impl ResultFormatter {
         let json_result = json_obj;
 
         serde_json::to_string_pretty(&json_result).unwrap_or_else(|_| {
-            "{\"status\": \"error\", \"error\": \"Could not serialize results to JSON\"}".to_string()
+            "{\"status\": \"error\", \"error\": \"Could not serialize results to JSON\"}"
+                .to_string()
         })
     }
 

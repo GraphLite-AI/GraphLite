@@ -41,8 +41,8 @@ impl TestFixture {
 
         // Use public API - QueryCoordinator::from_path()
         // This initializes ALL internal components automatically
-        let coordinator = QueryCoordinator::from_path(db_path)
-            .map_err(Box::<dyn std::error::Error>::from)?;
+        let coordinator =
+            QueryCoordinator::from_path(db_path).map_err(Box::<dyn std::error::Error>::from)?;
 
         // Create session using public API
         let session_id = coordinator

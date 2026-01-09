@@ -20,9 +20,9 @@ pub mod streaming_topk; // Phase 4: Week 6.5 - Streaming top-K // Phase 4: Week 
 
 // Execution engines (architecture refactoring - Phase 1)
 pub mod read_engine;
-pub mod write_engine;
 pub mod schema_engine;
 pub mod transaction_engine;
+pub mod write_engine;
 
 // Re-export processors for backward compatibility (moved to read_engine)
 pub use read_engine::processors::unwind_preprocessor;

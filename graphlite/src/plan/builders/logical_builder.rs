@@ -11,9 +11,9 @@
 use std::collections::HashMap;
 
 use crate::ast::{
-    BasicQuery, BinaryExpression, Expression, LetStatement, MatchClause,
-    OrderClause, OrderDirection, PathPattern, PatternElement, Query, ReturnClause,
-    SetOperation, SetOperationType, Variable,
+    BasicQuery, BinaryExpression, Expression, LetStatement, MatchClause, OrderClause,
+    OrderDirection, PathPattern, PatternElement, Query, ReturnClause, SetOperation,
+    SetOperationType, Variable,
 };
 use crate::plan::logical::{
     EntityType, JoinType, LogicalNode, LogicalPlan, ProjectExpression, SortExpression, VariableInfo,
@@ -22,8 +22,7 @@ use crate::plan::optimizer::PlanningError;
 
 /// Builder for creating logical plans from AST queries
 #[derive(Debug)]
-pub struct LogicalBuilder {
-}
+pub struct LogicalBuilder {}
 
 /// Planning context holds state during logical plan building
 #[derive(Debug, Clone)]
@@ -944,9 +943,7 @@ impl Default for PlanningContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{
-        Expression, Literal, Location, Variable,
-    };
+    use crate::ast::{Expression, Literal, Location, Variable};
 
     fn dummy_location() -> Location {
         Location {
@@ -960,7 +957,10 @@ mod tests {
     fn test_logical_builder_creation() {
         let builder = LogicalBuilder::new();
         // Just verify it can be created without panic
-        assert_eq!(std::mem::size_of_val(&builder), std::mem::size_of::<LogicalBuilder>());
+        assert_eq!(
+            std::mem::size_of_val(&builder),
+            std::mem::size_of::<LogicalBuilder>()
+        );
     }
 
     #[test]

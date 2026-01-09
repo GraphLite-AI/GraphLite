@@ -103,12 +103,15 @@ impl SessionCatalogCache {
 
     /// Check if graph list cache is valid for the given schema and version
     pub fn is_graph_list_valid(&self, schema_name: &str, current_version: u64) -> bool {
-        self.graphs_by_schema.contains_key(schema_name)
-            && self.graphs_version == current_version
+        self.graphs_by_schema.contains_key(schema_name) && self.graphs_version == current_version
     }
 
     /// Get cached graph list for a schema if valid
-    pub fn get_graph_list(&mut self, schema_name: &str, current_version: u64) -> Option<Vec<String>> {
+    pub fn get_graph_list(
+        &mut self,
+        schema_name: &str,
+        current_version: u64,
+    ) -> Option<Vec<String>> {
         if self.is_graph_list_valid(schema_name, current_version) {
             self.last_graph_access = Some(Instant::now());
             self.graphs_by_schema.get(schema_name).cloned()

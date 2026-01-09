@@ -3,7 +3,6 @@
 /// This benchmark demonstrates the performance improvement from per-session catalog caching.
 /// It measures the throughput of gql.list_schemas() and gql.list_graphs() system procedures
 /// with and without the catalog cache.
-
 use graphlite::QueryCoordinator;
 use std::time::Instant;
 use tempfile::tempdir;
@@ -16,8 +15,7 @@ fn main() {
     let temp_dir = tempdir().unwrap();
     let db_path = temp_dir.path().join("bench_db");
 
-    let coordinator = QueryCoordinator::from_path(&db_path)
-        .expect("Failed to create coordinator");
+    let coordinator = QueryCoordinator::from_path(&db_path).expect("Failed to create coordinator");
 
     // Create a session for testing
     let session_id = coordinator
@@ -80,13 +78,18 @@ fn main() {
         coordinator.process_query(&create_schema, &session_id).ok();
 
         // List schemas to test cache refresh
-        coordinator.process_query("CALL gql.list_schemas()", &session_id).ok();
+        coordinator
+            .process_query("CALL gql.list_schemas()", &session_id)
+            .ok();
     }
 
     let invalidation_duration = invalidation_start.elapsed();
     println!("  Created 10 schemas with list_schemas() after each");
     println!("  Time: {:?}", invalidation_duration);
-    println!("  Average per create+list: {:?}", invalidation_duration / 10);
+    println!(
+        "  Average per create+list: {:?}",
+        invalidation_duration / 10
+    );
     println!();
 
     // Summary

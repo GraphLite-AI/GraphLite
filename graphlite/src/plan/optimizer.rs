@@ -10,14 +10,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
 
-use crate::ast::{
-    Document, Expression, Operator, Query,
-};
+use crate::ast::{Document, Expression, Operator, Query};
 use crate::plan::builders::{LogicalBuilder, PhysicalBuilder};
 use crate::plan::cost::{CostEstimate, CostModel, Statistics};
-use crate::plan::logical::{
-    LogicalNode, LogicalPlan,
-};
+use crate::plan::logical::{LogicalNode, LogicalPlan};
 use crate::plan::optimizers::{LogicalOptimizer, PhysicalOptimizer};
 use crate::plan::physical::PhysicalPlan;
 use crate::plan::trace::{PlanTrace, PlanTracer, PlanningPhase, TraceMetadata};
@@ -382,14 +378,11 @@ impl QueryPlanner {
         self.logical_builder.build(query)
     }
 
-
-
     /// Optimize logical plan
     fn optimize_logical_plan(&self, plan: LogicalPlan) -> Result<LogicalPlan, PlanningError> {
         // Delegate to LogicalOptimizer
         self.logical_optimizer.optimize(plan)
     }
-
 
     /// Create physical plan from logical plan
     fn create_physical_plan(
@@ -405,7 +398,6 @@ impl QueryPlanner {
         // Delegate to PhysicalOptimizer
         self.physical_optimizer.optimize(plan)
     }
-
 
     /// Generate alternative join orders
     #[allow(dead_code)] // ROADMAP v0.3.0 - Join reordering for cost-based optimization (see ROADMAP.md §5)
@@ -457,7 +449,6 @@ impl QueryPlanner {
     pub fn get_cost_model(&self) -> &CostModel {
         &self.cost_model
     }
-
 }
 
 /// Information about available indexes for optimization

@@ -10,7 +10,9 @@ use crate::ast::parser::parse_query;
 use crate::cache::CacheManager;
 use crate::catalog::manager::CatalogManager;
 use crate::exec::{ExecutionRequest, QueryExecutor, QueryResult};
-use crate::session::{GlobalSessionProvider, InstanceSessionProvider, SessionManager, SessionMode, SessionProvider};
+use crate::session::{
+    GlobalSessionProvider, InstanceSessionProvider, SessionManager, SessionMode, SessionProvider,
+};
 use crate::storage::{StorageManager, StorageMethod, StorageType};
 use crate::txn::TransactionManager;
 use std::panic::{RefUnwindSafe, UnwindSafe};
@@ -140,7 +142,7 @@ impl QueryCoordinator {
     ///
     /// ```no_run
     /// use graphlite::QueryCoordinator;
-    /// use graphlite::session::SessionMode;
+    /// use graphlite::SessionMode;
     ///
     /// // Embedded mode - each instance isolated (default behavior)
     /// let coord1 = QueryCoordinator::from_path_with_mode("db1.graphlite", SessionMode::Instance)?;
@@ -561,7 +563,11 @@ impl QueryCoordinator {
     pub fn session_manager(&self) -> Arc<SessionManager> {
         // For Phase 0, we know the provider is InstanceSessionProvider
         // This method provides backward compatibility
-        if let Some(instance_provider) = self.session_provider.as_any().downcast_ref::<InstanceSessionProvider>() {
+        if let Some(instance_provider) = self
+            .session_provider
+            .as_any()
+            .downcast_ref::<InstanceSessionProvider>()
+        {
             instance_provider.manager()
         } else {
             panic!("session_manager() is only supported with InstanceSessionProvider")

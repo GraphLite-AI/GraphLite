@@ -209,7 +209,11 @@ impl DDLStatementExecutor for DropSchemaExecutor {
                                 // Also invalidate graph cache since CASCADE drops dependent graphs
                                 cache_mgr.invalidate_on_data_change(None, 0);
                             }
-                            log::debug!("Invalidated catalog cache after DROP SCHEMA '{}' cascade={}", schema_name, self.statement.cascade);
+                            log::debug!(
+                                "Invalidated catalog cache after DROP SCHEMA '{}' cascade={}",
+                                schema_name,
+                                self.statement.cascade
+                            );
                         }
 
                         let message = if self.statement.if_exists {

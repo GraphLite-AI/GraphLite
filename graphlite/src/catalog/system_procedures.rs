@@ -121,7 +121,11 @@ impl SystemProcedures {
     }
 
     /// CALL gql.list_schemas() YIELD schema_name, schema_path, created_at, modified_at, description
-    fn list_schemas(&self, _args: Vec<Value>, session_id: Option<&str>) -> Result<QueryResult, ExecutionError> {
+    fn list_schemas(
+        &self,
+        _args: Vec<Value>,
+        session_id: Option<&str>,
+    ) -> Result<QueryResult, ExecutionError> {
         // Note: For this procedure, we always query the catalog since we need full schema objects
         // (name, path, created_at, modified_at, description). Future optimization could cache
         // full objects, but for now we just update the cache after querying.
@@ -158,7 +162,9 @@ impl SystemProcedures {
                 let current_version = cache_mgr.get_schema_version();
                 if let Some(session_arc) = sess_provider.get_session(sess_id) {
                     if let Ok(mut session) = session_arc.write() {
-                        session.catalog_cache_mut().set_schema_list(schema_names, current_version);
+                        session
+                            .catalog_cache_mut()
+                            .set_schema_list(schema_names, current_version);
                     }
                 }
             }
@@ -237,7 +243,11 @@ impl SystemProcedures {
     }
 
     /// CALL gql.list_graphs() YIELD graph_name, schema_name
-    fn list_graphs(&self, _args: Vec<Value>, session_id: Option<&str>) -> Result<QueryResult, ExecutionError> {
+    fn list_graphs(
+        &self,
+        _args: Vec<Value>,
+        session_id: Option<&str>,
+    ) -> Result<QueryResult, ExecutionError> {
         let mut catalog_manager = self.catalog_manager.write().map_err(|_| {
             ExecutionError::RuntimeError("Failed to acquire catalog manager lock".to_string())
         })?;
@@ -276,10 +286,7 @@ impl SystemProcedures {
                             .map(|s| s.to_string());
 
                         if let (Some(g_name), Some(s_name)) = (graph_name, schema_name) {
-                            graphs_by_schema
-                                .entry(s_name)
-                                .or_default()
-                                .push(g_name);
+                            graphs_by_schema.entry(s_name).or_default().push(g_name);
                         }
                     }
                 }
@@ -288,9 +295,11 @@ impl SystemProcedures {
                 if let Some(session_arc) = sess_provider.get_session(sess_id) {
                     if let Ok(mut session) = session_arc.write() {
                         for (schema_name, graph_names) in graphs_by_schema {
-                            session
-                                .catalog_cache_mut()
-                                .set_graph_list(schema_name, graph_names, current_version);
+                            session.catalog_cache_mut().set_graph_list(
+                                schema_name,
+                                graph_names,
+                                current_version,
+                            );
                         }
                     }
                 }

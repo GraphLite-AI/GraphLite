@@ -2,7 +2,6 @@
 ///
 /// This benchmark measures the performance improvement from lock partitioning
 /// by creating sessions concurrently using the public API.
-
 use graphlite::QueryCoordinator;
 use std::time::Instant;
 use tempfile::tempdir;
@@ -15,8 +14,7 @@ fn main() {
     let temp_dir = tempdir().unwrap();
     let db_path = temp_dir.path().join("bench_db");
 
-    let coordinator = QueryCoordinator::from_path(&db_path)
-        .expect("Failed to create coordinator");
+    let coordinator = QueryCoordinator::from_path(&db_path).expect("Failed to create coordinator");
 
     // Benchmark: Sequential session creation using public API
     println!("📊 Sequential Session Creation:");
@@ -73,9 +71,15 @@ fn main() {
     // Summary
     println!("=== Summary ===");
     println!("With lock partitioning (16 partitions):");
-    println!("  Session creation: {:.0} sessions/sec", sequential_ops_per_sec);
+    println!(
+        "  Session creation: {:.0} sessions/sec",
+        sequential_ops_per_sec
+    );
     println!("  Query execution:  {:.0} queries/sec", query_ops_per_sec);
-    println!("  Session cleanup:  {:.0} removals/sec", cleanup_ops_per_sec);
+    println!(
+        "  Session cleanup:  {:.0} removals/sec",
+        cleanup_ops_per_sec
+    );
     println!();
     println!("✅ Lock partitioning reduces contention and improves concurrent throughput");
     println!();
