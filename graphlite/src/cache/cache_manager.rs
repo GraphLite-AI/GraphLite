@@ -5,7 +5,7 @@
 
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-
+use crate::cache::subquery_cache::SubqueryCacheMetric;
 use crate::exec::QueryResult;
 use crate::plan::logical::LogicalPlan;
 use crate::plan::physical::PhysicalPlan;
@@ -19,8 +19,7 @@ use super::{
     },
     subquery_cache::{create_subquery_cache_key, SubqueryCacheStats},
     CacheConfig, CacheLevel, InvalidationEvent, InvalidationManager, PlanCache, PlanCacheEntry,
-    PlanCacheKey, ResultCache, SubqueryCache, SubqueryCacheHit, SubqueryCacheKey, SubqueryResult,
-    SubqueryType,
+    PlanCacheKey, ResultCache, SubqueryCache, SubqueryCacheHit, SubqueryResult, SubqueryType,
 };
 
 /// Central cache manager coordinating all cache types
@@ -617,12 +616,12 @@ impl CacheManager {
 
         let mut global_stats = self.global_stats.write().unwrap();
         global_stats.total_hits =
-            result_stats.l1_hits + result_stats.l2_hits + plan_stats.hits + subquery_stats.hits;
-        global_stats.total_misses = result_stats.misses + plan_stats.misses + subquery_stats.misses;
+            result_stats.l1_hits + result_stats.l2_hits + plan_stats.hits + subquery_stats.load(SubqueryCacheMetric::Hits);
+        global_stats.total_misses = result_stats.misses + plan_stats.misses + subquery_stats.load(SubqueryCacheMetric::Misses);
         global_stats.total_evictions = result_stats.evictions + plan_stats.evictions;
-        global_stats.total_entries = plan_stats.current_entries + subquery_stats.current_entries;
+        global_stats.total_entries = plan_stats.current_entries + subquery_stats.load(SubqueryCacheMetric::CurrentEntries) as usize;
         global_stats.total_memory_bytes =
-            plan_stats.current_memory_bytes + subquery_stats.memory_bytes;
+            plan_stats.current_memory_bytes + subquery_stats.load(SubqueryCacheMetric::MemoryBytes) as usize;
     }
 
     fn record_event(&self, event: CacheEvent) {

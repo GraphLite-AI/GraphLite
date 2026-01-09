@@ -6,10 +6,10 @@
 use super::{CacheEntryMetadata, CacheKey, CacheLevel, CacheValue};
 use crate::exec::{QueryResult, Row};
 use crate::storage::Value;
+use crossbeam_utils::CachePadded;
 use moka::sync::Cache;
-use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 /// Types of subquery results that can be cached
@@ -70,17 +70,17 @@ impl SubqueryResult {
 impl CacheValue for SubqueryResult {
     fn size_bytes(&self) -> usize {
         match self {
-            SubqueryResult::Boolean(_) => std::mem::size_of::<bool>(),
+            SubqueryResult::Boolean(_) => size_of::<bool>(),
             SubqueryResult::Scalar(Some(value)) => {
-                std::mem::size_of::<Value>()
+                size_of::<Value>()
                     + match value {
                         Value::String(s) => s.len(),
                         _ => 0,
                     }
             }
-            SubqueryResult::Scalar(None) => std::mem::size_of::<Option<Value>>(),
+            SubqueryResult::Scalar(None) => size_of::<Option<Value>>(),
             SubqueryResult::Set(values) => {
-                values.len() * std::mem::size_of::<Value>()
+                values.len() * size_of::<Value>()
                     + values
                         .iter()
                         .map(|v| match v {
@@ -90,8 +90,8 @@ impl CacheValue for SubqueryResult {
                         .sum::<usize>()
             }
             SubqueryResult::FullResult(result) => {
-                let base_size = std::mem::size_of::<QueryResult>();
-                let rows_size = result.rows.len() * std::mem::size_of::<Row>();
+                let base_size = size_of::<QueryResult>();
+                let rows_size = result.rows.len() * size_of::<Row>();
                 let variables_size = result.variables.iter().map(|var| var.len()).sum::<usize>();
                 base_size + rows_size + variables_size
             }
@@ -310,7 +310,7 @@ pub struct SubqueryCacheEntry {
     pub result: SubqueryResult,
     pub execution_time: Duration,
     #[allow(dead_code)]
-    // ROADMAP v0.5.0 - Tracks correlation complexity for cache eviction policies. Currently set (line 447) but not yet used in eviction scoring. Will be used for cost-based eviction when correlated subquery optimization is implemented.
+    // ROADMAP v0.5.0 - Tracks correlation complexity for cache eviction policies. Currently, set (line 447) but not yet used in eviction scoring. Will be used for cost-based eviction when correlated subquery optimization is implemented.
     pub outer_variable_count: usize,
     pub metadata: CacheEntryMetadata,
     pub hit_count: u64,
@@ -328,36 +328,78 @@ impl CacheValue for SubqueryCacheEntry {
     }
 }
 
-/// Statistics for subquery cache
-#[derive(Debug, Default, Clone)]
+#[repr(usize)]
+#[derive(Copy, Clone, Debug)]
+pub enum SubqueryCacheMetric {
+    Hits = 0,
+    Misses = 1,
+    TotalExecutionTimeSavedMs = 2,
+    BooleanCacheHits = 3,
+    ScalarCacheHits = 4,
+    SetCacheHits = 5,
+    FullResultCacheHits = 6,
+    CurrentEntries = 7,
+    MemoryBytes = 8,
+    Invalidations = 9,
+}
+
+const SUBQUERY_CACHE_METRIC_COUNT: usize = 16;
+
+#[derive(Debug)]
 pub struct SubqueryCacheStats {
-    pub hits: u64,
-    pub misses: u64,
-    pub total_execution_time_saved_ms: u64,
-    pub boolean_cache_hits: u64, // EXISTS/NOT EXISTS
-    pub scalar_cache_hits: u64,  // Scalar subqueries
-    pub set_cache_hits: u64,     // IN/NOT IN
-    pub full_result_cache_hits: u64,
-    pub current_entries: usize,
-    pub memory_bytes: usize,
-    pub invalidations: u64,
+    metrics: [CachePadded<AtomicU64>; SUBQUERY_CACHE_METRIC_COUNT],
 }
 
 impl SubqueryCacheStats {
+    #[inline]
+    pub fn inc(&self, metric: SubqueryCacheMetric) {
+        self.metrics[metric as usize].fetch_add(1, Ordering::Relaxed);
+    }
+
+    #[inline]
+    pub fn add(&self, metric: SubqueryCacheMetric, value: u64) {
+        self.metrics[metric as usize].fetch_add(value, Ordering::Relaxed);
+    }
+
+    #[inline]
+    pub fn set(&self, metric: SubqueryCacheMetric, value: u64) {
+        self.metrics[metric as usize].store(value, Ordering::Relaxed);
+    }
+
+    #[inline]
+    pub fn load(&self, metric: SubqueryCacheMetric) -> u64 {
+        self.metrics[metric as usize].load(Ordering::Relaxed)
+    }
+
+    #[inline]
     pub fn hit_rate(&self) -> f64 {
-        let total = self.hits + self.misses;
+        let hits = self.load(SubqueryCacheMetric::Hits);
+        let misses = self.load(SubqueryCacheMetric::Misses);
+        let total = hits + misses;
+
         if total == 0 {
             0.0
         } else {
-            self.hits as f64 / total as f64
+            hits as f64 / total as f64
         }
     }
+}
 
-    pub fn average_time_saved_ms(&self) -> f64 {
-        if self.hits == 0 {
-            0.0
-        } else {
-            self.total_execution_time_saved_ms as f64 / self.hits as f64
+impl Clone for SubqueryCacheStats {
+    fn clone(&self) -> Self {
+        let cloned = SubqueryCacheStats::default();
+        for (index, metric) in self.metrics.iter().enumerate() {
+            let value = metric.load(Ordering::Relaxed);
+            cloned.metrics[index].store(value, Ordering::Relaxed);
+        }
+        cloned
+    }
+}
+
+impl Default for SubqueryCacheStats {
+    fn default() -> Self {
+        Self {
+            metrics: std::array::from_fn(|_| CachePadded::new(AtomicU64::new(0))),
         }
     }
 }
@@ -365,27 +407,22 @@ impl SubqueryCacheStats {
 /// Subquery result cache implementation
 pub struct SubqueryCache {
     entries: Cache<SubqueryCacheKey, SubqueryCacheEntry>,
-    max_entries: usize,
     max_memory_bytes: usize,
-    current_memory: RwLock<usize>,
-    stats: RwLock<SubqueryCacheStats>,
+    stats: SubqueryCacheStats,
     ttl: Duration,
 }
 
 impl SubqueryCache {
     pub fn new(max_entries: usize, max_memory_bytes: usize, ttl: Duration) -> Self {
         let entries = Cache::builder()
-            .support_invalidation_closures()
             .time_to_live(ttl)
             .max_capacity(max_entries as u64)
             .build();
 
         Self {
             entries,
-            max_entries,
             max_memory_bytes,
-            current_memory: RwLock::new(0),
-            stats: RwLock::new(SubqueryCacheStats::default()),
+            stats: SubqueryCacheStats::default(),
             ttl,
         }
     }
@@ -394,21 +431,28 @@ impl SubqueryCache {
     pub fn get(&self, key: &SubqueryCacheKey) -> Option<SubqueryResult> {
         if let Some(entry) = self.entries.get(key) {
             {
-                let mut stats = self.stats.write().unwrap();
-                stats.hits += 1;
-                stats.total_execution_time_saved_ms += entry.execution_time.as_millis() as u64;
+                self.stats.add(SubqueryCacheMetric::Hits, 1);
+                self.stats.add(
+                    SubqueryCacheMetric::TotalExecutionTimeSavedMs,
+                    entry.execution_time.as_millis() as u64,
+                );
 
                 match &entry.result {
-                    SubqueryResult::Boolean(_) => stats.boolean_cache_hits += 1,
-                    SubqueryResult::Scalar(_) => stats.scalar_cache_hits += 1,
-                    SubqueryResult::Set(_) => stats.set_cache_hits += 1,
-                    SubqueryResult::FullResult(_) => stats.full_result_cache_hits += 1,
+                    SubqueryResult::Boolean(_) => {
+                        self.stats.inc(SubqueryCacheMetric::BooleanCacheHits)
+                    }
+                    SubqueryResult::Scalar(_) => {
+                        self.stats.inc(SubqueryCacheMetric::ScalarCacheHits)
+                    }
+                    SubqueryResult::Set(_) => self.stats.inc(SubqueryCacheMetric::ScalarCacheHits),
+                    SubqueryResult::FullResult(_) => {
+                        self.stats.inc(SubqueryCacheMetric::FullResultCacheHits)
+                    }
                 }
             }
             Some(entry.result)
         } else {
-            let mut stats = self.stats.write().unwrap();
-            stats.misses += 1;
+            self.stats.inc(SubqueryCacheMetric::Misses);
             None
         }
     }
@@ -432,17 +476,12 @@ impl SubqueryCache {
             complexity_score,
         };
 
-        let size = entry.size_bytes();
+        let entry_size = entry.size_bytes();
+
         self.entries.insert(key, entry);
-        {
-            let mut current_memory = self.current_memory.write().unwrap();
-            *current_memory += size;
-        }
-        {
-            let mut stats = self.stats.write().unwrap();
-            stats.current_entries = self.entries.iter().count();
-            stats.memory_bytes = *self.current_memory.read().unwrap();
-        }
+        self.stats.add(SubqueryCacheMetric::CurrentEntries, 1);
+        self.stats
+            .add(SubqueryCacheMetric::MemoryBytes, entry_size as u64);
     }
 
     /// Invalidate entries by graph version
@@ -452,10 +491,11 @@ impl SubqueryCache {
             .invalidate_entries_if(move |key, _| key.graph_version < version)
             .unwrap();
 
-        let mut stats = self.stats.write().unwrap();
-        stats.invalidations += 1;
-        stats.current_entries = self.entries.iter().count();
-        // NOTE: memory_bytes will also be corrected once removal_listener is added
+        self.stats.add(SubqueryCacheMetric::Invalidations, 1);
+        self.stats.set(
+            SubqueryCacheMetric::CurrentEntries,
+            self.entries.entry_count(),
+        );
     }
 
     /// Invalidate entries by schema version
@@ -465,28 +505,24 @@ impl SubqueryCache {
             .invalidate_entries_if(move |key, _| key.schema_version < version)
             .unwrap();
 
-        let mut stats = self.stats.write().unwrap();
-        stats.invalidations += 1;
-        stats.current_entries = self.entries.iter().count();
-        // NOTE: stats.memory_bytes will be corrected once removal_listener is added.
+        self.stats.add(SubqueryCacheMetric::Invalidations, 1);
+        self.stats.set(
+            SubqueryCacheMetric::CurrentEntries,
+            self.entries.entry_count(),
+        );
     }
 
     /// Get cache statistics
     pub fn stats(&self) -> SubqueryCacheStats {
-        let mut stats = self.stats.read().unwrap().clone();
-        stats.current_entries = self.entries.iter().count();
-        stats.memory_bytes = *self.current_memory.read().unwrap();
-        stats
+        self.stats.clone()
     }
 
     /// Clear all cached subquery results
     pub fn clear(&self) {
         self.entries.invalidate_all();
-        *self.current_memory.write().unwrap() = 0;
 
-        let mut stats = self.stats.write().unwrap();
-        stats.current_entries = 0;
-        stats.memory_bytes = 0;
+        self.stats.set(SubqueryCacheMetric::CurrentEntries, 0);
+        self.stats.set(SubqueryCacheMetric::MemoryBytes, 0);
     }
 }
 
@@ -587,12 +623,12 @@ mod tests {
         let result = SubqueryResult::Scalar(Some(Value::Boolean(true)));
         cache.insert(cache_key.clone(), result, Duration::from_secs(0), 0.50);
 
-        let memory_guard = cache.current_memory.read().unwrap();
-        assert!(*memory_guard > 0);
+        let stats = cache.stats();
+        assert!(stats.load(SubqueryCacheMetric::MemoryBytes) > 0);
     }
 
     #[test]
-    fn should_update_cache_stats_on_insert() {
+    fn should_update_cache_entry_stats_on_insert() {
         let max_memory_bytes = 1024;
         let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(100));
 
@@ -606,8 +642,8 @@ mod tests {
         let result = SubqueryResult::Scalar(Some(Value::Boolean(true)));
         cache.insert(cache_key.clone(), result, Duration::from_secs(0), 0.50);
 
-        let stats_guard = cache.stats.read().unwrap();
-        assert_eq!(1, stats_guard.current_entries);
+        let stats = cache.stats();
+        assert_eq!(1, stats.load(SubqueryCacheMetric::CurrentEntries));
     }
 
     #[test]
@@ -627,8 +663,8 @@ mod tests {
 
         let _ = cache.get(&cache_key);
 
-        let stats_guard = cache.stats.read().unwrap();
-        assert_eq!(1, stats_guard.hits);
+        let stats = cache.stats();
+        assert_eq!(1, stats.load(SubqueryCacheMetric::Hits));
     }
 
     #[test]
@@ -638,8 +674,8 @@ mod tests {
 
         let _ = cache.get(&any_subquery_cache_key());
 
-        let stats_guard = cache.stats.read().unwrap();
-        assert_eq!(1, stats_guard.misses);
+        let stats = cache.stats();
+        assert_eq!(1, stats.load(SubqueryCacheMetric::Misses));
     }
 
     fn any_subquery_cache_key() -> SubqueryCacheKey {

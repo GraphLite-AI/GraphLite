@@ -22,6 +22,7 @@ use crate::storage::Value;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
+use crate::cache::subquery_cache::SubqueryCacheMetric;
 
 /// System catalog procedures registry (vendor-specific system procedures)
 pub struct SystemProcedures {
@@ -763,7 +764,7 @@ impl SystemProcedures {
                 );
                 row_values.insert(
                     "entries".to_string(),
-                    Value::Number(subquery_stats.current_entries as f64),
+                    Value::Number(subquery_stats.load(SubqueryCacheMetric::CurrentEntries) as f64),
                 );
                 row_values.insert(
                     "hit_rate".to_string(),
@@ -771,7 +772,7 @@ impl SystemProcedures {
                 );
                 row_values.insert(
                     "memory_bytes".to_string(),
-                    Value::Number(subquery_stats.memory_bytes as f64),
+                    Value::Number(subquery_stats.load(SubqueryCacheMetric::MemoryBytes) as f64),
                 );
                 rows.push(Row::from_values(row_values));
             }

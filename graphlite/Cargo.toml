@@ -52,6 +52,7 @@ lazy_static = { workspace = true }
 crc32fast = { workspace = true }
 petgraph = { workspace = true }
 moka = { version = "0.12.11", features = ["sync"] }
+crossbeam-utils = "0.8.21"
 
 [dev-dependencies]
 tempfile = { workspace = true }

@@ -488,6 +488,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "crc32fast",
+ "crossbeam-utils",
  "env_logger",
  "fastrand",
  "lazy_static",
