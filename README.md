@@ -254,8 +254,21 @@ cargo test --release
 ```
 
 ### Comprehensive Testing
+
+**Recommended: Parallel Test Runner** (~10x faster)
 ```bash
-# Run all integration tests with organized output and summary
+# Fast parallel execution (8 jobs, ~75 seconds for 169 tests)
+./scripts/run_integration_tests_parallel.sh --release --jobs=8
+
+# With failure analysis
+./scripts/run_integration_tests_parallel.sh --release --jobs=8 --analyze
+```
+
+**Note**: Requires GNU Parallel (`brew install parallel` on macOS, `apt install parallel` on Ubuntu)
+
+**Alternative: Sequential Test Runner** (slower but no dependencies)
+```bash
+# Run all integration tests sequentially (~10-15 minutes)
 ./scripts/run_tests.sh --release
 
 # Include detailed failure analysis for debugging

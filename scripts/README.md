@@ -67,18 +67,69 @@ Uninstalls and cleans up all GraphLite project artifacts.
 
 ### Testing Scripts
 
-#### `run_tests.sh`
-Runs all GraphLite tests (unit, integration, parser).
+#### `run_unit_tests.sh`
+Runs only unit tests (fast, ~2-3 seconds).
 
 ```bash
-./scripts/run_tests.sh
+./scripts/run_unit_tests.sh
 ```
 
+#### `run_tests.sh`
+Runs integration tests sequentially (slower, ~10-15 minutes).
+
+```bash
+# Debug mode (default)
+./scripts/run_tests.sh
+
+# Release mode (faster execution)
+./scripts/run_tests.sh --release
+
+# With failure analysis
+./scripts/run_tests.sh --release --analyze
+```
+
+#### `run_integration_tests_parallel.sh`
+Runs integration tests in parallel using GNU Parallel (~1.5-4 minutes, **10x faster**).
+
+**Prerequisite:** Requires GNU Parallel to be installed:
+```bash
+# macOS
+brew install parallel
+
+# Ubuntu/Debian
+sudo apt install parallel
+```
+
+**Usage:**
+```bash
+# Default: 4 parallel jobs, debug mode
+./scripts/run_integration_tests_parallel.sh
+
+# Release mode with 8 parallel jobs (recommended)
+./scripts/run_integration_tests_parallel.sh --release --jobs=8
+
+# With failure analysis
+./scripts/run_integration_tests_parallel.sh --release --analyze
+```
+
+**Performance:** With 8 jobs, completes 169 integration tests in ~75 seconds vs 10-15 minutes sequential.
+
 #### `test_cli.sh`
-Tests the GraphLite CLI functionality.
+End-to-end tests for the GraphLite CLI binary functionality.
 
 ```bash
 ./scripts/test_cli.sh
+```
+
+#### `validate_ci.sh`
+Validates that code will pass GitHub Actions CI/CD pipeline before pushing.
+
+```bash
+# Quick check: formatting + linting only (~30 seconds)
+./scripts/validate_ci.sh --quick
+
+# Full check: includes build + tests (~5-10 minutes)
+./scripts/validate_ci.sh --full
 ```
 
 ### Development Scripts

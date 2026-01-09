@@ -8,10 +8,10 @@ Run the automated test script:
 
 ```bash
 # Quick check (formatting + linting only)
-./scripts/test_ci_locally.sh --quick
+./scripts/validate_ci.sh --quick
 
 # Full check (includes build + tests)
-./scripts/test_ci_locally.sh --full
+./scripts/validate_ci.sh --full
 ```
 
 This tests all the same checks that CI will run!
@@ -119,11 +119,11 @@ sudo systemctl start docker  # Linux
 1. **Make changes** to workflows or code
 2. **Quick test locally:**
    ```bash
-   ./scripts/test_ci_locally.sh --quick
+   ./scripts/validate_ci.sh --quick
    ```
 3. **If passing, full test:**
    ```bash
-   ./scripts/test_ci_locally.sh --full
+   ./scripts/validate_ci.sh --full
    ```
 4. **If all local tests pass, push to test branch:**
    ```bash
@@ -135,4 +135,4 @@ sudo systemctl start docker  # Linux
 
 - See detailed docs: [.github/workflows/TEST_WORKFLOWS.md](.github/workflows/TEST_WORKFLOWS.md)
 - Check workflow configs: [.github/workflows/](.github/workflows/)
-- Run with help: `./scripts/test_ci_locally.sh --help`
+- Run with help: `./scripts/validate_ci.sh --help`

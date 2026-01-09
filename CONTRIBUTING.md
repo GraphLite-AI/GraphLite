@@ -583,13 +583,18 @@ cargo clippy --all -- -D warnings
 # Run code pattern checks (REQUIRED - must pass)
 ./scripts/check_code_patterns.sh
 
-<<<<<<< Updated upstream
-# Test examples still work
-cd examples/rust/sdk/drug_discovery
-=======
+# Run integration tests - parallel (RECOMMENDED - fast, ~75 seconds)
+./scripts/run_integration_tests_parallel.sh --release --jobs=8
+
+# OR run integration tests - sequential (slower, ~10-15 minutes)
+./scripts/run_tests.sh --release
+
+# Validate CI will pass before pushing (RECOMMENDED)
+./scripts/validate_ci.sh --quick  # Fast check: formatting + linting
+./scripts/validate_ci.sh --full   # Complete check: includes build + tests
+
 # Test examples still work (REQUIRED - verify manually)
-cd examples-core/fraud_detection
->>>>>>> Stashed changes
+cd examples/rust/sdk/drug_discovery
 cargo run
 ```
 

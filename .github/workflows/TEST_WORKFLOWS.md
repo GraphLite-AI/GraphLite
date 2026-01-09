@@ -299,7 +299,7 @@ Create a quick test script for common validations:
 
 ```bash
 #!/bin/bash
-# scripts/test_ci_locally.sh
+# scripts/validate_ci.sh
 
 set -e
 
@@ -341,8 +341,8 @@ echo "Ready to push to GitHub."
 
 Make it executable and run:
 ```bash
-chmod +x scripts/test_ci_locally.sh
-./scripts/test_ci_locally.sh
+chmod +x scripts/validate_ci.sh
+./scripts/validate_ci.sh
 ```
 
 ## Troubleshooting
