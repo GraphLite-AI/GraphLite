@@ -403,18 +403,6 @@ impl CacheManager {
         self.update_global_stats();
     }
 
-    /// Find cached boolean results for EXISTS/NOT EXISTS optimization
-    pub fn find_boolean_subquery_matches(
-        &self,
-        subquery_hash: u64,
-    ) -> Vec<(SubqueryCacheKey, bool)> {
-        if !self.config.enabled {
-            return vec![];
-        }
-
-        self.subquery_cache.find_boolean_matches(subquery_hash)
-    }
-
     /// Invalidate caches when graph data changes
     pub fn invalidate_on_data_change(&self, table: Option<String>, affected_rows: u64) {
         let mut graph_version = self.graph_version.write().unwrap();

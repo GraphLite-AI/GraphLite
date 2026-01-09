@@ -3,14 +3,14 @@
 //
 //! Subquery result caching for nested query optimization
 
-use std::collections::HashMap;
-use std::hash::{DefaultHasher, Hash, Hasher};
-use std::sync::RwLock;
-use std::time::{Duration, Instant};
-
 use super::{CacheEntryMetadata, CacheKey, CacheLevel, CacheValue};
 use crate::exec::{QueryResult, Row};
 use crate::storage::Value;
+use moka::sync::Cache;
+use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
 
 /// Types of subquery results that can be cached
 #[derive(Debug, Clone)]
@@ -320,7 +320,7 @@ pub struct SubqueryCacheEntry {
 
 impl CacheValue for SubqueryCacheEntry {
     fn size_bytes(&self) -> usize {
-        std::mem::size_of::<Self>() + self.result.size_bytes()
+        size_of::<Self>() + self.result.size_bytes()
     }
 
     fn is_valid(&self) -> bool {
@@ -364,87 +364,55 @@ impl SubqueryCacheStats {
 
 /// Subquery result cache implementation
 pub struct SubqueryCache {
-    entries: RwLock<HashMap<SubqueryCacheKey, SubqueryCacheEntry>>,
+    entries: Cache<SubqueryCacheKey, SubqueryCacheEntry>,
     max_entries: usize,
     max_memory_bytes: usize,
     current_memory: RwLock<usize>,
     stats: RwLock<SubqueryCacheStats>,
     ttl: Duration,
-
-    // Specialized indices for fast lookups
-    boolean_index: RwLock<HashMap<u64, Vec<SubqueryCacheKey>>>, // subquery_hash -> keys
-    scalar_index: RwLock<HashMap<u64, Vec<SubqueryCacheKey>>>,  // subquery_hash -> keys
 }
 
 impl SubqueryCache {
     pub fn new(max_entries: usize, max_memory_bytes: usize, ttl: Duration) -> Self {
+        let entries = Cache::builder()
+            .support_invalidation_closures()
+            .time_to_live(ttl)
+            .max_capacity(max_entries as u64)
+            .build();
+
         Self {
-            entries: RwLock::new(HashMap::new()),
+            entries,
             max_entries,
             max_memory_bytes,
             current_memory: RwLock::new(0),
             stats: RwLock::new(SubqueryCacheStats::default()),
             ttl,
-            boolean_index: RwLock::new(HashMap::new()),
-            scalar_index: RwLock::new(HashMap::new()),
         }
     }
 
     /// Get cached subquery result
     pub fn get(&self, key: &SubqueryCacheKey) -> Option<SubqueryResult> {
-        let mut entries = self.entries.write().unwrap();
+        if let Some(entry) = self.entries.get(key) {
+            {
+                let mut stats = self.stats.write().unwrap();
+                stats.hits += 1;
+                stats.total_execution_time_saved_ms += entry.execution_time.as_millis() as u64;
 
-        if let Some(entry) = entries.get_mut(key) {
-            if entry.is_valid() {
-                // Update access info
-                entry.metadata.update_access();
-                entry.hit_count += 1;
-                entry.last_hit = Instant::now();
-
-                // Update stats
-                {
-                    let mut stats = self.stats.write().unwrap();
-                    stats.hits += 1;
-                    stats.total_execution_time_saved_ms += entry.execution_time.as_millis() as u64;
-
-                    // Track by subquery type
-                    match &entry.result {
-                        SubqueryResult::Boolean(_) => stats.boolean_cache_hits += 1,
-                        SubqueryResult::Scalar(_) => stats.scalar_cache_hits += 1,
-                        SubqueryResult::Set(_) => stats.set_cache_hits += 1,
-                        SubqueryResult::FullResult(_) => stats.full_result_cache_hits += 1,
-                    }
+                match &entry.result {
+                    SubqueryResult::Boolean(_) => stats.boolean_cache_hits += 1,
+                    SubqueryResult::Scalar(_) => stats.scalar_cache_hits += 1,
+                    SubqueryResult::Set(_) => stats.set_cache_hits += 1,
+                    SubqueryResult::FullResult(_) => stats.full_result_cache_hits += 1,
                 }
-
-                Some(entry.result.clone())
-            } else {
-                // Remove expired entry
-                let removed_entry = entries.remove(key).unwrap();
-                let size = removed_entry.size_bytes();
-
-                {
-                    let mut current_memory = self.current_memory.write().unwrap();
-                    *current_memory = current_memory.saturating_sub(size);
-                }
-
-                {
-                    let mut stats = self.stats.write().unwrap();
-                    stats.misses += 1;
-                    stats.current_entries = entries.len();
-                    stats.memory_bytes = *self.current_memory.read().unwrap();
-                }
-
-                None
             }
+            Some(entry.result)
         } else {
-            // Cache miss
             let mut stats = self.stats.write().unwrap();
             stats.misses += 1;
             None
         }
     }
 
-    /// Insert subquery result into cache
     pub fn insert(
         &self,
         key: SubqueryCacheKey,
@@ -453,7 +421,7 @@ impl SubqueryCache {
         complexity_score: f64,
     ) {
         let entry = SubqueryCacheEntry {
-            result: result.clone(),
+            result,
             execution_time,
             outer_variable_count: key.outer_variables.len(),
             metadata: CacheEntryMetadata::new(0, CacheLevel::L1)
@@ -465,225 +433,55 @@ impl SubqueryCache {
         };
 
         let size = entry.size_bytes();
-
-        // Evict if necessary
-        self.evict_if_needed(size);
-
-        // Update indices
-        self.update_indices(&key, true);
-
-        // Insert entry
-        {
-            let mut entries = self.entries.write().unwrap();
-            entries.insert(key, entry);
-        }
-
+        self.entries.insert(key, entry);
         {
             let mut current_memory = self.current_memory.write().unwrap();
             *current_memory += size;
         }
-
-        // Update stats
         {
             let mut stats = self.stats.write().unwrap();
-            stats.current_entries = self.entries.read().unwrap().len();
+            stats.current_entries = self.entries.iter().count();
             stats.memory_bytes = *self.current_memory.read().unwrap();
         }
-    }
-
-    /// Find potential cache hits for EXISTS subqueries
-    pub fn find_boolean_matches(&self, subquery_hash: u64) -> Vec<(SubqueryCacheKey, bool)> {
-        let mut matches = Vec::new();
-
-        if let Some(keys) = self.boolean_index.read().unwrap().get(&subquery_hash) {
-            let entries = self.entries.read().unwrap();
-
-            for key in keys {
-                if let Some(entry) = entries.get(key) {
-                    if entry.is_valid() {
-                        if let Some(boolean_result) = entry.result.as_boolean() {
-                            matches.push((key.clone(), boolean_result));
-                        }
-                    }
-                }
-            }
-        }
-
-        matches
     }
 
     /// Invalidate entries by graph version
     pub fn invalidate_by_graph_version(&self, version: u64) {
-        let mut entries = self.entries.write().unwrap();
-        let mut removed_keys = Vec::new();
-        let mut removed_size = 0;
+        let _predicate_id = self
+            .entries
+            .invalidate_entries_if(move |key, _| key.graph_version < version)
+            .unwrap();
 
-        entries.retain(|key, entry| {
-            if key.graph_version < version {
-                removed_keys.push(key.clone());
-                removed_size += entry.size_bytes();
-                false
-            } else {
-                true
-            }
-        });
-
-        // Update indices
-        for key in removed_keys {
-            self.update_indices(&key, false);
-        }
-
-        {
-            let mut current_memory = self.current_memory.write().unwrap();
-            *current_memory = current_memory.saturating_sub(removed_size);
-        }
-
-        {
-            let mut stats = self.stats.write().unwrap();
-            stats.invalidations += 1;
-            stats.current_entries = entries.len();
-            stats.memory_bytes = *self.current_memory.read().unwrap();
-        }
+        let mut stats = self.stats.write().unwrap();
+        stats.invalidations += 1;
+        stats.current_entries = self.entries.iter().count();
+        // NOTE: memory_bytes will also be corrected once removal_listener is added
     }
 
     /// Invalidate entries by schema version
     pub fn invalidate_by_schema_version(&self, version: u64) {
-        let mut entries = self.entries.write().unwrap();
-        let mut removed_keys = Vec::new();
-        let mut removed_size = 0;
+        let _predicate_id = self
+            .entries
+            .invalidate_entries_if(move |key, _| key.schema_version < version)
+            .unwrap();
 
-        entries.retain(|key, entry| {
-            if key.schema_version < version {
-                removed_keys.push(key.clone());
-                removed_size += entry.size_bytes();
-                false
-            } else {
-                true
-            }
-        });
-
-        // Update indices
-        for key in removed_keys {
-            self.update_indices(&key, false);
-        }
-
-        {
-            let mut current_memory = self.current_memory.write().unwrap();
-            *current_memory = current_memory.saturating_sub(removed_size);
-        }
-
-        {
-            let mut stats = self.stats.write().unwrap();
-            stats.invalidations += 1;
-            stats.current_entries = entries.len();
-            stats.memory_bytes = *self.current_memory.read().unwrap();
-        }
-    }
-
-    fn evict_if_needed(&self, incoming_size: usize) {
-        let current_memory = *self.current_memory.read().unwrap();
-        let current_entries = self.entries.read().unwrap().len();
-
-        if current_memory + incoming_size > self.max_memory_bytes
-            || current_entries >= self.max_entries
-        {
-            // Collect eviction candidates (prioritize by hit rate vs complexity)
-            let mut candidates: Vec<(SubqueryCacheKey, f64)> = {
-                let entries = self.entries.read().unwrap();
-                entries
-                    .iter()
-                    .map(|(key, entry)| {
-                        // Score based on hit rate, recency, and complexity
-                        let hit_rate = if entry.metadata.access_count == 0 {
-                            0.0
-                        } else {
-                            entry.hit_count as f64 / entry.metadata.access_count as f64
-                        };
-                        let recency_score = 1.0 / (1.0 + entry.last_hit.elapsed().as_secs() as f64);
-                        let complexity_bonus = entry.complexity_score / 10.0; // Higher complexity = keep longer
-
-                        let keep_score = hit_rate + recency_score + complexity_bonus;
-                        (key.clone(), keep_score)
-                    })
-                    .collect()
-            };
-
-            // Sort by keep score (ascending = evict first)
-            candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-
-            // Evict lowest scoring entries
-            let mut entries = self.entries.write().unwrap();
-            for (key, _) in candidates {
-                if let Some(evicted_entry) = entries.remove(&key) {
-                    let evicted_size = evicted_entry.size_bytes();
-                    self.update_indices(&key, false);
-
-                    {
-                        let mut current_memory = self.current_memory.write().unwrap();
-                        *current_memory = current_memory.saturating_sub(evicted_size);
-                    }
-
-                    // Check if we have enough space now
-                    let new_current_memory = *self.current_memory.read().unwrap();
-                    let new_current_entries = entries.len();
-
-                    if new_current_memory + incoming_size <= self.max_memory_bytes
-                        && new_current_entries < self.max_entries
-                    {
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    fn update_indices(&self, key: &SubqueryCacheKey, add: bool) {
-        match key.subquery_type {
-            SubqueryType::Exists | SubqueryType::NotExists => {
-                let mut boolean_index = self.boolean_index.write().unwrap();
-                if add {
-                    boolean_index
-                        .entry(key.subquery_hash)
-                        .or_default()
-                        .push(key.clone());
-                } else if let Some(keys) = boolean_index.get_mut(&key.subquery_hash) {
-                    keys.retain(|k| k != key);
-                    if keys.is_empty() {
-                        boolean_index.remove(&key.subquery_hash);
-                    }
-                }
-            }
-            SubqueryType::Scalar => {
-                let mut scalar_index = self.scalar_index.write().unwrap();
-                if add {
-                    scalar_index
-                        .entry(key.subquery_hash)
-                        .or_default()
-                        .push(key.clone());
-                } else if let Some(keys) = scalar_index.get_mut(&key.subquery_hash) {
-                    keys.retain(|k| k != key);
-                    if keys.is_empty() {
-                        scalar_index.remove(&key.subquery_hash);
-                    }
-                }
-            }
-            _ => {} // Other types don't need special indices
-        }
+        let mut stats = self.stats.write().unwrap();
+        stats.invalidations += 1;
+        stats.current_entries = self.entries.iter().count();
+        // NOTE: stats.memory_bytes will be corrected once removal_listener is added.
     }
 
     /// Get cache statistics
     pub fn stats(&self) -> SubqueryCacheStats {
         let mut stats = self.stats.read().unwrap().clone();
-        stats.current_entries = self.entries.read().unwrap().len();
+        stats.current_entries = self.entries.iter().count();
         stats.memory_bytes = *self.current_memory.read().unwrap();
         stats
     }
 
     /// Clear all cached subquery results
     pub fn clear(&self) {
-        self.entries.write().unwrap().clear();
-        self.boolean_index.write().unwrap().clear();
-        self.scalar_index.write().unwrap().clear();
+        self.entries.invalidate_all();
         *self.current_memory.write().unwrap() = 0;
 
         let mut stats = self.stats.write().unwrap();
@@ -831,50 +629,6 @@ mod tests {
 
         let stats_guard = cache.stats.read().unwrap();
         assert_eq!(1, stats_guard.hits);
-    }
-
-    #[test]
-    fn should_update_boolean_index() {
-        let max_memory_bytes = 1024;
-        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(100));
-
-        let cache_key = SubqueryCacheKey {
-            subquery_hash: 100,
-            outer_variables: vec![],
-            graph_version: 1,
-            schema_version: 1,
-            subquery_type: SubqueryType::Exists,
-        };
-        let result = SubqueryResult::Boolean(true);
-        cache.insert(cache_key.clone(), result, Duration::from_secs(0), 0.50);
-
-        let boolean_index_guard = cache.boolean_index.write().unwrap();
-        let subquery_cache_keys = boolean_index_guard.get(&cache_key.subquery_hash).unwrap();
-
-        assert_eq!(1, subquery_cache_keys.len());
-        assert_eq!(subquery_cache_keys.first().unwrap().subquery_hash, cache_key.subquery_hash);
-    }
-
-    #[test]
-    fn should_update_scalar_index() {
-        let max_memory_bytes = 1024;
-        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(100));
-
-        let cache_key = SubqueryCacheKey {
-            subquery_hash: 100,
-            outer_variables: vec![],
-            graph_version: 1,
-            schema_version: 1,
-            subquery_type: SubqueryType::Scalar,
-        };
-        let result = SubqueryResult::Scalar(Some(Value::Boolean(true)));
-        cache.insert(cache_key.clone(), result, Duration::from_secs(0), 0.50);
-
-        let scalar_index_guard = cache.scalar_index.write().unwrap();
-        let subquery_cache_keys = scalar_index_guard.get(&cache_key.subquery_hash).unwrap();
-
-        assert_eq!(1, subquery_cache_keys.len());
-        assert_eq!(subquery_cache_keys.first().unwrap().subquery_hash, cache_key.subquery_hash);
     }
 
     #[test]
