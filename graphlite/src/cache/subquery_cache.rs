@@ -479,7 +479,7 @@ impl SubqueryCache {
         let entry_size = entry.size_bytes();
 
         self.entries.insert(key, entry);
-        self.stats.add(SubqueryCacheMetric::CurrentEntries, 1);
+        self.stats.inc(SubqueryCacheMetric::CurrentEntries);
         self.stats
             .add(SubqueryCacheMetric::MemoryBytes, entry_size as u64);
     }
@@ -491,7 +491,7 @@ impl SubqueryCache {
             .invalidate_entries_if(move |key, _| key.graph_version < version)
             .unwrap();
 
-        self.stats.add(SubqueryCacheMetric::Invalidations, 1);
+        self.stats.inc(SubqueryCacheMetric::Invalidations);
         self.stats.set(
             SubqueryCacheMetric::CurrentEntries,
             self.entries.entry_count(),
@@ -505,7 +505,7 @@ impl SubqueryCache {
             .invalidate_entries_if(move |key, _| key.schema_version < version)
             .unwrap();
 
-        self.stats.add(SubqueryCacheMetric::Invalidations, 1);
+        self.stats.inc(SubqueryCacheMetric::Invalidations);
         self.stats.set(
             SubqueryCacheMetric::CurrentEntries,
             self.entries.entry_count(),
