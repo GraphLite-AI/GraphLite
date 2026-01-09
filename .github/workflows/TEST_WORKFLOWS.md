@@ -131,7 +131,7 @@ cargo fmt --all -- --check
 cargo fmt --all
 
 # Run clippy (what CI does)
-cargo clippy --all-targets --all-features -- -D warnings
+./scripts/clippy_all.sh --all
 ```
 
 ### Test Security Audit
@@ -250,7 +250,7 @@ actionlint .github/workflows/ci.yml
    cargo fmt --all -- --check
 
    # Linting
-   cargo clippy --all-targets --all-features -- -D warnings
+   ./scripts/clippy_all.sh --all
 
    # Build
    ./scripts/build_all.sh --release
@@ -321,7 +321,7 @@ echo "Code formatting passed"
 echo ""
 
 echo "3. Running clippy..."
-cargo clippy --all-targets --all-features -- -D warnings
+./scripts/clippy_all.sh --all
 echo "Clippy passed"
 echo ""
 

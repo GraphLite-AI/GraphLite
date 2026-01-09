@@ -174,7 +174,7 @@ cargo fmt --all
 
 ### Linting
 ```bash
-cargo clippy --all-targets --all-features -- -D warnings
+./scripts/clippy_all.sh --all
 ```
 
 ## Workflow Badges

@@ -269,11 +269,14 @@ cargo fmt --all -- --check
 
 #### Linting
 ```bash
-# Run Clippy linter
-cargo clippy --all -- -D warnings
+# Run Clippy linter on all targets (REQUIRED before each commit)
+./scripts/clippy_all.sh --all
 
-# Fix auto-fixable issues
-cargo clippy --all --fix
+# Auto-fix suggestions where possible
+./scripts/clippy_all.sh --fix
+
+# Strict mode (treat warnings as errors)
+./scripts/clippy_all.sh --all --strict
 ```
 
 #### Code Organization
@@ -577,8 +580,8 @@ cargo test --all
 # Check formatting (REQUIRED - must pass)
 cargo fmt --all -- --check
 
-# Run linter (REQUIRED - must pass)
-cargo clippy --all -- -D warnings
+# Run linter on all targets (REQUIRED - must pass)
+./scripts/clippy_all.sh --all
 
 # Run code pattern checks (REQUIRED - must pass)
 ./scripts/check_code_patterns.sh
@@ -647,6 +650,7 @@ Provide clear, step-by-step instructions for reviewers to test your changes:
 
 - [ ] Code follows project style guidelines
 - [ ] Tests pass locally (`cargo test --all`)
+- [ ] Clippy linting passes (`./scripts/clippy_all.sh --all`)
 - [ ] Code pattern checks pass (`./scripts/check_code_patterns.sh`)
 - [ ] Documentation updated (if applicable)
 - [ ] Documentation is concise and curated (no AI-generated fluff)

@@ -84,7 +84,7 @@ git push origin --delete test/verify-ci
 ## What Gets Tested
 
 **Formatting** - `cargo fmt --all -- --check`
-**Linting** - `cargo clippy --all-targets --all-features`
+**Linting** - `./scripts/clippy_all.sh --all`
 **Build** - `./scripts/build_all.sh --release`
 **Tests** - `./scripts/run_integration_tests.sh --release`
 **Docs** - `cargo doc --no-deps --all-features`
@@ -100,7 +100,10 @@ cargo fmt --all
 ```
 
 **Fix clippy warnings:**
-Review the warnings and fix them, or allow specific ones if needed.
+```bash
+./scripts/clippy_all.sh --all
+```
+Review the warnings and fix them, or use `--fix` to auto-apply suggestions.
 
 ### Want to test on specific OS?
 

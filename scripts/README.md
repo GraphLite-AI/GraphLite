@@ -222,12 +222,21 @@ Validates code against established patterns and anti-patterns.
 ```
 
 ### Pre-Commit Workflow
+
+**REQUIRED before every commit:**
+
 ```bash
-# Format, lint, and validate before committing
+# 1. Format code (auto-fix)
 cargo fmt --all
+
+# 2. Run clippy linter on all targets (REQUIRED - must pass)
 ./scripts/clippy_all.sh --all
+
+# 3. Quick validation that CI will pass (RECOMMENDED)
 ./scripts/validate_ci.sh --quick
 ```
+
+**Note:** All contributors must run `./scripts/clippy_all.sh --all` before committing. This ensures consistent code quality and prevents CI failures.
 
 ### Complete Uninstall
 ```bash
