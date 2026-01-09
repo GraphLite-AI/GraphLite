@@ -23,7 +23,7 @@ pub use invalidation::{InvalidationEvent, InvalidationManager};
 pub use plan_cache::{PlanCache, PlanCacheEntry, PlanCacheKey};
 pub use result_cache::ResultCache;
 pub use subquery_cache::{
-    SubqueryCache, SubqueryCacheHit, SubqueryCacheKey, SubqueryResult, SubqueryType,
+    SubqueryCache, SubqueryCacheHit, SubqueryResult, SubqueryType,
 };
 
 use std::time::{Duration, Instant};
