@@ -269,10 +269,10 @@ cargo test --release
 **Alternative: Sequential Test Runner** (slower but no dependencies)
 ```bash
 # Run all integration tests sequentially (~10-15 minutes)
-./scripts/run_tests.sh --release
+./scripts/run_integration_tests.sh --release
 
 # Include detailed failure analysis for debugging
-./scripts/run_tests.sh --release --analyze
+./scripts/run_integration_tests.sh --release --analyze
 ```
 
 ### Specific Tests

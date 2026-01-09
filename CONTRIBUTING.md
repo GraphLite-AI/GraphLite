@@ -587,7 +587,7 @@ cargo clippy --all -- -D warnings
 ./scripts/run_integration_tests_parallel.sh --release --jobs=8
 
 # OR run integration tests - sequential (slower, ~10-15 minutes)
-./scripts/run_tests.sh --release
+./scripts/run_integration_tests.sh --release
 
 # Validate CI will pass before pushing (RECOMMENDED)
 ./scripts/validate_ci.sh --quick  # Fast check: formatting + linting

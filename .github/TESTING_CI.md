@@ -86,7 +86,7 @@ git push origin --delete test/verify-ci
 **Formatting** - `cargo fmt --all -- --check`
 **Linting** - `cargo clippy --all-targets --all-features`
 **Build** - `./scripts/build_all.sh --release`
-**Tests** - `./scripts/run_tests.sh --release`
+**Tests** - `./scripts/run_integration_tests.sh --release`
 **Docs** - `cargo doc --no-deps --all-features`
 **Security** - `cargo audit` (if installed)
 

@@ -148,13 +148,13 @@ cargo audit
 
 ```bash
 # Run all integration tests (debug)
-./scripts/run_tests.sh --debug
+./scripts/run_integration_tests.sh --debug
 
 # Run all integration tests (release)
-./scripts/run_tests.sh --release
+./scripts/run_integration_tests.sh --release
 
 # Run with analysis
-./scripts/run_tests.sh --release --analyze
+./scripts/run_integration_tests.sh --release --analyze
 
 # Run specific test (parallel execution enabled)
 cargo test --release --test aggregation_tests
@@ -256,7 +256,7 @@ actionlint .github/workflows/ci.yml
    ./scripts/build_all.sh --release
 
    # Tests
-   ./scripts/run_tests.sh --release
+   ./scripts/run_integration_tests.sh --release
    ```
 
 3. **Test with `act` (if installed):**
@@ -331,7 +331,7 @@ echo "Build successful"
 echo ""
 
 echo "5. Running tests..."
-./scripts/run_tests.sh --release
+./scripts/run_integration_tests.sh --release
 echo "Tests passed"
 echo ""
 

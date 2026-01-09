@@ -121,7 +121,7 @@ After building, you can run tests to verify everything works correctly:
 ./scripts/run_integration_tests_parallel.sh --release --jobs=8
 
 # Full integration tests - sequential (slower, ~10-15 minutes)
-./scripts/run_tests.sh --release
+./scripts/run_integration_tests.sh --release
 ```
 
 **Note**: Parallel tests require GNU Parallel (`brew install parallel` on macOS, `apt install parallel` on Ubuntu)

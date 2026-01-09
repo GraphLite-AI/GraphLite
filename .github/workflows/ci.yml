@@ -128,11 +128,11 @@ jobs:
 
       - name: Run integration tests (Debug)
         if: matrix.build-mode == 'debug'
-        run: ./scripts/run_tests.sh --debug
+        run: ./scripts/run_integration_tests.sh --debug
 
       - name: Run integration tests (Release)
         if: matrix.build-mode == 'release'
-        run: ./scripts/run_tests.sh --release
+        run: ./scripts/run_integration_tests.sh --release
 
   security-audit:
     name: Security Audit
