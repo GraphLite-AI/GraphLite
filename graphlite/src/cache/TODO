@@ -1,9 +1,0 @@
-1. Add unit tests for
-    - SubqueryCache - done
-    - ResultCache - done
-    - PlanCache - done
-    - CacheManager -
-2. Choose an appropriate cache library(/crate)
-3. Redesign *CacheStats to avoid locks - use Atomics avoiding false-sharing
-   (https://github.com/SarthakMakhija/cached/blob/main/src/cache/stats/mod.rs)
-4. Identify the impact of point 3 on CacheManager
