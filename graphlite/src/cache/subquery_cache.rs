@@ -313,7 +313,6 @@ pub struct SubqueryCacheEntry {
     // ROADMAP v0.5.0 - Tracks correlation complexity for cache eviction policies. Currently, set (line 447) but not yet used in eviction scoring. Will be used for cost-based eviction when correlated subquery optimization is implemented.
     pub outer_variable_count: usize,
     pub metadata: CacheEntryMetadata,
-    pub hit_count: u64,
     pub last_hit: Instant,
     pub complexity_score: f64, // Higher score = more expensive to compute
 }
@@ -471,7 +470,6 @@ impl SubqueryCache {
             metadata: CacheEntryMetadata::new(0, CacheLevel::L1)
                 .with_ttl(self.ttl)
                 .with_tags(key.tags()),
-            hit_count: 0,
             last_hit: Instant::now(),
             complexity_score,
         };
