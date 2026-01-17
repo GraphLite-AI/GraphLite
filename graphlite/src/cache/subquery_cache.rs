@@ -313,7 +313,6 @@ pub struct SubqueryCacheEntry {
     // ROADMAP v0.5.0 - Tracks correlation complexity for cache eviction policies. Currently, set (line 447) but not yet used in eviction scoring. Will be used for cost-based eviction when correlated subquery optimization is implemented.
     pub outer_variable_count: usize,
     pub metadata: CacheEntryMetadata,
-    pub last_hit: Instant,
     pub complexity_score: f64, // Higher score = more expensive to compute
 }
 
@@ -443,7 +442,7 @@ impl SubqueryCache {
                     SubqueryResult::Scalar(_) => {
                         self.stats.inc(SubqueryCacheMetric::ScalarCacheHits)
                     }
-                    SubqueryResult::Set(_) => self.stats.inc(SubqueryCacheMetric::ScalarCacheHits),
+                    SubqueryResult::Set(_) => self.stats.inc(SubqueryCacheMetric::SetCacheHits),
                     SubqueryResult::FullResult(_) => {
                         self.stats.inc(SubqueryCacheMetric::FullResultCacheHits)
                     }
@@ -470,7 +469,6 @@ impl SubqueryCache {
             metadata: CacheEntryMetadata::new(0, CacheLevel::L1)
                 .with_ttl(self.ttl)
                 .with_tags(key.tags()),
-            last_hit: Instant::now(),
             complexity_score,
         };
 
@@ -604,6 +602,94 @@ mod tests {
 
         let value = result.unwrap().as_boolean();
         assert_eq!(Some(true), value);
+    }
+
+    #[test]
+    fn should_update_boolean_cache_hits() {
+        let max_memory_bytes = 1024;
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(100));
+
+        let cache_key = SubqueryCacheKey {
+            subquery_hash: 10,
+            outer_variables: vec![],
+            graph_version: 1,
+            schema_version: 1,
+            subquery_type: SubqueryType::Exists,
+        };
+        let result = SubqueryResult::Boolean(true);
+        cache.insert(cache_key.clone(), result, Duration::from_secs(0), 0.50);
+
+        let result = cache.get(&cache_key);
+        assert_eq!(result.is_some(), true);
+
+        let stats = cache.stats();
+        assert!(stats.load(SubqueryCacheMetric::BooleanCacheHits) > 0);
+    }
+
+    #[test]
+    fn should_update_scalar_cache_hits() {
+        let max_memory_bytes = 1024;
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(100));
+
+        let cache_key = SubqueryCacheKey {
+            subquery_hash: 10,
+            outer_variables: vec![],
+            graph_version: 1,
+            schema_version: 1,
+            subquery_type: SubqueryType::Exists,
+        };
+        let result = SubqueryResult::Scalar(Some(Value::Boolean(true)));
+        cache.insert(cache_key.clone(), result, Duration::from_secs(0), 0.50);
+
+        let result = cache.get(&cache_key);
+        assert_eq!(result.is_some(), true);
+
+        let stats = cache.stats();
+        assert!(stats.load(SubqueryCacheMetric::ScalarCacheHits) > 0);
+    }
+
+    #[test]
+    fn should_update_set_cache_hits() {
+        let max_memory_bytes = 1024;
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(100));
+
+        let cache_key = SubqueryCacheKey {
+            subquery_hash: 10,
+            outer_variables: vec![],
+            graph_version: 1,
+            schema_version: 1,
+            subquery_type: SubqueryType::Exists,
+        };
+        let result = SubqueryResult::Set(vec![Value::Boolean(true), Value::Boolean(true)]);
+        cache.insert(cache_key.clone(), result, Duration::from_secs(0), 0.50);
+
+        let result = cache.get(&cache_key);
+        assert_eq!(result.is_some(), true);
+
+        let stats = cache.stats();
+        assert!(stats.load(SubqueryCacheMetric::SetCacheHits) > 0);
+    }
+
+    #[test]
+    fn should_update_full_result_cache_hits() {
+        let max_memory_bytes = 1024;
+        let cache = SubqueryCache::new(1, max_memory_bytes, Duration::from_millis(100));
+
+        let cache_key = SubqueryCacheKey {
+            subquery_hash: 10,
+            outer_variables: vec![],
+            graph_version: 1,
+            schema_version: 1,
+            subquery_type: SubqueryType::Exists,
+        };
+        let result = SubqueryResult::FullResult(QueryResult::default());
+        cache.insert(cache_key.clone(), result, Duration::from_secs(0), 0.50);
+
+        let result = cache.get(&cache_key);
+        assert_eq!(result.is_some(), true);
+
+        let stats = cache.stats();
+        assert!(stats.load(SubqueryCacheMetric::FullResultCacheHits) > 0);
     }
 
     #[test]
