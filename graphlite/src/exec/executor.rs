@@ -6661,6 +6661,40 @@ impl QueryExecutor {
         Ok(current_paths)
     }
 
+    /// Evaluates an ORDER BY expression against a row.
+    ///
+    /// This helper injects row values into the context with both:
+    /// - Aliased column names (e.g., `age` from `p.age AS age`)
+    /// - Original property paths (e.g., `p.age`)
+    ///
+    /// This dual binding is necessary because ORDER BY expressions may reference
+    /// the original property path (e.g., `ORDER BY p.age`) while row values are
+    /// stored under aliased names. Without this, the expression would resolve
+    /// to stale values from the base context instead of the current row.
+    fn eval_order_by_expression(
+        &self,
+        expr: &Expression,
+        row_values: &std::collections::HashMap<String, Value>,
+        base_context: &ExecutionContext,
+        prop_access: Option<&PropertyAccess>,
+    ) -> Result<Value, ExecutionError> {
+        let mut ctx = base_context.clone();
+
+        for (k, v) in row_values {
+            ctx.set_variable(k.clone(), v.clone());
+
+            // Also set the prefixed version (e.g., "p.age") when the property matches
+            if let Some(prop) = prop_access {
+                if prop.property == *k {
+                    let prefixed = format!("{}.{}", prop.object, prop.property);
+                    ctx.set_variable(prefixed, v.clone());
+                }
+            }
+        }
+
+        self.evaluate_expression(expr, &ctx)
+    }
+
     /// Execute in-memory sort operation
     fn execute_in_memory_sort(
         &self,
@@ -6671,18 +6705,24 @@ impl QueryExecutor {
         // Sort the rows based on the sort expressions
         input_rows.sort_by(|a, b| {
             for sort_item in sort_expressions {
-                // Evaluate the sort expression for both rows using cloned context
-                let mut context_a = context.clone();
-                for (k, v) in &a.values {
-                    context_a.set_variable(k.clone(), v.clone());
-                }
-                let val_a = self.evaluate_expression(&sort_item.expression, &context_a);
+                // Pre-extract PropertyAccess once per sort item (not per row value)
+                let prop_access = match &sort_item.expression {
+                    Expression::PropertyAccess(p) => Some(p),
+                    _ => None,
+                };
 
-                let mut context_b = context.clone();
-                for (k, v) in &b.values {
-                    context_b.set_variable(k.clone(), v.clone());
-                }
-                let val_b = self.evaluate_expression(&sort_item.expression, &context_b);
+                let val_a = self.eval_order_by_expression(
+                    &sort_item.expression,
+                    &a.values,
+                    context,
+                    prop_access,
+                );
+                let val_b = self.eval_order_by_expression(
+                    &sort_item.expression,
+                    &b.values,
+                    context,
+                    prop_access,
+                );
 
                 match (val_a, val_b) {
                     (Ok(a_val), Ok(b_val)) => {
