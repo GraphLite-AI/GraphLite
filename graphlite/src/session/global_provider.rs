@@ -125,6 +125,7 @@ impl GlobalSessionProvider {
     ///
     /// This method provides backward compatibility and direct access to the
     /// session manager for advanced use cases.
+    #[allow(dead_code)]
     pub fn manager(&self) -> Arc<SessionManager> {
         self.get_manager()
             .expect("Global session manager not initialized")
@@ -250,8 +251,10 @@ mod tests {
         let txn_mgr = Arc::new(TransactionManager::new(db_path.clone()).unwrap());
 
         // Create two global providers with same managers
-        let provider1 = GlobalSessionProvider::new(txn_mgr.clone(), storage.clone(), catalog.clone());
-        let provider2 = GlobalSessionProvider::new(txn_mgr.clone(), storage.clone(), catalog.clone());
+        let provider1 =
+            GlobalSessionProvider::new(txn_mgr.clone(), storage.clone(), catalog.clone());
+        let provider2 =
+            GlobalSessionProvider::new(txn_mgr.clone(), storage.clone(), catalog.clone());
 
         // Create session in provider1
         let permissions = SessionPermissionCache::default();

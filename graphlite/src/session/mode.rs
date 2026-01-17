@@ -17,8 +17,8 @@
 /// # Examples
 ///
 /// ```rust,no_run
-/// use graphlite::coordinator::QueryCoordinator;
-/// use graphlite::session::SessionMode;
+/// use graphlite::QueryCoordinator;
+/// use graphlite::SessionMode;
 ///
 /// // Embedded mode - each instance isolated
 /// let coord1 = QueryCoordinator::from_path_with_mode("db1.graphlite", SessionMode::Instance)?;
@@ -31,8 +31,7 @@
 /// // coord1 and coord2 share the same session pool
 /// # Ok::<(), String>(())
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SessionMode {
     /// Instance-based session management (default)
     ///
@@ -57,7 +56,6 @@ pub enum SessionMode {
     /// - Implementing connection pooling
     Global,
 }
-
 
 impl SessionMode {
     /// Returns true if this is Instance mode

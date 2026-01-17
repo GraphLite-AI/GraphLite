@@ -154,7 +154,7 @@ For full functionality, configure these secrets in your GitHub repository:
 ./scripts/build_all.sh --release --test
 
 # Run integration tests
-./scripts/run_tests.sh --release
+./scripts/run_integration_tests.sh --release
 ```
 
 ### Security Audit
@@ -174,7 +174,7 @@ cargo fmt --all
 
 ### Linting
 ```bash
-cargo clippy --all-targets --all-features -- -D warnings
+./scripts/clippy_all.sh --all
 ```
 
 ## Workflow Badges

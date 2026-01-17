@@ -92,7 +92,10 @@ impl DDLStatementExecutor for CreateSchemaExecutor {
                             schema_name.clone(),
                             "schema_created".to_string(),
                         );
-                        log::debug!("Invalidated catalog cache after CREATE SCHEMA '{}'", schema_name);
+                        log::debug!(
+                            "Invalidated catalog cache after CREATE SCHEMA '{}'",
+                            schema_name
+                        );
                     }
 
                     let message = if self.statement.if_not_exists {

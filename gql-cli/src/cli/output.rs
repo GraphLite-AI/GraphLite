@@ -25,7 +25,7 @@ impl ResultFormatter {
         // Check if this is a session command
         if result.is_session_command() {
             if let Some(msg) = result.get_session_message() {
-                return format!("{}\n", format!("{}", msg).green());
+                return format!("{}\n", msg.to_string().green());
             }
         }
 
@@ -113,7 +113,8 @@ impl ResultFormatter {
         let json_result = json_obj;
 
         serde_json::to_string_pretty(&json_result).unwrap_or_else(|_| {
-            "{\"status\": \"error\", \"error\": \"Could not serialize results to JSON\"}".to_string()
+            "{\"status\": \"error\", \"error\": \"Could not serialize results to JSON\"}"
+                .to_string()
         })
     }
 

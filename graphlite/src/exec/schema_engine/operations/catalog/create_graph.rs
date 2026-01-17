@@ -213,7 +213,10 @@ impl DDLStatementExecutor for CreateGraphExecutor {
                         // Invalidate catalog cache - graph list has changed
                         if let Some(cache_mgr) = &context.cache_manager {
                             cache_mgr.invalidate_on_data_change(Some(graph_name.clone()), 1);
-                            log::debug!("Invalidated catalog cache after CREATE GRAPH '{}'", graph_name);
+                            log::debug!(
+                                "Invalidated catalog cache after CREATE GRAPH '{}'",
+                                graph_name
+                            );
                         }
 
                         let message = if self.statement.if_not_exists {

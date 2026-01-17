@@ -269,11 +269,39 @@ cargo fmt --all -- --check
 
 #### Linting
 ```bash
-# Run Clippy linter
-cargo clippy --all -- -D warnings
+# Run Clippy linter on all targets (REQUIRED before each commit)
+./scripts/clippy_all.sh --all
 
-# Fix auto-fixable issues
-cargo clippy --all --fix
+# Auto-fix suggestions where possible
+./scripts/clippy_all.sh --fix
+
+# Strict mode (treat warnings as errors)
+./scripts/clippy_all.sh --all --strict
+```
+
+#### Pre-Commit Checklist
+
+**REQUIRED: Run these commands before EVERY commit:**
+
+```bash
+# 1. Format code (auto-fix)
+cargo fmt --all
+
+# 2. Run clippy on all targets (must pass)
+./scripts/clippy_all.sh --all
+
+# 3. Verify formatting passes (optional - for peace of mind)
+cargo fmt --all -- --check
+```
+
+**Why this matters:**
+- Formatting issues will cause CI to fail
+- Clippy errors will block your PR from merging
+- Running these locally saves time and CI resources
+
+**Quick validation before push:**
+```bash
+./scripts/validate_ci.sh --quick  # Runs both checks above + more
 ```
 
 #### Code Organization
@@ -371,6 +399,33 @@ This installs a git pre-commit hook that validates **only staged files** before 
 11. **No Emojis in Documentation**: All markdown files must be emoji-free for professional consistency
 
 **Before submitting a PR, verify your changes don't violate these rules.**
+
+#### Understanding Validation Scripts
+
+GraphLite uses two different validation scripts with different purposes:
+
+**`check_code_patterns.sh` - GraphLite Architecture Validator**
+- Checks the 11 critical rules listed above
+- GraphLite-specific patterns and anti-patterns
+- Fast (~5 seconds)
+- Run before committing code changes
+
+**`validate_ci.sh` - CI Pipeline Simulator**
+- Checks formatting, linting, build, tests
+- Standard Rust tooling (cargo fmt, clippy, etc.)
+- Slower (~30s quick, ~10min full)
+- Run before pushing to GitHub
+
+**When to use each:**
+```bash
+# Before committing (fast checks):
+./scripts/check_code_patterns.sh    # GraphLite rules
+
+# Before pushing (comprehensive checks):
+./scripts/validate_ci.sh --quick    # CI simulation
+```
+
+See [scripts/README.md](scripts/README.md) for detailed comparison.
 
 ## Testing Requirements
 
@@ -577,19 +632,24 @@ cargo test --all
 # Check formatting (REQUIRED - must pass)
 cargo fmt --all -- --check
 
-# Run linter (REQUIRED - must pass)
-cargo clippy --all -- -D warnings
+# Run linter on all targets (REQUIRED - must pass)
+./scripts/clippy_all.sh --all
 
 # Run code pattern checks (REQUIRED - must pass)
 ./scripts/check_code_patterns.sh
 
-<<<<<<< Updated upstream
-# Test examples still work
-cd examples/rust/sdk/drug_discovery
-=======
+# Run integration tests - parallel (RECOMMENDED - fast, ~75 seconds)
+./scripts/run_integration_tests_parallel.sh --release --jobs=8
+
+# OR run integration tests - sequential (slower, ~10-15 minutes)
+./scripts/run_integration_tests.sh --release
+
+# Validate CI will pass before pushing (RECOMMENDED)
+./scripts/validate_ci.sh --quick  # Fast check: formatting + linting
+./scripts/validate_ci.sh --full   # Complete check: includes build + tests
+
 # Test examples still work (REQUIRED - verify manually)
-cd examples-core/fraud_detection
->>>>>>> Stashed changes
+cd examples/rust/sdk/drug_discovery
 cargo run
 ```
 
@@ -642,6 +702,7 @@ Provide clear, step-by-step instructions for reviewers to test your changes:
 
 - [ ] Code follows project style guidelines
 - [ ] Tests pass locally (`cargo test --all`)
+- [ ] Clippy linting passes (`./scripts/clippy_all.sh --all`)
 - [ ] Code pattern checks pass (`./scripts/check_code_patterns.sh`)
 - [ ] Documentation updated (if applicable)
 - [ ] Documentation is concise and curated (no AI-generated fluff)

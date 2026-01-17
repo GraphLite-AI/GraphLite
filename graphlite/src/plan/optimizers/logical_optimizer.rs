@@ -289,8 +289,6 @@ impl LogicalOptimizer {
 
     /// Recursively unnest subqueries in a logical node
     fn unnest_subqueries_in_node(&self, node: LogicalNode) -> Result<LogicalNode, PlanningError> {
-        
-
         match node {
             // EXISTS subquery can be converted to LEFT SEMI JOIN
             LogicalNode::ExistsSubquery {

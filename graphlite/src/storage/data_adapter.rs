@@ -5,7 +5,7 @@
 //!
 //! This module bridges application data structures (Graph, Catalog, Auth) and low-level storage drivers.
 //! It handles serialization/deserialization and organizes data into logical collections,
-//! working with any StorageDriver implementation (Sled, RocksDB, Redis/Valkey).
+//! working with any StorageDriver implementation (Sled, Memory, Redis/Valkey).
 
 use crate::catalog::manager::CatalogManager;
 use crate::catalog::providers::graph_metadata::{Graph, GraphType};

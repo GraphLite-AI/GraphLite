@@ -79,7 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **250+ Integration Tests** - 40 test files for end-to-end scenarios
 - **TestFixture Pattern** - Reusable test setup with randomized schema/graph names
 - **Parallel Test Execution** - Instance-based isolation enables concurrent testing (~10x speedup)
-- **Test Runner Script** - `run_tests.sh` with debug and release modes
+- **Test Runner Script** - `run_integration_tests.sh` with debug and release modes
 - **Build Script** - `build_all.sh` for automated compilation
 
 #### Documentation

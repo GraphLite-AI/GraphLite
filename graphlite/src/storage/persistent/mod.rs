@@ -4,7 +4,7 @@
 //! Persistent storage backends
 //!
 //! This module provides trait-based abstractions for persistent key-value storage,
-//! allowing different storage backends (RocksDB, Sled, etc.) to be used interchangeably.
+//! allowing different storage backends (Sled, Memory) to be used interchangeably.
 //!
 //! These drivers handle raw key-value operations for persistent disk-based storage.
 //!
@@ -14,8 +14,8 @@
 //! DataAdapter (application data structures)
 //!     ↓
 //! StorageDriver (key-value abstraction)
-//!     ↓  
-//! Concrete Implementations (Sled, RocksDB)
+//!     ↓
+//! Concrete Implementations (Sled, Memory)
 //! ```
 //!
 //! # Example Usage
@@ -41,9 +41,8 @@ pub mod traits;
 pub mod types;
 
 // Driver implementations
-pub mod sled;
-// pub mod rocksdb;  // TODO: Not yet extracted
 pub mod memory;
+pub mod sled;
 
 // Public API re-exports
 pub use factory::create_storage_driver;

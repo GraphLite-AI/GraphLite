@@ -149,9 +149,8 @@ impl PatternOptimizationPipeline {
         original_physical_plan: &PhysicalNode,
     ) -> Result<OptimizationPipelineResult, String> {
         if !self.config.enable_optimization {
-            return Ok(OptimizationPipelineResult::no_optimization(
+            return Ok(OptimizationPipelineResult::new(
                 original_physical_plan.clone(),
-                "Pattern optimization is disabled".to_string(),
             ));
         }
 
@@ -163,9 +162,8 @@ impl PatternOptimizationPipeline {
         if match_clauses.is_empty() {
             let elapsed = start_time.elapsed().as_millis() as u64;
             self.metrics.record_skip(elapsed);
-            return Ok(OptimizationPipelineResult::no_optimization(
+            return Ok(OptimizationPipelineResult::new(
                 original_physical_plan.clone(),
-                "No MATCH clauses found in query".to_string(),
             ));
         }
 
@@ -175,9 +173,8 @@ impl PatternOptimizationPipeline {
         if !needs_optimization {
             let elapsed = start_time.elapsed().as_millis() as u64;
             self.metrics.record_skip(elapsed);
-            return Ok(OptimizationPipelineResult::no_optimization(
+            return Ok(OptimizationPipelineResult::new(
                 original_physical_plan.clone(),
-                "No comma-separated patterns found".to_string(),
             ));
         }
 
@@ -243,21 +240,13 @@ impl PatternOptimizationPipeline {
             // Record successful optimization
             self.metrics.record_success(elapsed, &total_improvement);
 
-            Ok(OptimizationPipelineResult::optimized(
-                optimized_plan,
-                total_improvement,
-                optimization_reasons.join("; "),
-            ))
+            Ok(OptimizationPipelineResult::new(optimized_plan))
         } else {
             // Record skipped optimization
             self.metrics.record_skip(elapsed);
 
-            Ok(OptimizationPipelineResult::no_optimization(
+            Ok(OptimizationPipelineResult::new(
                 original_physical_plan.clone(),
-                format!(
-                    "Optimization not beneficial: {}",
-                    optimization_reasons.join("; ")
-                ),
             ))
         }
     }
@@ -398,44 +387,12 @@ impl PatternOptimizationPipeline {
 pub struct OptimizationPipelineResult {
     /// The optimized physical plan
     pub physical_plan: PhysicalNode,
-    /// Whether optimization was applied
-    pub optimized: bool,
-    /// Performance improvement from optimization
-    pub improvement: OptimizationImprovement,
-    /// Explanation of what happened
-    pub explanation: String,
 }
 
 impl OptimizationPipelineResult {
-    /// Create result for successful optimization
-    pub fn optimized(
-        physical_plan: PhysicalNode,
-        improvement: OptimizationImprovement,
-        explanation: String,
-    ) -> Self {
-        Self {
-            physical_plan,
-            optimized: true,
-            improvement,
-            explanation,
-        }
-    }
-
-    /// Create result for no optimization
-    pub fn no_optimization(physical_plan: PhysicalNode, explanation: String) -> Self {
-        Self {
-            physical_plan,
-            optimized: false,
-            improvement: OptimizationImprovement {
-                cost_reduction_percentage: 0.0,
-                cardinality_reduction_percentage: 0.0,
-                original_cost: 0.0,
-                optimized_cost: 0.0,
-                original_rows: 0,
-                optimized_rows: 0,
-            },
-            explanation,
-        }
+    /// Create result for optimization
+    pub fn new(physical_plan: PhysicalNode) -> Self {
+        Self { physical_plan }
     }
 }
 
@@ -695,31 +652,24 @@ mod tests {
             estimated_cost: 50.0,
         };
 
-        let improvement = OptimizationImprovement {
-            cost_reduction_percentage: 90.0,
-            cardinality_reduction_percentage: 83.3,
-            original_cost: 500.0,
-            optimized_cost: 50.0,
-            original_rows: 18,
-            optimized_rows: 3,
-        };
+        let result = OptimizationPipelineResult::new(physical_plan.clone());
 
-        let result = OptimizationPipelineResult::optimized(
-            physical_plan.clone(),
-            improvement.clone(),
-            "Path traversal optimization applied".to_string(),
-        );
+        // Verify the physical plan is properly stored
+        match &result.physical_plan {
+            PhysicalNode::NodeSeqScan { variable, .. } => {
+                assert_eq!(variable, "n");
+            }
+            _ => panic!("Expected NodeSeqScan"),
+        }
 
-        assert!(result.optimized);
-        assert_eq!(result.improvement.cost_reduction_percentage, 90.0);
-        assert!(result.explanation.contains("Path traversal"));
+        let no_opt_result = OptimizationPipelineResult::new(physical_plan);
 
-        let no_opt_result = OptimizationPipelineResult::no_optimization(
-            physical_plan,
-            "No optimization needed".to_string(),
-        );
-
-        assert!(!no_opt_result.optimized);
-        assert_eq!(no_opt_result.improvement.cost_reduction_percentage, 0.0);
+        // Verify the physical plan is properly stored
+        match &no_opt_result.physical_plan {
+            PhysicalNode::NodeSeqScan { variable, .. } => {
+                assert_eq!(variable, "n");
+            }
+            _ => panic!("Expected NodeSeqScan"),
+        }
     }
 }

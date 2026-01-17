@@ -4,9 +4,9 @@
 use crate::ast::CatalogStatement;
 use crate::catalog::manager::CatalogManager;
 use crate::exec::schema_engine::operations::catalog::*;
-use crate::exec::schema_engine::operations::types::*;
-use crate::exec::schema_engine::operations::security::*;
 use crate::exec::schema_engine::operations::ddl_statement_base::DDLStatementExecutor;
+use crate::exec::schema_engine::operations::security::*;
+use crate::exec::schema_engine::operations::types::*;
 use crate::exec::write_stmt::ExecutionContext;
 use crate::exec::{ExecutionError, QueryResult, Row};
 use crate::schema::executor::alter_graph_type::AlterGraphTypeExecutor;

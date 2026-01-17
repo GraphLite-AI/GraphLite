@@ -15,12 +15,8 @@ use std::fmt::Debug;
 /// Each type has different performance characteristics and use cases.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
 pub enum StorageType {
-    /// RocksDB - High-performance persistent key-value store
-    /// Best for: High write throughput, large datasets, production use
-    RocksDB,
-
     /// Sled - Pure Rust embedded database
-    /// Best for: Development, testing, pure Rust environments
+    /// Best for: Production, development, testing
     #[default]
     Sled,
 
@@ -34,11 +30,10 @@ impl std::str::FromStr for StorageType {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "rocksdb" => Ok(StorageType::RocksDB),
             "sled" => Ok(StorageType::Sled),
             "memory" => Ok(StorageType::Memory),
             _ => Err(format!(
-                "Unknown storage type: {}. Valid options: rocksdb, sled, memory",
+                "Unknown storage type: {}. Valid options: sled, memory",
                 s
             )),
         }
@@ -48,7 +43,6 @@ impl std::str::FromStr for StorageType {
 impl std::fmt::Display for StorageType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let name = match self {
-            StorageType::RocksDB => "rocksdb",
             StorageType::Sled => "sled",
             StorageType::Memory => "memory",
         };
@@ -77,7 +71,7 @@ pub enum StorageDriverError {
     /// Invalid key format or content
     _InvalidKey(String),
 
-    /// Driver-specific error (RocksDB, Sled, etc.)
+    /// Driver-specific error (Sled, Memory, etc.)
     BackendSpecific(String),
 }
 

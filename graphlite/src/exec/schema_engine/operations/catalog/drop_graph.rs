@@ -138,7 +138,10 @@ impl DDLStatementExecutor for DropGraphExecutor {
                         // Invalidate catalog cache - graph list has changed
                         if let Some(cache_mgr) = &context.cache_manager {
                             cache_mgr.invalidate_on_data_change(Some(full_path.clone()), 1);
-                            log::debug!("Invalidated catalog cache after DROP GRAPH '{}'", full_path);
+                            log::debug!(
+                                "Invalidated catalog cache after DROP GRAPH '{}'",
+                                full_path
+                            );
                         }
 
                         let message = if self.statement.cascade {

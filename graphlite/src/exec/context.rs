@@ -46,14 +46,23 @@ impl std::fmt::Debug for ExecutionContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ExecutionContext")
             .field("session_id", &self.session_id)
-            .field("session_provider", &self.session_provider.as_ref().map(|_| "Some(SessionProvider)"))
+            .field(
+                "session_provider",
+                &self
+                    .session_provider
+                    .as_ref()
+                    .map(|_| "Some(SessionProvider)"),
+            )
             .field("variables", &self.variables)
             .field("variable_types", &self.variable_types)
             .field("schema_types", &self.schema_types)
             .field("current_graph", &self.current_graph)
             .field("storage_manager", &self.storage_manager)
             .field("function_registry", &self.function_registry)
-            .field("cache_manager", &self.cache_manager.as_ref().map(|_| "Some(CacheManager)"))
+            .field(
+                "cache_manager",
+                &self.cache_manager.as_ref().map(|_| "Some(CacheManager)"),
+            )
             .field("current_user", &self.current_user)
             .field("current_transaction", &self.current_transaction)
             .field("warnings", &self.warnings)
@@ -116,7 +125,9 @@ impl ExecutionContext {
 
     /// Get the user session from session provider
     pub fn get_session(&self) -> Option<Arc<std::sync::RwLock<UserSession>>> {
-        self.session_provider.as_ref()?.get_session(&self.session_id)
+        self.session_provider
+            .as_ref()?
+            .get_session(&self.session_id)
     }
 
     /// Get a variable value, checking session parameters first, then local variables

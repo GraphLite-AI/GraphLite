@@ -109,6 +109,25 @@ GraphLite includes a comprehensive build script that simplifies the build proces
 
 ---
 
+## Verify Installation (Optional)
+
+After building, you can run tests to verify everything works correctly:
+
+```bash
+# Quick unit tests (~2-3 seconds)
+./scripts/run_unit_tests.sh
+
+# Full integration tests - parallel (recommended, ~75 seconds)
+./scripts/run_integration_tests_parallel.sh --release --jobs=8
+
+# Full integration tests - sequential (slower, ~10-15 minutes)
+./scripts/run_integration_tests.sh --release
+```
+
+**Note**: Parallel tests require GNU Parallel (`brew install parallel` on macOS, `apt install parallel` on Ubuntu)
+
+---
+
 ## Initialize Your First Database
 
 Create a new GraphLite database with an admin user:

@@ -4,7 +4,6 @@
 /// 1. Instance mode provides session isolation between coordinators
 /// 2. Global mode provides session sharing between coordinators
 /// 3. Sessions are properly managed in each mode
-
 use graphlite::{QueryCoordinator, SessionMode};
 use tempfile::tempdir;
 
@@ -14,17 +13,13 @@ fn test_instance_mode_isolation() {
     let temp_dir1 = tempdir().unwrap();
     let temp_dir2 = tempdir().unwrap();
 
-    let coord1 = QueryCoordinator::from_path_with_mode(
-        temp_dir1.path().join("db1"),
-        SessionMode::Instance,
-    )
-    .expect("Failed to create coordinator 1");
+    let coord1 =
+        QueryCoordinator::from_path_with_mode(temp_dir1.path().join("db1"), SessionMode::Instance)
+            .expect("Failed to create coordinator 1");
 
-    let coord2 = QueryCoordinator::from_path_with_mode(
-        temp_dir2.path().join("db2"),
-        SessionMode::Instance,
-    )
-    .expect("Failed to create coordinator 2");
+    let coord2 =
+        QueryCoordinator::from_path_with_mode(temp_dir2.path().join("db2"), SessionMode::Instance)
+            .expect("Failed to create coordinator 2");
 
     // Create session in coord1
     let session1 = coord1
@@ -49,15 +44,13 @@ fn test_global_mode_session_sharing() {
     let temp_dir1 = tempdir().unwrap();
     let temp_dir2 = tempdir().unwrap();
 
-    let coord1 = QueryCoordinator::from_path_with_mode(
-        temp_dir1.path().join("db1"),
-        SessionMode::Global
-    ).expect("Failed to create coordinator 1");
+    let coord1 =
+        QueryCoordinator::from_path_with_mode(temp_dir1.path().join("db1"), SessionMode::Global)
+            .expect("Failed to create coordinator 1");
 
-    let coord2 = QueryCoordinator::from_path_with_mode(
-        temp_dir2.path().join("db2"),
-        SessionMode::Global
-    ).expect("Failed to create coordinator 2");
+    let coord2 =
+        QueryCoordinator::from_path_with_mode(temp_dir2.path().join("db2"), SessionMode::Global)
+            .expect("Failed to create coordinator 2");
 
     // Create session in coord1
     let session_id = coord1
@@ -70,7 +63,10 @@ fn test_global_mode_session_sharing() {
     let session2 = coord2.create_simple_session("another_user").unwrap();
 
     // Both sessions should exist in the global pool
-    assert_ne!(session_id, session2, "Different sessions should have different IDs");
+    assert_ne!(
+        session_id, session2,
+        "Different sessions should have different IDs"
+    );
 }
 
 #[test]
@@ -92,11 +88,9 @@ fn test_instance_mode_explicit() {
     // Explicitly using Instance mode should behave like from_path()
     let temp_dir = tempdir().unwrap();
 
-    let coord = QueryCoordinator::from_path_with_mode(
-        temp_dir.path().join("db"),
-        SessionMode::Instance,
-    )
-    .expect("Failed to create coordinator");
+    let coord =
+        QueryCoordinator::from_path_with_mode(temp_dir.path().join("db"), SessionMode::Instance)
+            .expect("Failed to create coordinator");
 
     let _session_id = coord
         .create_simple_session("test_user")
@@ -110,15 +104,13 @@ fn test_global_mode_session_close() {
     let temp_dir1 = tempdir().unwrap();
     let temp_dir2 = tempdir().unwrap();
 
-    let coord1 = QueryCoordinator::from_path_with_mode(
-        temp_dir1.path().join("db1"),
-        SessionMode::Global
-    ).expect("Failed to create coordinator 1");
+    let coord1 =
+        QueryCoordinator::from_path_with_mode(temp_dir1.path().join("db1"), SessionMode::Global)
+            .expect("Failed to create coordinator 1");
 
-    let coord2 = QueryCoordinator::from_path_with_mode(
-        temp_dir2.path().join("db2"),
-        SessionMode::Global
-    ).expect("Failed to create coordinator 2");
+    let coord2 =
+        QueryCoordinator::from_path_with_mode(temp_dir2.path().join("db2"), SessionMode::Global)
+            .expect("Failed to create coordinator 2");
 
     // Create session in coord1
     let session_id = coord1
@@ -142,17 +134,13 @@ fn test_multiple_databases_instance_mode() {
     let temp_dir1 = tempdir().unwrap();
     let temp_dir2 = tempdir().unwrap();
 
-    let coord1 = QueryCoordinator::from_path_with_mode(
-        temp_dir1.path().join("db1"),
-        SessionMode::Instance,
-    )
-    .expect("Failed to create coordinator 1");
+    let coord1 =
+        QueryCoordinator::from_path_with_mode(temp_dir1.path().join("db1"), SessionMode::Instance)
+            .expect("Failed to create coordinator 1");
 
-    let coord2 = QueryCoordinator::from_path_with_mode(
-        temp_dir2.path().join("db2"),
-        SessionMode::Instance,
-    )
-    .expect("Failed to create coordinator 2");
+    let coord2 =
+        QueryCoordinator::from_path_with_mode(temp_dir2.path().join("db2"), SessionMode::Instance)
+            .expect("Failed to create coordinator 2");
 
     // Create sessions in each database
     let _session1 = coord1.create_simple_session("user1").unwrap();
@@ -168,15 +156,13 @@ fn test_same_database_global_mode() {
     let temp_dir1 = tempdir().unwrap();
     let temp_dir2 = tempdir().unwrap();
 
-    let coord1 = QueryCoordinator::from_path_with_mode(
-        temp_dir1.path().join("db1"),
-        SessionMode::Global
-    ).expect("Failed to create coordinator 1");
+    let coord1 =
+        QueryCoordinator::from_path_with_mode(temp_dir1.path().join("db1"), SessionMode::Global)
+            .expect("Failed to create coordinator 1");
 
-    let coord2 = QueryCoordinator::from_path_with_mode(
-        temp_dir2.path().join("db2"),
-        SessionMode::Global
-    ).expect("Failed to create coordinator 2");
+    let coord2 =
+        QueryCoordinator::from_path_with_mode(temp_dir2.path().join("db2"), SessionMode::Global)
+            .expect("Failed to create coordinator 2");
 
     // Create a session in coord1
     let session1 = coord1.create_simple_session("admin").unwrap();
@@ -185,5 +171,8 @@ fn test_same_database_global_mode() {
     let session2 = coord2.create_simple_session("user").unwrap();
 
     // Both sessions should exist in the global pool
-    assert_ne!(session1, session2, "Different sessions should have different IDs");
+    assert_ne!(
+        session1, session2,
+        "Different sessions should have different IDs"
+    );
 }

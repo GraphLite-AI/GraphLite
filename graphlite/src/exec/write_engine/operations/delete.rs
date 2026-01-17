@@ -451,7 +451,11 @@ mod tests {
         // Pattern requires subset of node's labels
         let node = Node {
             id: "n1".to_string(),
-            labels: vec!["Person".to_string(), "Employee".to_string(), "Manager".to_string()],
+            labels: vec![
+                "Person".to_string(),
+                "Employee".to_string(),
+                "Manager".to_string(),
+            ],
             properties: HashMap::new(),
         };
 

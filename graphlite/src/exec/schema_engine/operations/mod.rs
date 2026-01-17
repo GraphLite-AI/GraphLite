@@ -4,8 +4,8 @@
 //! Schema operations modules
 
 pub mod catalog;
-pub mod types;
 pub mod security;
+pub mod types;
 
 // Base types
 pub mod coordinator;

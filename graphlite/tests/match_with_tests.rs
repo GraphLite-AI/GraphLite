@@ -1906,10 +1906,7 @@ fn test_debug_with_clause_issue() {
                 let simple_result =
                     fixture.query("MATCH (u:User {name: 'Alice'}) WITH u RETURN u.id as user_id");
                 match simple_result {
-                    Ok(simple_query_result) => {
-                        if simple_query_result.rows.is_empty() {
-                        } 
-                    }
+                    Ok(simple_query_result) => if simple_query_result.rows.is_empty() {},
                     Err(_e) => {}
                 }
             } else {

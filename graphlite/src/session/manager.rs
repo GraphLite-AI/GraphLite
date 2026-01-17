@@ -10,8 +10,8 @@ use crate::catalog::manager::CatalogManager;
 use crate::session::models::{SessionPermissionCache, UserSession};
 use crate::storage::StorageManager;
 use crate::txn::TransactionManager;
-use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, RwLock};
 
@@ -190,21 +190,17 @@ impl SessionManager {
         // Collect expired session IDs from all partitions
         for partition in &self.sessions {
             if let Ok(sessions) = partition.read() {
-                expired_ids.extend(
-                    sessions
-                        .iter()
-                        .filter_map(|(id, session_arc)| {
-                            if let Ok(session) = session_arc.read() {
-                                if session.is_expired() {
-                                    Some(id.clone())
-                                } else {
-                                    None
-                                }
-                            } else {
-                                None
-                            }
-                        })
-                );
+                expired_ids.extend(sessions.iter().filter_map(|(id, session_arc)| {
+                    if let Ok(session) = session_arc.read() {
+                        if session.is_expired() {
+                            Some(id.clone())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                }));
             }
         }
 
