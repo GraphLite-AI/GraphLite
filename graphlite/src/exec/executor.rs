@@ -6711,10 +6711,18 @@ impl QueryExecutor {
                     _ => None,
                 };
 
-                let val_a =
-                    self.eval_order_by_expression(&sort_item.expression, &a.values, context, prop_access);
-                let val_b =
-                    self.eval_order_by_expression(&sort_item.expression, &b.values, context, prop_access);
+                let val_a = self.eval_order_by_expression(
+                    &sort_item.expression,
+                    &a.values,
+                    context,
+                    prop_access,
+                );
+                let val_b = self.eval_order_by_expression(
+                    &sort_item.expression,
+                    &b.values,
+                    context,
+                    prop_access,
+                );
 
                 match (val_a, val_b) {
                     (Ok(a_val), Ok(b_val)) => {
