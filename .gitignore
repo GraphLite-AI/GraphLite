@@ -55,3 +55,9 @@ my_db/
 # GitHub Actions local testing
 .secrets
 .env
+
+# NL2GQL artifacts
+nl2gql/config.env
+nl2gql/__pycache__/
+nl2gql/pipeline/__pycache__/
+nl2gql-logs/

@@ -55,8 +55,8 @@ pub use coordinator::{QueryCoordinator, QueryInfo, QueryPlan, QueryResult, Query
 // Re-export session types for SessionMode configuration
 pub use session::SessionMode;
 
-// Re-export Value type (needed for inspecting query results in Row.values)
-pub use storage::Value;
+// Re-export storage types for testing and advanced usage
+pub use storage::{StorageManager, StorageMethod, StorageType, Value};
 
 /// GraphLite version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

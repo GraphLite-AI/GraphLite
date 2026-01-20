@@ -101,7 +101,7 @@ pub unsafe extern "C" fn graphlite_open(
         };
 
         // Create QueryCoordinator
-        match QueryCoordinator::from_path(path_str) {
+        match QueryCoordinator::from_path(path_str, graphlite::StorageType::from_features()) {
             Ok(coordinator) => {
                 set_error(error_out, GraphLiteErrorCode::Success);
                 Box::into_raw(Box::new(GraphLiteDB { coordinator }))

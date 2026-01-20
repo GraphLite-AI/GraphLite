@@ -41,8 +41,9 @@ impl TestFixture {
 
         // Use public API - QueryCoordinator::from_path()
         // This initializes ALL internal components automatically
+        // Uses default storage type (Sled unless configured otherwise)
         let coordinator =
-            QueryCoordinator::from_path(db_path).map_err(Box::<dyn std::error::Error>::from)?;
+            QueryCoordinator::from_path(db_path, graphlite::StorageType::from_features()).map_err(Box::<dyn std::error::Error>::from)?;
 
         // Create session using public API
         let session_id = coordinator

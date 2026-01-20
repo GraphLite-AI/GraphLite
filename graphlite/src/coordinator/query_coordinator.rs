@@ -57,9 +57,9 @@ impl QueryCoordinator {
     ///
     /// # Example
     /// ```no_run
-    /// use graphlite::QueryCoordinator;
+    /// use graphlite::{QueryCoordinator, StorageType};
     ///
-    /// let coordinator = QueryCoordinator::from_path("./mydb")
+    /// let coordinator = QueryCoordinator::from_path("./mydb", StorageType::Sled)
     ///     .expect("Failed to initialize database");
     ///
     /// let session_id = coordinator.create_simple_session("user")
@@ -68,12 +68,12 @@ impl QueryCoordinator {
     /// let result = coordinator.process_query("MATCH (n) RETURN n", &session_id)
     ///     .expect("Failed to execute query");
     /// ```
-    pub fn from_path(db_path: impl AsRef<Path>) -> Result<Arc<Self>, String> {
+    pub fn from_path(db_path: impl AsRef<Path>, storage_type: StorageType) -> Result<Arc<Self>, String> {
         let path = db_path.as_ref().to_path_buf();
 
         // Initialize storage
         let storage = Arc::new(
-            StorageManager::new(path.clone(), StorageMethod::DiskOnly, StorageType::Sled)
+            StorageManager::new(path.clone(), StorageMethod::DiskOnly, storage_type)
                 .map_err(|e| format!("Failed to initialize storage: {}", e))?,
         );
 
@@ -379,7 +379,7 @@ impl QueryCoordinator {
     /// # Example
     /// ```no_run
     /// # use graphlite::QueryCoordinator;
-    /// # let coordinator = QueryCoordinator::from_path("./mydb").unwrap();
+    /// # let coordinator = QueryCoordinator::from_path("./mydb", graphlite::StorageType::Sled).unwrap();
     /// let session_id = coordinator.create_simple_session("user")
     ///     .expect("Failed to create session");
     /// ```
@@ -432,7 +432,7 @@ impl QueryCoordinator {
     /// # Example
     /// ```no_run
     /// # use graphlite::QueryCoordinator;
-    /// # let coordinator = QueryCoordinator::from_path("./mydb").unwrap();
+    /// # let coordinator = QueryCoordinator::from_path("./mydb", graphlite::StorageType::Sled).unwrap();
     /// let session_id = coordinator.authenticate_and_create_session("admin", "password")
     ///     .expect("Authentication failed");
     /// ```
@@ -514,7 +514,7 @@ impl QueryCoordinator {
     /// # Example
     /// ```no_run
     /// # use graphlite::QueryCoordinator;
-    /// # let coordinator = QueryCoordinator::from_path("./mydb").unwrap();
+    /// # let coordinator = QueryCoordinator::from_path("./mydb", graphlite::StorageType::Sled).unwrap();
     /// coordinator.set_user_password("admin", "newpassword")
     ///     .expect("Failed to set password");
     /// ```
@@ -594,7 +594,7 @@ impl QueryCoordinator {
     /// # Example
     /// ```no_run
     /// # use graphlite::QueryCoordinator;
-    /// # let coordinator = QueryCoordinator::from_path("./mydb").unwrap();
+    /// # let coordinator = QueryCoordinator::from_path("./mydb", graphlite::StorageType::Sled).unwrap();
     /// // Valid query
     /// assert!(coordinator.validate_query("MATCH (n) RETURN n").is_ok());
     ///
@@ -626,7 +626,7 @@ impl QueryCoordinator {
     /// # Example
     /// ```no_run
     /// # use graphlite::QueryCoordinator;
-    /// # let coordinator = QueryCoordinator::from_path("./mydb").unwrap();
+    /// # let coordinator = QueryCoordinator::from_path("./mydb", graphlite::StorageType::Sled).unwrap();
     /// if coordinator.is_valid_query("MATCH (n) RETURN n") {
     ///     println!("Query is valid!");
     /// }
@@ -650,7 +650,7 @@ impl QueryCoordinator {
     /// # Example
     /// ```no_run
     /// # use graphlite::QueryCoordinator;
-    /// # let coordinator = QueryCoordinator::from_path("./mydb").unwrap();
+    /// # let coordinator = QueryCoordinator::from_path("./mydb", graphlite::StorageType::Sled).unwrap();
     /// let info = coordinator.analyze_query("MATCH (n:Person) RETURN n.name")
     ///     .expect("Failed to analyze query");
     ///
@@ -773,7 +773,7 @@ impl QueryCoordinator {
     /// # Example
     /// ```no_run
     /// # use graphlite::QueryCoordinator;
-    /// # let coordinator = QueryCoordinator::from_path("./mydb").unwrap();
+    /// # let coordinator = QueryCoordinator::from_path("./mydb", graphlite::StorageType::Sled).unwrap();
     /// let plan = coordinator.explain_query("MATCH (n:Person) RETURN n.name")
     ///     .expect("Failed to explain query");
     ///

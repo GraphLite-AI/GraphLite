@@ -19,7 +19,7 @@ use graphlite::QueryCoordinator;
 ///
 /// SQLite-style initialization: Creates database files and fully initializes
 /// the database using a coordinator instance that lives only during this command.
-/// All state is persisted to disk via Sled before the process exits.
+/// All state is persisted to disk before the process exits.
 pub fn handle_install(
     path: PathBuf,
     admin_user: String,
@@ -47,7 +47,11 @@ pub fn handle_install(
         }
     };
 
+    // Use the storage type that was compiled in
+    let storage_type = graphlite::StorageType::from_features();
+
     println!("{}", "Initializing GraphLite...".bold().green());
+    println!("  Storage backend: {}", storage_type);
 
     // Create database directory
     std::fs::create_dir_all(&path)?;
@@ -57,7 +61,7 @@ pub fn handle_install(
     println!("  → Creating database files...");
 
     // Initialize coordinator - this handles all internal component setup
-    let coordinator = QueryCoordinator::from_path(&path)
+    let coordinator = QueryCoordinator::from_path(&path, storage_type)
         .map_err(|e| format!("Failed to initialize database: {}", e))?;
 
     println!("  → Initializing security catalog...");
@@ -320,7 +324,7 @@ pub fn handle_query(
 /// Load an existing database
 fn load_database(path: &PathBuf) -> Result<Arc<QueryCoordinator>, Box<dyn std::error::Error>> {
     // Use simplified API - all component initialization is handled internally
-    let coordinator = QueryCoordinator::from_path(path)
+    let coordinator = QueryCoordinator::from_path(path, graphlite::StorageType::from_features())
         .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
 
     Ok(coordinator)

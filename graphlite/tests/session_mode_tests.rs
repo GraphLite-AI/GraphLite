@@ -74,7 +74,7 @@ fn test_default_mode_is_instance() {
     // from_path() should use Instance mode by default
     let temp_dir = tempdir().unwrap();
 
-    let coord = QueryCoordinator::from_path(temp_dir.path().join("db"))
+    let coord = QueryCoordinator::from_path(temp_dir.path().join("db"), graphlite::StorageType::from_features())
         .expect("Failed to create coordinator");
 
     // Create a session and verify it works

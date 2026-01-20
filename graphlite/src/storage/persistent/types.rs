@@ -13,11 +13,13 @@ use std::fmt::Debug;
 ///
 /// Specifies which underlying storage technology to use.
 /// Each type has different performance characteristics and use cases.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
+///
+/// NOTE: No Default implementation - you must explicitly choose a backend
+/// at compile time using feature flags (sled-backend or redb-backend).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum StorageType {
     /// Sled - Pure Rust embedded database
     /// Best for: Production, development, testing
-    #[default]
     Sled,
 
     /// Redb - Pure Rust ACID-compliant embedded database
@@ -27,6 +29,30 @@ pub enum StorageType {
     /// Memory - In-memory storage for testing
     /// Best for: Unit testing, development
     Memory,
+}
+
+impl StorageType {
+    /// Get the storage type based on compile-time feature flags
+    ///
+    /// Returns the backend that was compiled in. If multiple backends are available,
+    /// returns the first one found in order: Sled, Redb, Memory.
+    ///
+    /// # Compile Error
+    /// Fails to compile if no backend feature is enabled.
+    pub fn from_features() -> Self {
+        #[cfg(feature = "sled-backend")]
+        {
+            return StorageType::Sled;
+        }
+        #[cfg(all(feature = "redb-backend", not(feature = "sled-backend")))]
+        {
+            return StorageType::Redb;
+        }
+        #[cfg(not(any(feature = "sled-backend", feature = "redb-backend")))]
+        {
+            compile_error!("No storage backend feature enabled. You must specify either '--features sled-backend' or '--features redb-backend' when building.");
+        }
+    }
 }
 
 impl std::str::FromStr for StorageType {

@@ -56,7 +56,7 @@ impl GraphLite {
     /// # Ok::<(), graphlite_sdk::Error>(())
     /// ```
     pub fn open<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
-        let coordinator = QueryCoordinator::from_path(path)
+        let coordinator = QueryCoordinator::from_path(path, graphlite::StorageType::from_features())
             .map_err(|e| Error::Connection(format!("Failed to open database: {}", e)))?;
         Ok(GraphLite { coordinator })
     }

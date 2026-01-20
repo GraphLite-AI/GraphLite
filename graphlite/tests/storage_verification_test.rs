@@ -19,7 +19,7 @@ fn test_storage_directory_structure() {
     let db_path = temp_dir.path().join("test_db");
 
     // Create database
-    let coordinator = QueryCoordinator::from_path(&db_path).expect("Failed to create database");
+    let coordinator = QueryCoordinator::from_path(&db_path, graphlite::StorageType::from_features()).expect("Failed to create database");
 
     // Verify directory structure
     assert!(db_path.exists(), "Database directory should exist");
@@ -42,7 +42,7 @@ fn test_wal_directory_structure() {
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
     let db_path = temp_dir.path().join("test_db");
 
-    let coordinator = QueryCoordinator::from_path(&db_path).expect("Failed to create database");
+    let coordinator = QueryCoordinator::from_path(&db_path, graphlite::StorageType::from_features()).expect("Failed to create database");
 
     let session_id = coordinator
         .create_simple_session("admin")
@@ -79,7 +79,7 @@ fn test_user_data_storage_separation() {
     let db_path = temp_dir.path().join("test_db");
 
     {
-        let coordinator = QueryCoordinator::from_path(&db_path).expect("Failed to create database");
+        let coordinator = QueryCoordinator::from_path(&db_path, graphlite::StorageType::from_features()).expect("Failed to create database");
 
         let session_id = coordinator
             .create_simple_session("admin")
@@ -125,7 +125,7 @@ fn test_multi_graph_tree_isolation() {
     let db_path = temp_dir.path().join("test_db");
 
     {
-        let coordinator = QueryCoordinator::from_path(&db_path).expect("Failed to create database");
+        let coordinator = QueryCoordinator::from_path(&db_path, graphlite::StorageType::from_features()).expect("Failed to create database");
 
         let session_id = coordinator
             .create_simple_session("admin")
@@ -185,7 +185,7 @@ fn test_no_unwanted_data_directories() {
     let cwd = std::env::current_dir().expect("Failed to get current directory");
 
     // Create database
-    let coordinator = QueryCoordinator::from_path(&db_path).expect("Failed to create database");
+    let coordinator = QueryCoordinator::from_path(&db_path, graphlite::StorageType::from_features()).expect("Failed to create database");
 
     let session_id = coordinator
         .create_simple_session("admin")
@@ -229,7 +229,7 @@ fn test_catalog_and_user_data_coexist() {
     let db_path = temp_dir.path().join("test_db");
 
     {
-        let coordinator = QueryCoordinator::from_path(&db_path).expect("Failed to create database");
+        let coordinator = QueryCoordinator::from_path(&db_path, graphlite::StorageType::from_features()).expect("Failed to create database");
 
         let session_id = coordinator
             .create_simple_session("admin")

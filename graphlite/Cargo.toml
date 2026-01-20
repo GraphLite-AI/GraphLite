@@ -17,7 +17,7 @@ path = "src/lib.rs"
 doctest = false
 
 [features]
-default = ["sled-backend", "redb-backend"]
+default = []
 memory = []
 sled-backend = ["dep:sled"]
 redb-backend = ["dep:redb"]

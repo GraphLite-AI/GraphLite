@@ -14,7 +14,7 @@ fn main() {
     let temp_dir = tempdir().unwrap();
     let db_path = temp_dir.path().join("bench_db");
 
-    let coordinator = QueryCoordinator::from_path(&db_path).expect("Failed to create coordinator");
+    let coordinator = QueryCoordinator::from_path(&db_path, graphlite::StorageType::from_features()).expect("Failed to create coordinator");
 
     // Benchmark: Sequential session creation using public API
     println!("📊 Sequential Session Creation:");

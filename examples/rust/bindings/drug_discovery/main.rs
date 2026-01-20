@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Step 1: Initialize GraphLite
     println!("1. Initializing database...");
-    let coordinator = QueryCoordinator::from_path("./drug_discovery_db")
+    let coordinator = QueryCoordinator::from_path("./drug_discovery_db", graphlite::StorageType::from_features())
         .map_err(|e| format!("Failed to initialize database: {}", e))?;
     println!("   ✓ Database initialized\n");
 
