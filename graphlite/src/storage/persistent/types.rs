@@ -31,27 +31,29 @@ pub enum StorageType {
     Memory,
 }
 
+// Compile-time assertion that at least one backend is enabled
+// This will cause a compile error before any code is even generated
+#[cfg(not(any(feature = "sled-backend", feature = "redb-backend")))]
+compile_error!("No storage backend feature enabled. You must specify either '--features sled-backend' or '--features redb-backend' when building.");
+
 impl StorageType {
     /// Get the storage type based on compile-time feature flags
     ///
     /// Returns the backend that was compiled in. If multiple backends are available,
-    /// returns the first one found in order: Sled, Redb, Memory.
-    ///
-    /// # Compile Error
-    /// Fails to compile if no backend feature is enabled.
+    /// returns the first one found in order: Sled, Redb.
     pub fn from_features() -> Self {
+        // If sled is enabled, use it (even if redb is also enabled)
         #[cfg(feature = "sled-backend")]
-        {
-            return StorageType::Sled;
-        }
+        return StorageType::Sled;
+
+        // If only redb is enabled, use it
         #[cfg(all(feature = "redb-backend", not(feature = "sled-backend")))]
-        {
-            return StorageType::Redb;
-        }
+        return StorageType::Redb;
+
+        // This path is unreachable due to compile_error! above,
+        // but needed to satisfy the compiler when features are disabled
         #[cfg(not(any(feature = "sled-backend", feature = "redb-backend")))]
-        {
-            compile_error!("No storage backend feature enabled. You must specify either '--features sled-backend' or '--features redb-backend' when building.");
-        }
+        unreachable!()
     }
 }
 
