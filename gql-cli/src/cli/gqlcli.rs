@@ -237,7 +237,10 @@ pub fn handle_gql(
                     Ok(s) => s,
                     Err(e) => {
                         eprintln!("{}", format!("Failed to extract schema: {}", e).red());
-                        println!("{}", "Make sure you have set a graph with SESSION SET GRAPH".yellow());
+                        println!(
+                            "{}",
+                            "Make sure you have set a graph with SESSION SET GRAPH".yellow()
+                        );
                         continue;
                     }
                 };
@@ -432,7 +435,10 @@ fn extract_schema(coordinator: &Arc<QueryCoordinator>, session_id: &str) -> Resu
 
     // 3. Get all edge types
     let edges_result = coordinator
-        .process_query("MATCH ()-[r]->() RETURN DISTINCT type(r) AS edge_type;", session_id)
+        .process_query(
+            "MATCH ()-[r]->() RETURN DISTINCT type(r) AS edge_type;",
+            session_id,
+        )
         .map_err(|e| e.to_string())?;
 
     let mut edge_types = HashSet::new();
@@ -445,7 +451,8 @@ fn extract_schema(coordinator: &Arc<QueryCoordinator>, session_id: &str) -> Resu
     if !edge_types.is_empty() {
         let mut edges_sorted: Vec<_> = edge_types.iter().collect();
         edges_sorted.sort();
-        let edges_formatted: Vec<String> = edges_sorted.iter().map(|e| format!("- [:{}]", e)).collect();
+        let edges_formatted: Vec<String> =
+            edges_sorted.iter().map(|e| format!("- [:{}]", e)).collect();
         schema_parts.push(format!("Relationships:\n{}", edges_formatted.join("\n")));
     }
 
@@ -494,7 +501,10 @@ fn print_help() {
     println!("  {}  - Exit the GQL console", "exit/quit".cyan());
     println!("  {}  - Clear the screen", "clear".cyan());
     println!("\n{}", "Natural language queries:".bold().green());
-    println!("  {}  - Convert natural language to GQL and execute", "nl: <query>".cyan());
+    println!(
+        "  {}  - Convert natural language to GQL and execute",
+        "nl: <query>".cyan()
+    );
     println!("\n{}", "Query syntax:".bold().green());
     println!("  Multi-line queries are supported");
     println!("  Terminate queries with semicolon (;)");
