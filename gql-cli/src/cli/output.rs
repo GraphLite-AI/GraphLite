@@ -25,7 +25,7 @@ impl ResultFormatter {
         // Check if this is a session command
         if result.is_session_command() {
             if let Some(msg) = result.get_session_message() {
-                return format!("{}\n", format!("{}", msg).green());
+                return format!("{}\n", msg.to_string().green());
             }
         }
 
@@ -62,7 +62,7 @@ impl ResultFormatter {
                 .iter()
                 .map(|col| {
                     row.get_value(col)
-                        .map(|v| Self::value_to_string(v))
+                        .map(Self::value_to_string)
                         .unwrap_or_else(|| "NULL".to_string())
                 })
                 .collect();
@@ -93,7 +93,7 @@ impl ResultFormatter {
                 let mut row_map = serde_json::Map::new();
                 for col in &result.variables {
                     let value = row.get_value(col)
-                        .map(|v| Self::value_to_json(v))
+                        .map(Self::value_to_json)
                         .unwrap_or(serde_json::Value::Null);
                     row_map.insert(col.clone(), value);
                 }
@@ -113,7 +113,8 @@ impl ResultFormatter {
         let json_result = json_obj;
 
         serde_json::to_string_pretty(&json_result).unwrap_or_else(|_| {
-            format!("{{\"status\": \"error\", \"error\": \"Could not serialize results to JSON\"}}")
+            "{\"status\": \"error\", \"error\": \"Could not serialize results to JSON\"}"
+                .to_string()
         })
     }
 
@@ -132,7 +133,7 @@ impl ResultFormatter {
                 .iter()
                 .map(|col| {
                     row.get_value(col)
-                        .map(|v| Self::value_to_csv_string(v))
+                        .map(Self::value_to_csv_string)
                         .unwrap_or_else(|| "".to_string())
                 })
                 .collect();
@@ -166,7 +167,7 @@ impl ResultFormatter {
             Value::Array(arr) | Value::List(arr) => format!(
                 "[{}]",
                 arr.iter()
-                    .map(|v| Self::value_to_string(v))
+                    .map(Self::value_to_string)
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
@@ -211,7 +212,7 @@ impl ResultFormatter {
             }),
             Value::Path(path) => serde_json::json!(format!("{:?}", path)),
             Value::Array(arr) | Value::List(arr) => {
-                serde_json::Value::Array(arr.iter().map(|v| Self::value_to_json(v)).collect())
+                serde_json::Value::Array(arr.iter().map(Self::value_to_json).collect())
             }
             Value::Vector(vec) => {
                 serde_json::Value::Array(vec.iter().map(|v| serde_json::json!(v)).collect())

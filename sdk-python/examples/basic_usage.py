@@ -19,12 +19,15 @@ import shutil
 import sys
 from pathlib import Path
 
-# Add parent directory to path so we can import src
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from src.connection import GraphLite
-from src.error import GraphLiteError, SerializationError, QueryError, TransactionError
-from src.result import TypedResult
+# Import from the installed package
+from graphlite_sdk import (
+    GraphLite,
+    GraphLiteError,
+    SerializationError,
+    QueryError,
+    TransactionError,
+    TypedResult,
+)
 
 @dataclass
 class Person:

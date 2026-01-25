@@ -154,7 +154,7 @@ For full functionality, configure these secrets in your GitHub repository:
 ./scripts/build_all.sh --release --test
 
 # Run integration tests
-./scripts/run_tests.sh --release
+./scripts/run_integration_tests.sh --release
 ```
 
 ### Security Audit
@@ -174,7 +174,7 @@ cargo fmt --all
 
 ### Linting
 ```bash
-cargo clippy --all-targets --all-features -- -D warnings
+./scripts/clippy_all.sh --all
 ```
 
 ## Workflow Badges
@@ -190,8 +190,9 @@ Add these badges to your README.md:
 ## Troubleshooting
 
 ### Tests Failing in CI but Passing Locally
-- Ensure you're running tests with `--test-threads=1` (required for GraphLite)
+- Tests now run in parallel by default (instance-based session isolation)
 - Check if the build mode matches (debug vs release)
+- Verify all test dependencies are properly isolated
 
 ### Cache Issues
 - Clear caches by changing the cache key version

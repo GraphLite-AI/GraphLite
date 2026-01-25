@@ -10,8 +10,9 @@ use crate::catalog::manager::CatalogManager;
 use crate::session::models::{SessionPermissionCache, UserSession};
 use crate::storage::StorageManager;
 use crate::txn::TransactionManager;
-use once_cell::sync::Lazy;
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::sync::{Arc, RwLock};
 
 // Safe to use block_on here as they're not called from within async contexts
@@ -22,10 +23,21 @@ thread_local! {
         .expect("Failed to create runtime for session operations");
 }
 
+/// Number of partitions for lock partitioning
+/// 16 partitions provides good balance between memory overhead and concurrency
+const SESSION_PARTITIONS: usize = 16;
+
+/// Type alias for a session partition
+type SessionPartition = RwLock<HashMap<String, Arc<RwLock<UserSession>>>>;
+
 /// Global session manager that maintains all active sessions
+///
+/// Uses lock partitioning (16 partitions) to reduce lock contention
+/// and improve concurrent session access throughput.
 pub struct SessionManager {
-    /// Registry of all active sessions indexed by session_id
-    sessions: RwLock<HashMap<String, Arc<RwLock<UserSession>>>>,
+    /// Partitioned registry of active sessions indexed by session_id
+    /// Each partition has its own RwLock to reduce contention
+    sessions: [SessionPartition; SESSION_PARTITIONS],
     /// Transaction manager for creating new sessions
     transaction_manager: Arc<TransactionManager>,
     /// Storage manager - singleton shared across all sessions
@@ -41,12 +53,42 @@ impl SessionManager {
         storage_manager: Arc<StorageManager>,
         catalog_manager: Arc<RwLock<CatalogManager>>,
     ) -> Self {
+        // Initialize partitioned session storage
+        // Create array of 16 empty HashMaps
+        let sessions = [
+            RwLock::new(HashMap::new()),
+            RwLock::new(HashMap::new()),
+            RwLock::new(HashMap::new()),
+            RwLock::new(HashMap::new()),
+            RwLock::new(HashMap::new()),
+            RwLock::new(HashMap::new()),
+            RwLock::new(HashMap::new()),
+            RwLock::new(HashMap::new()),
+            RwLock::new(HashMap::new()),
+            RwLock::new(HashMap::new()),
+            RwLock::new(HashMap::new()),
+            RwLock::new(HashMap::new()),
+            RwLock::new(HashMap::new()),
+            RwLock::new(HashMap::new()),
+            RwLock::new(HashMap::new()),
+            RwLock::new(HashMap::new()),
+        ];
+
         Self {
-            sessions: RwLock::new(HashMap::new()),
+            sessions,
             transaction_manager,
             storage_manager,
             catalog_manager,
         }
+    }
+
+    /// Compute partition index for a given session ID
+    /// Uses hash-based partitioning for even distribution
+    #[inline]
+    fn partition_index(&self, session_id: &str) -> usize {
+        let mut hasher = DefaultHasher::new();
+        session_id.hash(&mut hasher);
+        (hasher.finish() as usize) % SESSION_PARTITIONS
     }
 
     /// Get the storage manager
@@ -81,36 +123,39 @@ impl SessionManager {
         let session_id = user_session.session_id.clone();
         let session_arc = Arc::new(RwLock::new(user_session));
 
-        {
-            let mut sessions = self
-                .sessions
-                .write()
-                .map_err(|_| "Failed to acquire sessions write lock")?;
-            sessions.insert(session_id.clone(), session_arc);
-        }
+        // Use partitioned lock for reduced contention
+        let partition_idx = self.partition_index(&session_id);
+        let mut partition = self.sessions[partition_idx]
+            .write()
+            .map_err(|_| "Failed to acquire partition write lock")?;
+        partition.insert(session_id.clone(), session_arc);
 
         Ok(session_id)
     }
 
     /// Get a session by ID
     pub fn get_session(&self, session_id: &str) -> Option<Arc<RwLock<UserSession>>> {
-        let sessions = self.sessions.read().ok()?;
-        sessions.get(session_id).cloned()
+        let partition_idx = self.partition_index(session_id);
+        let partition = self.sessions[partition_idx].read().ok()?;
+        partition.get(session_id).cloned()
     }
 
     /// Remove a session from the registry
     pub fn remove_session(&self, session_id: &str) -> Result<(), String> {
-        let mut sessions = self
-            .sessions
+        let partition_idx = self.partition_index(session_id);
+        let mut partition = self.sessions[partition_idx]
             .write()
-            .map_err(|_| "Failed to acquire sessions write lock")?;
+            .map_err(|_| "Failed to acquire partition write lock")?;
 
-        if let Some(session_arc) = sessions.remove(session_id) {
+        if let Some(session_arc) = partition.remove(session_id) {
             // Mark session as inactive
             if let Ok(mut session) = session_arc.write() {
                 session.deactivate();
             }
         }
+
+        // Release partition lock before catalog persistence
+        drop(partition);
 
         // Persist catalogs when session is removed to ensure data is saved
         if let Ok(catalog_manager) = self.catalog_manager.write() {
@@ -126,24 +171,26 @@ impl SessionManager {
 
     /// Get all active session IDs
     pub fn get_active_session_ids(&self) -> Vec<String> {
-        let sessions = match self.sessions.read() {
-            Ok(sessions) => sessions,
-            Err(_) => return Vec::new(), // In case of poisoned lock, return empty vec
-        };
-        sessions.keys().cloned().collect()
+        let mut all_ids = Vec::new();
+
+        // Collect IDs from all partitions
+        for partition in &self.sessions {
+            if let Ok(sessions) = partition.read() {
+                all_ids.extend(sessions.keys().cloned());
+            }
+        }
+
+        all_ids
     }
 
     /// Clean up expired sessions
     pub fn cleanup_expired_sessions(&self) -> Result<usize, String> {
-        let expired_ids: Vec<String> = {
-            let sessions = self
-                .sessions
-                .read()
-                .map_err(|_| "Failed to acquire sessions read lock")?;
+        let mut expired_ids = Vec::new();
 
-            sessions
-                .iter()
-                .filter_map(|(id, session_arc)| {
+        // Collect expired session IDs from all partitions
+        for partition in &self.sessions {
+            if let Ok(sessions) = partition.read() {
+                expired_ids.extend(sessions.iter().filter_map(|(id, session_arc)| {
                     if let Ok(session) = session_arc.read() {
                         if session.is_expired() {
                             Some(id.clone())
@@ -153,9 +200,9 @@ impl SessionManager {
                     } else {
                         None
                     }
-                })
-                .collect()
-        };
+                }));
+            }
+        }
 
         let count = expired_ids.len();
         for session_id in expired_ids {
@@ -168,9 +215,10 @@ impl SessionManager {
     /// Get session count
     pub fn session_count(&self) -> usize {
         self.sessions
-            .read()
+            .iter()
+            .filter_map(|partition| partition.read().ok())
             .map(|sessions| sessions.len())
-            .unwrap_or(0)
+            .sum()
     }
 
     /// Create an anonymous session for internal/testing use
@@ -187,54 +235,57 @@ impl SessionManager {
     /// This is called when a graph is dropped to prevent stale data access
     /// Returns the number of sessions that were invalidated
     pub fn invalidate_sessions_for_graph(&self, graph_name: &str) -> usize {
-        let sessions_guard = match self.sessions.read() {
-            Ok(guard) => guard,
-            Err(_) => {
-                log::error!("Failed to acquire sessions read lock for graph invalidation");
-                return 0;
-            }
-        };
-
         let mut invalidated_count = 0;
 
-        // Iterate through all sessions and invalidate those using the dropped graph
-        for (session_id, session_arc) in sessions_guard.iter() {
-            let mut session = match session_arc.write() {
+        // Iterate through all partitions and invalidate sessions
+        for partition in &self.sessions {
+            let sessions_guard = match partition.read() {
                 Ok(guard) => guard,
                 Err(_) => {
-                    log::warn!("Failed to acquire write lock for session {}", session_id);
+                    log::error!("Failed to acquire partition read lock for graph invalidation");
                     continue;
                 }
             };
 
-            // Check if this session is currently using the dropped graph
-            if let Some(current_graph) = &session.current_graph {
-                let current_graph_clone = current_graph.clone(); // Clone to avoid borrowing issues
+            // Iterate through all sessions in this partition
+            for (session_id, session_arc) in sessions_guard.iter() {
+                let mut session = match session_arc.write() {
+                    Ok(guard) => guard,
+                    Err(_) => {
+                        log::warn!("Failed to acquire write lock for session {}", session_id);
+                        continue;
+                    }
+                };
 
-                // Handle both "/graph_name" and "graph_name" formats
-                let matches = current_graph == graph_name
-                    || current_graph == &format!("/{}", graph_name)
-                    || current_graph.strip_prefix('/') == Some(graph_name);
+                // Check if this session is currently using the dropped graph
+                if let Some(current_graph) = &session.current_graph {
+                    let current_graph_clone = current_graph.clone(); // Clone to avoid borrowing issues
 
-                if matches {
-                    // Clear only the graph context to prevent stale data access
-                    // Keep the schema since it's independent of any particular graph
-                    session.current_graph = None;
+                    // Handle both "/graph_name" and "graph_name" formats
+                    let matches = current_graph == graph_name
+                        || current_graph == &format!("/{}", graph_name)
+                        || current_graph.strip_prefix('/') == Some(graph_name);
 
-                    log::info!(
-                        "Invalidated session {} using dropped graph '{}' (was: '{}')",
-                        session_id,
-                        graph_name,
-                        current_graph_clone
-                    );
-                    invalidated_count += 1;
-                } else {
-                    log::debug!(
-                        "Session {} using different graph '{}', not invalidating for '{}'",
-                        session_id,
-                        current_graph_clone,
-                        graph_name
-                    );
+                    if matches {
+                        // Clear only the graph context to prevent stale data access
+                        // Keep the schema since it's independent of any particular graph
+                        session.current_graph = None;
+
+                        log::info!(
+                            "Invalidated session {} using dropped graph '{}' (was: '{}')",
+                            session_id,
+                            graph_name,
+                            current_graph_clone
+                        );
+                        invalidated_count += 1;
+                    } else {
+                        log::debug!(
+                            "Session {} using different graph '{}', not invalidating for '{}'",
+                            session_id,
+                            current_graph_clone,
+                            graph_name
+                        );
+                    }
                 }
             }
         }
@@ -265,20 +316,22 @@ impl SessionManager {
             log::info!("Successfully persisted all catalogs during shutdown");
         }
 
-        // Close all active sessions
-        let session_ids: Vec<String> = {
-            if let Ok(sessions) = self.sessions.read() {
-                sessions.keys().cloned().collect()
-            } else {
-                Vec::new()
-            }
-        };
+        // Close all active sessions across all partitions
+        for partition in &self.sessions {
+            let session_ids: Vec<String> = {
+                if let Ok(sessions) = partition.read() {
+                    sessions.keys().cloned().collect()
+                } else {
+                    continue;
+                }
+            };
 
-        for session_id in session_ids {
-            if let Ok(mut sessions) = self.sessions.write() {
-                if let Some(session_arc) = sessions.remove(&session_id) {
-                    if let Ok(mut session) = session_arc.write() {
-                        session.deactivate();
+            for session_id in session_ids {
+                if let Ok(mut sessions) = partition.write() {
+                    if let Some(session_arc) = sessions.remove(&session_id) {
+                        if let Ok(mut session) = session_arc.write() {
+                            session.deactivate();
+                        }
                     }
                 }
             }
@@ -291,78 +344,6 @@ impl SessionManager {
         }
 
         log::info!("SessionManager shutdown completed");
-        Ok(())
-    }
-}
-
-/// Global session manager instance
-/// This will be initialized when the application starts
-pub static SESSION_MANAGER: Lazy<RwLock<Option<Arc<SessionManager>>>> =
-    Lazy::new(|| RwLock::new(None));
-
-/// Get the global session manager instance
-/// Returns None if not initialized
-pub fn get_session_manager() -> Option<Arc<SessionManager>> {
-    SESSION_MANAGER.read().ok()?.clone()
-}
-
-/// Clear the global session manager (for force reinstall/cleanup)
-/// This will reset the global SessionManager to None
-#[allow(dead_code)] // Utility function for cleanup during testing and reinstall operations
-pub fn clear_session_manager() -> Result<(), String> {
-    if let Ok(mut global_manager) = SESSION_MANAGER.write() {
-        *global_manager = None;
-        Ok(())
-    } else {
-        Err("Failed to acquire write lock on session manager".to_string())
-    }
-}
-
-/// Set the global session manager
-/// This should be called once during application initialization
-pub fn set_session_manager(manager: Arc<SessionManager>) -> Result<(), String> {
-    if let Ok(mut global_manager) = SESSION_MANAGER.write() {
-        *global_manager = Some(manager);
-        log::info!("✅ Global session manager initialized");
-        Ok(())
-    } else {
-        Err("Failed to acquire write lock on session manager".to_string())
-    }
-}
-
-/// Convenience function to get a session by ID from global manager
-pub fn get_session(session_id: &str) -> Option<Arc<RwLock<UserSession>>> {
-    get_session_manager()?.get_session(session_id)
-}
-
-/// Convenience function to create a session using global manager
-#[allow(dead_code)] // Convenience wrapper for session creation from global manager
-pub fn create_session(
-    username: String,
-    roles: Vec<String>,
-    permissions: SessionPermissionCache,
-) -> Result<String, String> {
-    get_session_manager()
-        .ok_or("Session manager not initialized")?
-        .create_session(username, roles, permissions)
-}
-
-/// Convenience function to create anonymous session using global manager
-#[allow(dead_code)] // Convenience wrapper for anonymous session creation
-pub fn create_anonymous_session() -> Result<String, String> {
-    get_session_manager()
-        .ok_or("Session manager not initialized")?
-        .create_anonymous_session()
-}
-
-/// Graceful shutdown of the global session manager
-/// This should be called when the application is shutting down
-#[allow(dead_code)] // Graceful shutdown handler for application termination
-pub fn shutdown_session_manager() -> Result<(), String> {
-    if let Some(session_manager) = get_session_manager() {
-        session_manager.shutdown()
-    } else {
-        log::warn!("No session manager to shutdown");
         Ok(())
     }
 }

@@ -5,24 +5,18 @@
 //! - User creation, listing, and deletion
 //! - System procedure calls for security catalog introspection
 //! - Error handling and edge cases
+//!
+//! Note: All tests use isolated fixtures to avoid race conditions when running in parallel
 
 #[path = "testutils/mod.rs"]
 mod testutils;
 
 use graphlite::Value;
-use std::sync::OnceLock;
 use testutils::test_fixture::TestFixture;
-
-static SECURITY_FIXTURE: OnceLock<TestFixture> = OnceLock::new();
-
-fn get_security_fixture() -> &'static TestFixture {
-    SECURITY_FIXTURE
-        .get_or_init(|| TestFixture::empty().expect("Failed to create security test fixture"))
-}
 
 #[test]
 fn test_role_lifecycle() {
-    let fixture = get_security_fixture();
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Test CREATE ROLE
     fixture.assert_query_succeeds("CREATE ROLE 'data_scientist'");
@@ -53,7 +47,7 @@ fn test_role_lifecycle() {
 
 #[test]
 fn test_role_listing() {
-    let fixture = get_security_fixture();
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Create some test roles
     let if_not_exists_result = fixture.query("CREATE ROLE IF NOT EXISTS 'test_role_1'");
@@ -108,7 +102,7 @@ fn test_role_listing() {
 
 #[test]
 fn test_user_lifecycle() {
-    let fixture = get_security_fixture();
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Test CREATE USER
     fixture.assert_query_succeeds("CREATE USER 'alice' PASSWORD 'password123'");
@@ -140,7 +134,7 @@ fn test_user_lifecycle() {
 
 #[test]
 fn test_user_listing() {
-    let fixture = get_security_fixture();
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Create some test users
     let if_not_exists_result =
@@ -198,7 +192,7 @@ fn test_user_listing() {
 
 #[test]
 fn test_role_assignment() {
-    let fixture = get_security_fixture();
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Create roles and users for assignment testing
     let if_not_exists_result = fixture.query("CREATE ROLE IF NOT EXISTS 'admin'");
@@ -206,10 +200,8 @@ fn test_role_assignment() {
         fixture.assert_query_succeeds("CREATE ROLE IF NOT EXISTS 'editor'");
     } else {
         // Try creating the roles, but handle the case where they already exist
-        let admin_result = fixture.query("CREATE ROLE 'admin'");
-        if admin_result.is_err() {}
-        let editor_result = fixture.query("CREATE ROLE 'editor'");
-        if editor_result.is_err() {}
+        let _ = fixture.query("CREATE ROLE 'admin'");
+        let _ = fixture.query("CREATE ROLE 'editor'");
     }
     let if_not_exists_result =
         fixture.query("CREATE USER IF NOT EXISTS 'testuser' PASSWORD 'password'");
@@ -220,38 +212,35 @@ fn test_role_assignment() {
     // Test role assignment (if GRANT ROLE is implemented)
     // Note: This might not be implemented yet, so we'll make it conditional
     let grant_result = fixture.query("GRANT ROLE 'admin' TO 'testuser'");
-    match grant_result {
-        Ok(_) => {
-            // Test multiple role assignment
-            fixture.assert_query_succeeds("GRANT ROLE 'editor' TO 'testuser'");
+    if grant_result.is_ok() {
+        // Test multiple role assignment
+        fixture.assert_query_succeeds("GRANT ROLE 'editor' TO 'testuser'");
 
-            // Verify roles in user listing
-            let result = fixture.assert_query_succeeds("CALL gql.list_users()");
-            let test_user_row = result.rows.iter().find(|row| {
-                if let Some(Value::String(username)) = row.values.get("username") {
-                    username == "testuser"
-                } else {
-                    false
-                }
-            });
-
-            if let Some(user_row) = test_user_row {
-                if let Some(Value::String(roles)) = user_row.values.get("roles") {
-                    assert!(roles.contains("admin"), "User should have admin role");
-                    assert!(roles.contains("editor"), "User should have editor role");
-                }
+        // Verify roles in user listing
+        let result = fixture.assert_query_succeeds("CALL gql.list_users()");
+        let test_user_row = result.rows.iter().find(|row| {
+            if let Some(Value::String(username)) = row.values.get("username") {
+                username == "testuser"
+            } else {
+                false
             }
+        });
 
-            // Test role revocation
-            fixture.assert_query_succeeds("REVOKE ROLE 'editor' FROM 'testuser'");
+        if let Some(user_row) = test_user_row {
+            if let Some(Value::String(roles)) = user_row.values.get("roles") {
+                assert!(roles.contains("admin"), "User should have admin role");
+                assert!(roles.contains("editor"), "User should have editor role");
+            }
         }
-        Err(_) => {}
+
+        // Test role revocation
+        fixture.assert_query_succeeds("REVOKE ROLE 'editor' FROM 'testuser'");
     }
 }
 
 #[test]
 fn test_authentication() {
-    let fixture = get_security_fixture();
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Create a test user
     let if_not_exists_result =
@@ -262,33 +251,30 @@ fn test_authentication() {
 
     // Test authentication procedure
     let auth_result = fixture.query("CALL gql.authenticate_user('authtest', 'testpass123')");
-    match auth_result {
-        Ok(result) => {
-            // Verify the result structure
-            assert!(
-                !result.rows.is_empty(),
-                "Authentication should return user info"
-            );
+    if let Ok(result) = auth_result {
+        // Verify the result structure
+        assert!(
+            !result.rows.is_empty(),
+            "Authentication should return user info"
+        );
 
-            // Test invalid password
-            fixture.assert_query_fails(
-                "CALL gql.authenticate_user('authtest', 'wrongpass')",
-                "Authentication failed",
-            );
+        // Test invalid password
+        fixture.assert_query_fails(
+            "CALL gql.authenticate_user('authtest', 'wrongpass')",
+            "Authentication failed",
+        );
 
-            // Test non-existent user
-            fixture.assert_query_fails(
-                "CALL gql.authenticate_user('nonexistent', 'anypass')",
-                "Authentication failed",
-            );
-        }
-        Err(_) => {}
+        // Test non-existent user
+        fixture.assert_query_fails(
+            "CALL gql.authenticate_user('nonexistent', 'anypass')",
+            "Authentication failed",
+        );
     }
 }
 
 #[test]
 fn test_security_edge_cases() {
-    let fixture = get_security_fixture();
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Test empty role names (this might not be validated in current implementation)
     let empty_role_result = fixture.query("CREATE ROLE ''");
@@ -357,7 +343,7 @@ fn test_security_edge_cases() {
 
 #[test]
 fn test_procedure_argument_validation() {
-    let fixture = get_security_fixture();
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Test gql.list_roles with arguments (should work with no args)
     fixture.assert_query_succeeds("CALL gql.list_roles()");
@@ -390,7 +376,7 @@ fn test_procedure_argument_validation() {
 
 #[test]
 fn test_transaction_integrity() {
-    let fixture = get_security_fixture();
+    let fixture = TestFixture::empty().expect("Failed to create test fixture");
 
     // Test that role creation is transactional
     fixture.assert_query_succeeds("BEGIN");
@@ -431,7 +417,6 @@ fn test_transaction_integrity() {
     if role_names_after.contains(&"tx_test_role".to_string()) {
         // Clean up the role that should have been rolled back
         let _cleanup = fixture.query("DROP ROLE 'tx_test_role'");
-    } else {
     }
 
     // Test committed transaction

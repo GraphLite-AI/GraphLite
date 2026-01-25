@@ -1,6 +1,6 @@
-import com.deepgraph.graphlite.GraphLite;
-import com.deepgraph.graphlite.GraphLite.GraphLiteException;
-import com.deepgraph.graphlite.QueryResult;
+import io.graphlite.GraphLite;
+import io.graphlite.GraphLite.GraphLiteException;
+import io.graphlite.QueryResult;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -33,12 +33,12 @@ public class BasicUsage {
             System.out.println("\n=== Example completed successfully ===");
 
         } catch (GraphLiteException e) {
-            System.err.println("\n❌ GraphLite Error: " + e.getMessage());
+            System.err.println("\n[ERROR] GraphLite Error: " + e.getMessage());
             System.err.println("Error code: " + e.getErrorCode());
             System.exit(1);
 
         } catch (Exception e) {
-            System.err.println("\n❌ Unexpected error: " + e.getMessage());
+            System.err.println("\n[ERROR] Unexpected error: " + e.getMessage());
             e.printStackTrace();
             System.exit(1);
 
@@ -66,30 +66,30 @@ public class BasicUsage {
         // 1. Open database
         System.out.println("1. Opening database...");
         try (GraphLite db = GraphLite.open(dbPath)) {
-            System.out.println("   ✓ GraphLite version: " + GraphLite.version() + "\n");
+            System.out.println("   [OK] GraphLite version: " + GraphLite.version() + "\n");
 
             // 2. Create session
             System.out.println("2. Creating session...");
             String session = db.createSession("admin");
-            System.out.println("   ✓ Session created: " + session.substring(0, 20) + "...\n");
+            System.out.println("   [OK] Session created: " + session.substring(0, 20) + "...\n");
 
             // 3. Create schema and graph
             System.out.println("3. Setting up schema and graph...");
-            db.execute(session, "CREATE SCHEMA IF NOT EXISTS example");
-            db.execute(session, "USE SCHEMA example");
+            db.execute(session, "CREATE SCHEMA IF NOT EXISTS /example");
+            db.execute(session, "SESSION SET SCHEMA /example");
             db.execute(session, "CREATE GRAPH IF NOT EXISTS social");
-            db.execute(session, "USE GRAPH social");
-            System.out.println("   ✓ Schema and graph created\n");
+            db.execute(session, "SESSION SET GRAPH social");
+            System.out.println("   [OK] Schema and graph created\n");
 
             // 4. Insert data
             System.out.println("4. Inserting data...");
-            db.execute(session, "CREATE (p:Person {name: 'Alice', age: 30})");
-            db.execute(session, "CREATE (p:Person {name: 'Bob', age: 25})");
-            db.execute(session, "CREATE (p:Person {name: 'Charlie', age: 35})");
-            System.out.println("   ✓ Inserted 3 persons\n");
+            db.execute(session, "INSERT (:Person {name: 'Alice', age: 30})");
+            db.execute(session, "INSERT (:Person {name: 'Bob', age: 25})");
+            db.execute(session, "INSERT (:Person {name: 'Charlie', age: 35})");
+            System.out.println("   [OK] Inserted 3 persons\n");
 
             // 5. Query data
-            System.out.println("5. Querying data...");
+            System.out.println("5. Querying: All persons' age and name)");
             QueryResult result = db.query(session,
                 "MATCH (p:Person) RETURN p.name as name, p.age as age");
             System.out.println("   Found " + result.getRowCount() + " persons:");
@@ -99,10 +99,10 @@ public class BasicUsage {
             System.out.println();
 
             // 6. Filter with WHERE
-            System.out.println("6. Filtering with WHERE clause...");
+            System.out.println("6. Filtering: Persons older than 25 years in the ascending order of age");
             result = db.query(session,
                 "MATCH (p:Person) WHERE p.age > 25 " +
-                "RETURN p.name as name, p.age as age ORDER BY p.age DESC");
+                "RETURN p.name as name, p.age as age ORDER BY p.age ASC");
             System.out.println("   Found " + result.getRowCount() + " persons over 25:");
             for (Map<String, Object> row : result.getRows()) {
                 System.out.println("   - " + row.get("name") + ": " + row.get("age") + " years old");
@@ -116,7 +116,8 @@ public class BasicUsage {
             if (!result.isEmpty()) {
                 Map<String, Object> row = result.first();
                 System.out.println("   Total persons: " + row.get("total"));
-                System.out.println("   Average age: " + String.format("%.1f", row.get("avg_age")));
+                Object avgAge = row.get("avg_age");
+                System.out.println("   Average age: " + (avgAge instanceof Number ? ((Number) avgAge).doubleValue() : avgAge));
             }
             System.out.println();
 
@@ -128,7 +129,7 @@ public class BasicUsage {
             // 9. Close session
             System.out.println("9. Closing session...");
             db.closeSession(session);
-            System.out.println("   ✓ Session closed\n");
+            System.out.println("   [OK] Session closed\n");
 
         } // Database automatically closed (try-with-resources)
         System.out.println("10. Database closed");

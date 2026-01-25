@@ -28,15 +28,13 @@ pub fn handle_install(
     yes: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Check if database already exists
-    if path.exists() && !force {
-        if !yes {
-            println!(
-                "{}",
-                format!("Database already exists at {:?}", path).yellow()
-            );
-            println!("Use --force to reinstall, or choose a different path.");
-            return Err("Database already exists".into());
-        }
+    if path.exists() && !force && !yes {
+        println!(
+            "{}",
+            format!("Database already exists at {:?}", path).yellow()
+        );
+        println!("Use --force to reinstall, or choose a different path.");
+        return Err("Database already exists".into());
     }
 
     // Prompt for password if not provided

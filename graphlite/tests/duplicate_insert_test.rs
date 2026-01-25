@@ -192,7 +192,7 @@ fn test_multiple_inserts_in_sequence() {
     for i in 1..=3 {
         fixture
             .query("INSERT (:Person {name: 'Bob', age: 25})")
-            .expect(&format!("INSERT {} should succeed", i));
+            .unwrap_or_else(|_| panic!("INSERT {} should succeed", i));
     }
 
     // Check total count

@@ -331,7 +331,7 @@ impl<'session> QueryBuilder<'session> {
     }
 }
 
-impl<'session> Session {
+impl Session {
     /// Get a query builder for this session
     ///
     /// Convenience method for creating a query builder.

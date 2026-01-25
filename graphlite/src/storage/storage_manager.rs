@@ -8,7 +8,7 @@
 //!
 //! Architecture:
 //! - Cache: Local in-memory cache for hot data (via MultiGraphManager)
-//! - Persistent Store: Optional disk-based storage (RocksDB/Sled via DataAdapter)
+//! - Persistent Store: Optional disk-based storage (Sled via DataAdapter)
 //! - Memory Store: Optional external memory store (Redis/Valkey via DataAdapter)
 //!
 //! At least one of persistent_store or memory_store must be configured.
@@ -28,7 +28,7 @@ use std::sync::Arc;
 /// Storage method configuration
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
 pub enum StorageMethod {
-    /// Disk-based storage only (RocksDB/Sled)
+    /// Disk-based storage only (Sled)
     #[default]
     DiskOnly,
     /// Memory-based storage only (Redis/Valkey)
@@ -43,10 +43,10 @@ pub struct StorageManager {
     /// Local in-memory cache for hot data
     cache: Arc<MultiGraphManager>,
 
-    /// Single storage driver instance (RocksDB/Sled) - created once at initialization
+    /// Single storage driver instance (Sled) - created once at initialization
     storage_driver: Option<Arc<Box<dyn StorageDriver<Tree = Box<dyn StorageTree>>>>>,
 
-    /// Optional disk-based persistent storage (RocksDB/Sled)
+    /// Optional disk-based persistent storage (Sled)
     persistent_store: Option<Arc<DataAdapter>>,
 
     /// Optional external memory store (Redis/Valkey)
@@ -78,7 +78,7 @@ impl StorageManager {
         }
     }
 
-    /// Initialize storage manager with disk-only storage (RocksDB/Sled)
+    /// Initialize storage manager with disk-only storage (Sled)
     fn init_disk_only<P: AsRef<Path>>(
         path: P,
         storage_type: StorageType,

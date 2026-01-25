@@ -1,10 +1,9 @@
 //! Test all examples from README.md to ensure they are correct and functional
 //!
-//! NOTE: These tests must be run with `--test-threads=1` due to shared global
-//! SessionManager in the test infrastructure. Run with:
-//! ```
-//! cargo test --test readme_examples_test -- --test-threads=1
-//! ```
+//! These tests use instance-based session management which provides complete
+//! isolation between test cases. They can now safely run in parallel.
+//!
+//! Run with: cargo test --test readme_examples_test
 
 #[path = "testutils/mod.rs"]
 mod testutils;
@@ -114,7 +113,7 @@ fn test_readme_friends_of_friends() {
 
     // Should return Carol and Dave
     assert!(
-        result.rows.len() >= 1,
+        !result.rows.is_empty(),
         "Should find at least one friend of friend"
     );
 
@@ -154,7 +153,7 @@ fn test_readme_variable_length_paths() {
         )
         .expect("Variable-length paths query should succeed");
 
-    assert!(result.rows.len() > 0, "Should find paths");
+    assert!(!result.rows.is_empty(), "Should find paths");
 }
 
 #[test]
@@ -177,7 +176,7 @@ fn test_readme_multiple_patterns_coworkers() {
 
     // Should find Alice and Bob at TechCorp
     assert!(
-        result.rows.len() > 0,
+        !result.rows.is_empty(),
         "Should find coworkers who know each other"
     );
 }
@@ -243,7 +242,7 @@ fn test_readme_insert_with_functions() {
         Some(&Value::Number(1299.99))
     );
     // warranty is duration in seconds: P2Y = 2 years ≈ 63072000 seconds
-    assert!(result.rows[0].values.get("p.warranty").is_some());
+    assert!(result.rows[0].values.contains_key("p.warranty"));
 }
 
 #[test]
@@ -494,7 +493,7 @@ fn test_readme_count_relationships() {
         )
         .expect("COUNT query should succeed");
 
-    assert!(result.rows.len() > 0, "Should have results");
+    assert!(!result.rows.is_empty(), "Should have results");
 
     // Verify Alice has 2 friends
     let alice_row = result

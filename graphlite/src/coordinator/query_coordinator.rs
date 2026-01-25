@@ -10,7 +10,9 @@ use crate::ast::parser::parse_query;
 use crate::cache::CacheManager;
 use crate::catalog::manager::CatalogManager;
 use crate::exec::{ExecutionRequest, QueryExecutor, QueryResult};
-use crate::session::SessionManager;
+use crate::session::{
+    GlobalSessionProvider, InstanceSessionProvider, SessionManager, SessionMode, SessionProvider,
+};
 use crate::storage::{StorageManager, StorageMethod, StorageType};
 use crate::txn::TransactionManager;
 use std::panic::{RefUnwindSafe, UnwindSafe};
@@ -26,8 +28,8 @@ use std::sync::RwLock;
 /// - Execution coordination
 /// - Result processing
 pub struct QueryCoordinator {
-    /// Session manager for session lookups
-    session_manager: Arc<SessionManager>,
+    /// Session provider (trait object for flexible session storage)
+    session_provider: Arc<dyn SessionProvider>,
     /// Query executor
     executor: Arc<QueryExecutor>,
 }
@@ -91,29 +93,129 @@ impl QueryCoordinator {
                 format!("Failed to initialize cache manager: {}", e)
             })?));
 
+        // Create instance-based session provider (embedded mode)
+        let session_provider: Arc<dyn SessionProvider> = Arc::new(InstanceSessionProvider::new(
+            transaction_manager.clone(),
+            storage.clone(),
+            catalog_manager.clone(),
+        ));
+
         // Create query executor
         let executor = Arc::new(
             QueryExecutor::new(
                 storage.clone(),
                 catalog_manager.clone(),
                 transaction_manager.clone(),
+                session_provider.clone(),
                 cache_manager,
             )
             .map_err(|e| format!("Failed to initialize query executor: {}", e))?,
         );
 
-        // Create session manager
-        let session_manager = Arc::new(SessionManager::new(
-            transaction_manager,
-            storage,
-            catalog_manager,
-        ));
+        Ok(Arc::new(Self::new(executor, session_provider)))
+    }
 
-        // Register as the global session manager for ExecutionContext lookups
-        crate::session::manager::set_session_manager(session_manager.clone())
-            .map_err(|e| format!("Failed to set global session manager: {}", e))?;
+    /// Create a new QueryCoordinator with specified session mode
+    ///
+    /// This method allows you to choose between Instance and Global session management.
+    ///
+    /// # Arguments
+    /// * `db_path` - Path to the database directory
+    /// * `mode` - Session management mode (Instance or Global)
+    ///
+    /// # Returns
+    /// * `Ok(Arc<QueryCoordinator>)` - Initialized coordinator ready for use
+    /// * `Err(String)` - Error message if initialization fails
+    ///
+    /// # Session Modes
+    ///
+    /// - **SessionMode::Instance** (default): Each QueryCoordinator instance has its own
+    ///   isolated session pool. Sessions are not shared between instances. Use this mode
+    ///   for embedded databases where each application instance needs complete isolation.
+    ///
+    /// - **SessionMode::Global**: All QueryCoordinator instances share a process-wide
+    ///   session pool. Sessions created in one coordinator are visible to all coordinators
+    ///   in the same process. Use this mode for server/daemon applications where multiple
+    ///   coordinators need to access the same user sessions.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use graphlite::QueryCoordinator;
+    /// use graphlite::SessionMode;
+    ///
+    /// // Embedded mode - each instance isolated (default behavior)
+    /// let coord1 = QueryCoordinator::from_path_with_mode("db1.graphlite", SessionMode::Instance)?;
+    /// let coord2 = QueryCoordinator::from_path_with_mode("db2.graphlite", SessionMode::Instance)?;
+    /// // coord1 and coord2 have separate session pools
+    ///
+    /// // Server mode - shared session pool
+    /// let coord1 = QueryCoordinator::from_path_with_mode("db.graphlite", SessionMode::Global)?;
+    /// let coord2 = QueryCoordinator::from_path_with_mode("db.graphlite", SessionMode::Global)?;
+    /// // coord1 and coord2 share the same session pool
+    /// # Ok::<(), String>(())
+    /// ```
+    pub fn from_path_with_mode(
+        db_path: impl AsRef<Path>,
+        mode: SessionMode,
+    ) -> Result<Arc<Self>, String> {
+        let path = db_path.as_ref().to_path_buf();
 
-        Ok(Arc::new(Self::new(session_manager, executor)))
+        // Initialize storage
+        let storage = Arc::new(
+            StorageManager::new(path.clone(), StorageMethod::DiskOnly, StorageType::Sled)
+                .map_err(|e| format!("Failed to initialize storage: {}", e))?,
+        );
+
+        // Initialize catalog manager
+        let catalog_manager = Arc::new(RwLock::new(CatalogManager::new(storage.clone())));
+
+        // Initialize transaction manager with database path
+        let transaction_manager = Arc::new(
+            TransactionManager::new(path.clone())
+                .map_err(|e| format!("Failed to initialize transaction manager: {}", e))?,
+        );
+
+        // Initialize cache manager
+        let cache_config = crate::cache::CacheConfig::default();
+        let cache_manager =
+            Some(Arc::new(CacheManager::new(cache_config).map_err(|e| {
+                format!("Failed to initialize cache manager: {}", e)
+            })?));
+
+        // Create session provider based on mode
+        let session_provider: Arc<dyn SessionProvider> = match mode {
+            SessionMode::Instance => {
+                // Instance mode: Each coordinator has isolated sessions
+                Arc::new(InstanceSessionProvider::new(
+                    transaction_manager.clone(),
+                    storage.clone(),
+                    catalog_manager.clone(),
+                ))
+            }
+            SessionMode::Global => {
+                // Global mode: All coordinators share process-wide session pool
+                Arc::new(GlobalSessionProvider::new(
+                    transaction_manager.clone(),
+                    storage.clone(),
+                    catalog_manager.clone(),
+                ))
+            }
+        };
+
+        // Create query executor
+        let executor = Arc::new(
+            QueryExecutor::new(
+                storage.clone(),
+                catalog_manager.clone(),
+                transaction_manager.clone(),
+                session_provider.clone(),
+                cache_manager,
+            )
+            .map_err(|e| format!("Failed to initialize query executor: {}", e))?,
+        );
+
+        Ok(Arc::new(Self::new(executor, session_provider)))
     }
 
     /// Create a new QueryCoordinator (Advanced API)
@@ -122,11 +224,11 @@ impl QueryCoordinator {
     /// over component initialization. Most users should use `from_path()` instead.
     ///
     /// # Arguments
-    /// * `session_manager` - Session manager with initialized components
     /// * `executor` - Query executor
-    pub fn new(session_manager: Arc<SessionManager>, executor: Arc<QueryExecutor>) -> Self {
+    /// * `session_provider` - Session provider (trait object)
+    pub fn new(executor: Arc<QueryExecutor>, session_provider: Arc<dyn SessionProvider>) -> Self {
         Self {
-            session_manager,
+            session_provider,
             executor,
         }
     }
@@ -147,7 +249,7 @@ impl QueryCoordinator {
         let document = parse_query(query_text).map_err(|e| format!("Parse error: {:?}", e))?;
 
         // Get session
-        let session = self.session_manager.get_session(session_id);
+        let session = self.session_provider.get_session(session_id);
 
         // Create execution request
         let request = ExecutionRequest::new(document.statement)
@@ -183,7 +285,7 @@ impl QueryCoordinator {
             } => {
                 // Get session
                 let session_arc = self
-                    .session_manager
+                    .session_provider
                     .get_session(session_id)
                     .ok_or_else(|| format!("Session not found: {}", session_id))?;
 
@@ -243,7 +345,7 @@ impl QueryCoordinator {
             } => {
                 // Get session
                 let session_arc = self
-                    .session_manager
+                    .session_provider
                     .get_session(session_id)
                     .ok_or_else(|| format!("Session not found: {}", session_id))?;
 
@@ -287,7 +389,7 @@ impl QueryCoordinator {
         // Create default permissions with full access
         let permissions = SessionPermissionCache::default();
 
-        self.session_manager
+        self.session_provider
             .create_session(username.into(), vec![], permissions)
     }
 
@@ -310,7 +412,7 @@ impl QueryCoordinator {
         roles: Vec<String>,
         permissions: crate::session::SessionPermissionCache,
     ) -> Result<String, String> {
-        self.session_manager
+        self.session_provider
             .create_session(username, roles, permissions)
     }
 
@@ -343,7 +445,7 @@ impl QueryCoordinator {
         use crate::session::SessionPermissionCache;
 
         // Get catalog manager and authenticate
-        let catalog_manager = self.session_manager.get_catalog_manager();
+        let catalog_manager = self.session_provider.get_catalog_manager();
         let catalog_lock = catalog_manager
             .read()
             .map_err(|_| "Failed to acquire catalog lock".to_string())?;
@@ -389,7 +491,7 @@ impl QueryCoordinator {
         }
 
         // Create session with authenticated user's roles
-        self.session_manager.create_session(
+        self.session_provider.create_session(
             username.to_string(),
             user_roles,
             SessionPermissionCache::new(),
@@ -419,7 +521,7 @@ impl QueryCoordinator {
     pub fn set_user_password(&self, username: &str, password: &str) -> Result<(), String> {
         use crate::catalog::operations::{CatalogOperation, EntityType};
 
-        let catalog_manager = self.session_manager.get_catalog_manager();
+        let catalog_manager = self.session_provider.get_catalog_manager();
         let mut catalog_lock = catalog_manager
             .write()
             .map_err(|_| "Failed to acquire catalog write lock".to_string())?;
@@ -451,12 +553,25 @@ impl QueryCoordinator {
     ///
     /// Removes the session from the session manager.
     pub fn close_session(&self, session_id: &str) -> Result<(), String> {
-        self.session_manager.remove_session(session_id)
+        self.session_provider.remove_session(session_id)
     }
 
-    /// Get the session manager reference
-    pub fn session_manager(&self) -> &Arc<SessionManager> {
-        &self.session_manager
+    /// Get the session manager reference (for backward compatibility)
+    ///
+    /// Note: This returns the underlying SessionManager from the InstanceSessionProvider.
+    /// For new code, prefer using session_provider methods directly through QueryCoordinator.
+    pub fn session_manager(&self) -> Arc<SessionManager> {
+        // For Phase 0, we know the provider is InstanceSessionProvider
+        // This method provides backward compatibility
+        if let Some(instance_provider) = self
+            .session_provider
+            .as_any()
+            .downcast_ref::<InstanceSessionProvider>()
+        {
+            instance_provider.manager()
+        } else {
+            panic!("session_manager() is only supported with InstanceSessionProvider")
+        }
     }
 
     /// Get the executor reference

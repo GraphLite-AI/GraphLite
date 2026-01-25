@@ -7,7 +7,7 @@
 //! It handles the instantiation and setup of different storage driver types.
 
 use super::traits::{StorageDriver, StorageTree};
-use super::types::{StorageDriverError, StorageResult, StorageType};
+use super::types::{StorageResult, StorageType};
 use std::path::Path;
 
 /// Factory function to create a storage driver based on configuration
@@ -16,7 +16,7 @@ use std::path::Path;
 /// and path, then returns the appropriate driver implementation as a trait object.
 ///
 /// # Arguments
-/// * `storage_type` - The type of storage driver to create (RocksDB, Sled, etc.)
+/// * `storage_type` - The type of storage driver to create (Sled or Memory)
 /// * `path` - The filesystem path where the database should be stored
 ///
 /// # Returns
@@ -39,9 +39,6 @@ pub fn create_storage_driver<P: AsRef<Path>>(
             let driver = SledDriver::open(path)?;
             Ok(Box::new(driver) as Box<dyn StorageDriver<Tree = Box<dyn StorageTree>>>)
         }
-        StorageType::RocksDB => Err(StorageDriverError::BackendSpecific(
-            "RocksDB storage backend not yet implemented".to_string(),
-        )),
         StorageType::Memory => {
             use crate::storage::persistent::memory::MemoryStorageDriver;
             let driver = MemoryStorageDriver::open(path)?;

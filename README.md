@@ -250,9 +250,9 @@ $ gql>
 
 ## Testing
 
-GraphLite includes comprehensive test coverage with **185 unit tests** and **250+ integration tests**.
+GraphLite includes comprehensive test coverage with **189 unit tests** and **537 total tests** (including integration and benchmark tests).
 
-**Note**: Tests are configured to run single-threaded by default (via `.cargo/config.toml`) to avoid database state conflicts.
+**Note**: Tests now run in parallel by default thanks to instance-based session isolation, providing ~10x faster test execution compared to the previous single-threaded approach.
 
 ### Quick Testing
 ```bash
@@ -261,12 +261,25 @@ cargo test --release
 ```
 
 ### Comprehensive Testing
+
+**Recommended: Parallel Test Runner** (~10x faster)
 ```bash
-# Run all integration tests with organized output and summary
-./scripts/run_tests.sh --release
+# Fast parallel execution (8 jobs, ~75 seconds for 169 tests)
+./scripts/run_integration_tests_parallel.sh --release --jobs=8
+
+# With failure analysis
+./scripts/run_integration_tests_parallel.sh --release --jobs=8 --analyze
+```
+
+**Note**: Requires GNU Parallel (`brew install parallel` on macOS, `apt install parallel` on Ubuntu)
+
+**Alternative: Sequential Test Runner** (slower but no dependencies)
+```bash
+# Run all integration tests sequentially (~10-15 minutes)
+./scripts/run_integration_tests.sh --release
 
 # Include detailed failure analysis for debugging
-./scripts/run_tests.sh --release --analyze
+./scripts/run_integration_tests.sh --release --analyze
 ```
 
 ### Specific Tests
@@ -481,6 +494,7 @@ GraphLite provides comprehensive documentation for all skill levels:
 - Open an issue for bugs or feature requests
 - Check existing issues before creating new ones
 - Join discussions in open issues and PRs
+- **[Join our Discord](https://discord.gg/Kcs2QakHqs)** - Connect with the community
 - **[Contribution Guidelines](CONTRIBUTING.md)** - How to contribute
 
 ---

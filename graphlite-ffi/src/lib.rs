@@ -79,7 +79,7 @@ pub enum GraphLiteErrorCode {
 /// graphlite_close(db);
 /// ```
 #[no_mangle]
-pub extern "C" fn graphlite_open(
+pub unsafe extern "C" fn graphlite_open(
     path: *const c_char,
     error_out: *mut GraphLiteErrorCode,
 ) -> *mut GraphLiteDB {
@@ -138,7 +138,7 @@ pub extern "C" fn graphlite_open(
 /// * `username` must be a valid null-terminated C string
 /// * Returned string must be freed with `graphlite_free_string`
 #[no_mangle]
-pub extern "C" fn graphlite_create_session(
+pub unsafe extern "C" fn graphlite_create_session(
     db: *mut GraphLiteDB,
     username: *const c_char,
     error_out: *mut GraphLiteErrorCode,
@@ -224,7 +224,7 @@ pub extern "C" fn graphlite_create_session(
 /// }
 /// ```
 #[no_mangle]
-pub extern "C" fn graphlite_query(
+pub unsafe extern "C" fn graphlite_query(
     db: *mut GraphLiteDB,
     session_id: *const c_char,
     query: *const c_char,
@@ -309,7 +309,7 @@ pub extern "C" fn graphlite_query(
 /// * `db` must be a valid handle from `graphlite_open`
 /// * `session_id` must be from `graphlite_create_session`
 #[no_mangle]
-pub extern "C" fn graphlite_close_session(
+pub unsafe extern "C" fn graphlite_close_session(
     db: *mut GraphLiteDB,
     session_id: *const c_char,
     error_out: *mut GraphLiteErrorCode,
@@ -362,7 +362,7 @@ pub extern "C" fn graphlite_close_session(
 /// * Must not be called more than once on the same string
 /// * Must not be called on strings not allocated by GraphLite
 #[no_mangle]
-pub extern "C" fn graphlite_free_string(s: *mut c_char) {
+pub unsafe extern "C" fn graphlite_free_string(s: *mut c_char) {
     if !s.is_null() {
         unsafe {
             drop(CString::from_raw(s));
@@ -380,7 +380,7 @@ pub extern "C" fn graphlite_free_string(s: *mut c_char) {
 /// * Must not be called more than once on the same handle
 /// * Must not be used after calling this function
 #[no_mangle]
-pub extern "C" fn graphlite_close(db: *mut GraphLiteDB) {
+pub unsafe extern "C" fn graphlite_close(db: *mut GraphLiteDB) {
     if !db.is_null() {
         unsafe {
             drop(Box::from_raw(db));
@@ -427,7 +427,7 @@ mod tests {
         let mut error = GraphLiteErrorCode::Success;
 
         // Test null path
-        let db = graphlite_open(ptr::null(), &mut error);
+        let db = unsafe { graphlite_open(ptr::null(), &mut error) };
         assert!(db.is_null());
         assert_eq!(error, GraphLiteErrorCode::NullPointer);
     }
@@ -437,10 +437,10 @@ mod tests {
         let mut error = GraphLiteErrorCode::Success;
         let path = CString::new("/tmp/test_ffi_db").unwrap();
 
-        let db = graphlite_open(path.as_ptr(), &mut error);
+        let db = unsafe { graphlite_open(path.as_ptr(), &mut error) };
         assert!(!db.is_null());
         assert_eq!(error, GraphLiteErrorCode::Success);
 
-        graphlite_close(db);
+        unsafe { graphlite_close(db) };
     }
 }

@@ -1,9 +1,9 @@
-//! DDL Tests that require independent fixtures
+//! DDL Tests with independent fixtures
 //!
-//! These tests perform operations that affect the entire database state
-//! or require complete isolation. They should be run serially to avoid conflicts.
+//! These tests use instance-based session management which provides complete
+//! isolation between test cases. They can now safely run in parallel.
 //!
-//! Run with: cargo test --test ddl_independent_tests -- --test-threads=1
+//! Run with: cargo test --test ddl_independent_tests
 
 #[path = "testutils/mod.rs"]
 mod testutils;
@@ -141,10 +141,7 @@ fn test_ddl_transaction_behavior() {
         test_schema
     ));
 
-    match result {
-        Ok(_) => {}
-        Err(_) => {}
-    }
+    if result.is_ok() {}
 }
 
 #[test]
@@ -356,16 +353,14 @@ fn test_drop_graph_preserves_session_schema() {
     let mut found_graph = false;
 
     for row in &result_before.rows {
-        if let (Some(prop_name), Some(_prop_value)) = (
+        if let (Some(Value::String(name)), Some(_prop_value)) = (
             row.values.get("property_name"),
             row.values.get("property_value"),
         ) {
-            if let Value::String(name) = prop_name {
-                match name.as_str() {
-                    "current_schema" => found_schema = true,
-                    "current_graph" => found_graph = true,
-                    _ => {}
-                }
+            match name.as_str() {
+                "current_schema" => found_schema = true,
+                "current_graph" => found_graph = true,
+                _ => {}
             }
         }
     }
@@ -382,16 +377,14 @@ fn test_drop_graph_preserves_session_schema() {
     let mut found_graph_after = false;
 
     for row in &result_after.rows {
-        if let (Some(prop_name), Some(_prop_value)) = (
+        if let (Some(Value::String(name)), Some(_prop_value)) = (
             row.values.get("property_name"),
             row.values.get("property_value"),
         ) {
-            if let Value::String(name) = prop_name {
-                match name.as_str() {
-                    "current_schema" => found_schema_after = true,
-                    "current_graph" => found_graph_after = true,
-                    _ => {}
-                }
+            match name.as_str() {
+                "current_schema" => found_schema_after = true,
+                "current_graph" => found_graph_after = true,
+                _ => {}
             }
         }
     }

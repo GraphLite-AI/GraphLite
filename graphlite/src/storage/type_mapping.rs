@@ -366,7 +366,7 @@ mod tests {
         let inferred = TypeMapping::infer_type_from_value(&int_val);
         assert!(matches!(inferred, GqlType::Integer));
 
-        let float_val = Value::Number(3.14);
+        let float_val = Value::Number(std::f64::consts::PI);
         let inferred = TypeMapping::infer_type_from_value(&float_val);
         assert!(matches!(inferred, GqlType::Double));
     }

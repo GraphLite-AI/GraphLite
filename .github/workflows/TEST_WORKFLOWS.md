@@ -131,7 +131,7 @@ cargo fmt --all -- --check
 cargo fmt --all
 
 # Run clippy (what CI does)
-cargo clippy --all-targets --all-features -- -D warnings
+./scripts/clippy_all.sh --all
 ```
 
 ### Test Security Audit
@@ -148,16 +148,16 @@ cargo audit
 
 ```bash
 # Run all integration tests (debug)
-./scripts/run_tests.sh --debug
+./scripts/run_integration_tests.sh --debug
 
 # Run all integration tests (release)
-./scripts/run_tests.sh --release
+./scripts/run_integration_tests.sh --release
 
 # Run with analysis
-./scripts/run_tests.sh --release --analyze
+./scripts/run_integration_tests.sh --release --analyze
 
-# Run specific test
-cargo test --release --test aggregation_tests -- --test-threads=1
+# Run specific test (parallel execution enabled)
+cargo test --release --test aggregation_tests
 ```
 
 ### Test Documentation
@@ -250,13 +250,13 @@ actionlint .github/workflows/ci.yml
    cargo fmt --all -- --check
 
    # Linting
-   cargo clippy --all-targets --all-features -- -D warnings
+   ./scripts/clippy_all.sh --all
 
    # Build
    ./scripts/build_all.sh --release
 
    # Tests
-   ./scripts/run_tests.sh --release
+   ./scripts/run_integration_tests.sh --release
    ```
 
 3. **Test with `act` (if installed):**
@@ -299,7 +299,7 @@ Create a quick test script for common validations:
 
 ```bash
 #!/bin/bash
-# scripts/test_ci_locally.sh
+# scripts/validate_ci.sh
 
 set -e
 
@@ -321,7 +321,7 @@ echo "Code formatting passed"
 echo ""
 
 echo "3. Running clippy..."
-cargo clippy --all-targets --all-features -- -D warnings
+./scripts/clippy_all.sh --all
 echo "Clippy passed"
 echo ""
 
@@ -331,7 +331,7 @@ echo "Build successful"
 echo ""
 
 echo "5. Running tests..."
-./scripts/run_tests.sh --release
+./scripts/run_integration_tests.sh --release
 echo "Tests passed"
 echo ""
 
@@ -341,8 +341,8 @@ echo "Ready to push to GitHub."
 
 Make it executable and run:
 ```bash
-chmod +x scripts/test_ci_locally.sh
-./scripts/test_ci_locally.sh
+chmod +x scripts/validate_ci.sh
+./scripts/validate_ci.sh
 ```
 
 ## Troubleshooting

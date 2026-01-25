@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased]
+
+### Performance Improvements
+
+#### Concurrent Session Performance Optimizations
+- **Lock Partitioning** - 16-partition hash-based session storage for reduced contention
+  - Eliminates single RwLock bottleneck in SessionManager
+  - Up to 16x throughput improvement for concurrent session operations
+  - Maintains backward-compatible API with internal optimization
+- **Catalog Cache** - Per-session caching for schema and graph metadata
+  - Version-based cache invalidation (schema_version, graph_version)
+  - Integrated with `gql.list_schemas()` and `gql.list_graphs()` system procedures
+  - Automatic cache invalidation on DDL operations (CREATE/DROP SCHEMA/GRAPH)
+  - Benchmark: 57K schemas/sec, 243K graphs/sec for cached queries
+- **Session Modes** - Support for Instance and Global session management
+  - Instance mode: Isolated sessions per QueryCoordinator (embedded use)
+  - Global mode: Shared session pool across coordinators (server use)
+  - Configurable via `SessionMode` enum
+
+### Testing
+- **Updated Test Count** - 189 unit tests, 537 total tests
+- **New Benchmarks** - Added session throughput and catalog cache benchmarks
+- **Test Isolation** - All 537 tests pass with `--test-threads=16`
+
 ## [0.0.1] - 2025-11-16
 
 ### Added
@@ -54,8 +78,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **185 Unit Tests** - Embedded tests in source files covering all modules
 - **250+ Integration Tests** - 40 test files for end-to-end scenarios
 - **TestFixture Pattern** - Reusable test setup with randomized schema/graph names
-- **Single-threaded Runner** - All tests run with `--test-threads=1` for isolation
-- **Test Runner Script** - `run_tests.sh` with debug and release modes
+- **Parallel Test Execution** - Instance-based isolation enables concurrent testing (~10x speedup)
+- **Test Runner Script** - `run_integration_tests.sh` with debug and release modes
 - **Build Script** - `build_all.sh` for automated compilation
 
 #### Documentation

@@ -14,6 +14,7 @@ use graphlite_sdk::{Error, GraphLite};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)] // Fields are read by Deserialize and Debug derives
 struct Person {
     name: String,
     age: f64,
@@ -65,7 +66,8 @@ fn main() -> Result<(), Error> {
 
     // 6. Use query builder
     println!("6. Using query builder...");
-    let result = session.query_builder()
+    let result = session
+        .query_builder()
         .match_pattern("(p:Person)")
         .where_clause("p.age > 25")
         .return_clause("p.name as name, p.age as age")

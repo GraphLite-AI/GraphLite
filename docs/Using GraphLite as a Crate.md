@@ -384,5 +384,6 @@ graphlite gql --path ./my_db -u admin -p secret
 
 ## Getting Help
 
+- **Discord**: [Join our Discord community](https://discord.gg/Kcs2QakHqs) for questions and discussions
 - **Issues**: [GitHub Issues](https://github.com/GraphLite-AI/GraphLite/issues)
 - **Contributing**: [CONTRIBUTING.md](../CONTRIBUTING.md)

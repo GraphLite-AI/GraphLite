@@ -20,7 +20,7 @@ jobs:
       - name: Install Rust toolchain
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --component rustfmt,clippy
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -50,17 +50,10 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        # TODO: Fix clippy warnings and re-enable -D warnings
-        # Currently allows warnings to prevent CI failures during initial setup
-        # There are ~344 clippy warnings that need to be addressed:
-        #   - Empty lines after doc comments
-        #   - Redundant imports
-        #   - Collapsible if statements
-        #   - Unsafe pointer dereference warnings (FFI layer)
-        #   - Other code style issues
-        # To see all warnings: cargo clippy --all-targets --all-features
-        # To fix and re-enable strict mode, change to: -- -D warnings
-        run: cargo clippy --all-targets --all-features -- -A clippy::not_unsafe_ptr_arg_deref -A clippy::approx_constant
+        # Using clippy_all.sh script for consistent linting across environments
+        # Note: Currently runs without --strict mode due to ~26 remaining warnings
+        # TODO: Fix remaining warnings and add --strict flag
+        run: ./scripts/clippy_all.sh --all
 
   build-and-test:
     name: Build and Test
@@ -78,7 +71,7 @@ jobs:
       - name: Install Rust toolchain
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Install build dependencies (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
@@ -128,11 +121,11 @@ jobs:
 
       - name: Run integration tests (Debug)
         if: matrix.build-mode == 'debug'
-        run: ./scripts/run_tests.sh --debug
+        run: ./scripts/run_integration_tests.sh --debug
 
       - name: Run integration tests (Release)
         if: matrix.build-mode == 'release'
-        run: ./scripts/run_tests.sh --release
+        run: ./scripts/run_integration_tests.sh --release
 
   security-audit:
     name: Security Audit
@@ -144,7 +137,7 @@ jobs:
       - name: Install Rust toolchain
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Install cargo-audit
         run: cargo install cargo-audit
@@ -185,7 +178,7 @@ jobs:
   #     - name: Install Rust toolchain
   #       run: |
   #         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-  #         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+  #         echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
   #
   #     - name: Cache cargo registry
   #       uses: actions/cache@v4
@@ -224,7 +217,7 @@ jobs:
       - name: Install Rust toolchain
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin

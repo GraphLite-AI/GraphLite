@@ -8,10 +8,10 @@ Run the automated test script:
 
 ```bash
 # Quick check (formatting + linting only)
-./scripts/test_ci_locally.sh --quick
+./scripts/validate_ci.sh --quick
 
 # Full check (includes build + tests)
-./scripts/test_ci_locally.sh --full
+./scripts/validate_ci.sh --full
 ```
 
 This tests all the same checks that CI will run!
@@ -84,9 +84,9 @@ git push origin --delete test/verify-ci
 ## What Gets Tested
 
 **Formatting** - `cargo fmt --all -- --check`
-**Linting** - `cargo clippy --all-targets --all-features`
+**Linting** - `./scripts/clippy_all.sh --all`
 **Build** - `./scripts/build_all.sh --release`
-**Tests** - `./scripts/run_tests.sh --release`
+**Tests** - `./scripts/run_integration_tests.sh --release`
 **Docs** - `cargo doc --no-deps --all-features`
 **Security** - `cargo audit` (if installed)
 
@@ -100,7 +100,10 @@ cargo fmt --all
 ```
 
 **Fix clippy warnings:**
-Review the warnings and fix them, or allow specific ones if needed.
+```bash
+./scripts/clippy_all.sh --all
+```
+Review the warnings and fix them, or use `--fix` to auto-apply suggestions.
 
 ### Want to test on specific OS?
 
@@ -119,11 +122,11 @@ sudo systemctl start docker  # Linux
 1. **Make changes** to workflows or code
 2. **Quick test locally:**
    ```bash
-   ./scripts/test_ci_locally.sh --quick
+   ./scripts/validate_ci.sh --quick
    ```
 3. **If passing, full test:**
    ```bash
-   ./scripts/test_ci_locally.sh --full
+   ./scripts/validate_ci.sh --full
    ```
 4. **If all local tests pass, push to test branch:**
    ```bash
@@ -135,4 +138,4 @@ sudo systemctl start docker  # Linux
 
 - See detailed docs: [.github/workflows/TEST_WORKFLOWS.md](.github/workflows/TEST_WORKFLOWS.md)
 - Check workflow configs: [.github/workflows/](.github/workflows/)
-- Run with help: `./scripts/test_ci_locally.sh --help`
+- Run with help: `./scripts/validate_ci.sh --help`
