@@ -151,7 +151,8 @@ pub fn handle_gql(
 
     println!("{}", "GraphLite".bold().green());
     println!("Type 'help' for commands, 'exit' or 'quit' to exit");
-    println!("Multi-line queries supported - use ';' to terminate\n");
+    println!("Multi-line queries supported - use ';' to terminate");
+    println!("NL2GQL: prefix with 'nl:' for natural language (e.g., 'nl: find all people')");
     println!("{}", format!("Authenticated as: {}", username).cyan());
     println!("Session ID: {}", session_id);
 
@@ -220,6 +221,47 @@ pub fn handle_gql(
                 }
                 "" => continue,
                 _ => {}
+            }
+
+            // Check for nl: prefix (natural language query)
+            if trimmed.to_lowercase().starts_with("nl:") {
+                let nl_input = trimmed[3..].trim();
+                if nl_input.is_empty() {
+                    println!("{}", "Usage: nl: <natural language query>".yellow());
+                    println!("{}", "Example: nl: find all people older than 25".cyan());
+                    continue;
+                }
+
+                // Extract schema and convert NL to GQL
+                let schema = match extract_schema(&coordinator, &session_id) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("{}", format!("Failed to extract schema: {}", e).red());
+                        println!("{}", "Make sure you have set a graph with SESSION SET GRAPH".yellow());
+                        continue;
+                    }
+                };
+
+                println!("{}", "Converting natural language to GQL...".cyan());
+                match convert_nl_to_gql(nl_input, &schema) {
+                    Ok(gql) => {
+                        println!("{}", format!("Generated GQL: {}", gql).green());
+                        rl.add_history_entry(trimmed)?;
+                        match coordinator.process_query(&gql, &session_id) {
+                            Ok(result) => {
+                                let output = ResultFormatter::format(&result, OutputFormat::Table);
+                                println!("{}", output);
+                            }
+                            Err(e) => {
+                                eprintln!("{}", format!("Error: {}", e).red());
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("{}", format!("NL2GQL error: {}", e).red());
+                    }
+                }
+                continue;
             }
         }
 
@@ -337,17 +379,130 @@ fn authenticate(
         .map_err(|e| e.into())
 }
 
+/// Extract schema from the current graph by querying node labels, properties, and edge types
+fn extract_schema(coordinator: &Arc<QueryCoordinator>, session_id: &str) -> Result<String, String> {
+    use graphlite::Value;
+    use std::collections::HashSet;
+
+    let mut schema_parts = Vec::new();
+
+    // 1. Get all node labels
+    let labels_result = coordinator
+        .process_query("MATCH (n) RETURN DISTINCT labels(n) AS labels;", session_id)
+        .map_err(|e| e.to_string())?;
+
+    let mut node_labels = HashSet::new();
+    for row in &labels_result.rows {
+        if let Some(Value::List(items)) = row.values.get("labels") {
+            for item in items {
+                if let Value::String(label) = item {
+                    node_labels.insert(label.clone());
+                }
+            }
+        }
+    }
+
+    // 2. Get properties for each label (query one sample node)
+    let mut entities = Vec::new();
+    for label in &node_labels {
+        let query = format!("MATCH (n:{}) RETURN n LIMIT 1;", label);
+        if let Ok(result) = coordinator.process_query(&query, session_id) {
+            let mut props: Vec<String> = Vec::new();
+            for row in &result.rows {
+                if let Some(Value::Node(node)) = row.values.get("n") {
+                    props.extend(node.properties.keys().cloned());
+                }
+            }
+            props.sort();
+            props.dedup();
+            if props.is_empty() {
+                entities.push(format!("- {}", label));
+            } else {
+                entities.push(format!("- {}: {}", label, props.join(", ")));
+            }
+        } else {
+            entities.push(format!("- {}", label));
+        }
+    }
+    entities.sort(); // Consistent ordering
+
+    if !entities.is_empty() {
+        schema_parts.push(format!("Entities and properties:\n{}", entities.join("\n")));
+    }
+
+    // 3. Get all edge types
+    let edges_result = coordinator
+        .process_query("MATCH ()-[r]->() RETURN DISTINCT type(r) AS edge_type;", session_id)
+        .map_err(|e| e.to_string())?;
+
+    let mut edge_types = HashSet::new();
+    for row in &edges_result.rows {
+        if let Some(Value::String(edge_type)) = row.values.get("edge_type") {
+            edge_types.insert(edge_type.clone());
+        }
+    }
+
+    if !edge_types.is_empty() {
+        let mut edges_sorted: Vec<_> = edge_types.iter().collect();
+        edges_sorted.sort();
+        let edges_formatted: Vec<String> = edges_sorted.iter().map(|e| format!("- [:{}]", e)).collect();
+        schema_parts.push(format!("Relationships:\n{}", edges_formatted.join("\n")));
+    }
+
+    if schema_parts.is_empty() {
+        return Err("No schema found - the graph appears to be empty".to_string());
+    }
+
+    Ok(schema_parts.join("\n\n"))
+}
+
+/// Convert natural language to GQL using the Python NL2GQL pipeline
+fn convert_nl_to_gql(nl_query: &str, schema: &str) -> Result<String, String> {
+    use std::process::Command;
+
+    let output = Command::new("python3")
+        .args([
+            "-m",
+            "nl2gql.pipeline.cli",
+            "--nl",
+            nl_query,
+            "--schema",
+            schema,
+            "--raw",
+        ])
+        .output()
+        .map_err(|e| format!("Failed to run NL2GQL pipeline: {}", e))?;
+
+    if output.status.success() {
+        // With --raw flag, stdout contains only the generated query
+        let gql = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if gql.is_empty() {
+            Err("NL2GQL returned empty query".to_string())
+        } else {
+            Ok(gql)
+        }
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(stderr.trim().to_string())
+    }
+}
+
 /// Print help message
 fn print_help() {
     println!("{}", "Available commands:".bold().green());
     println!("  {}  - Show this help message", "help".cyan());
     println!("  {}  - Exit the GQL console", "exit/quit".cyan());
     println!("  {}  - Clear the screen", "clear".cyan());
+    println!("\n{}", "Natural language queries:".bold().green());
+    println!("  {}  - Convert natural language to GQL and execute", "nl: <query>".cyan());
     println!("\n{}", "Query syntax:".bold().green());
     println!("  Multi-line queries are supported");
     println!("  Terminate queries with semicolon (;)");
-    println!("\n{}", "Examples:".bold().green());
+    println!("\n{}", "GQL examples:".bold().green());
     println!("  {}", "MATCH (n:Person) RETURN n;".yellow());
     println!("  {}", "CREATE SCHEMA /myschema;".yellow());
     println!("  {}", "INSERT (p:Person {{name: 'Alice'}});".yellow());
+    println!("\n{}", "NL examples:".bold().green());
+    println!("  {}", "nl: find all people".yellow());
+    println!("  {}", "nl: show users older than 30".yellow());
 }

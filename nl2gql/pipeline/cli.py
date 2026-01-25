@@ -58,6 +58,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--no-spinner", dest="spinner", action="store_false")
     parser.set_defaults(spinner=None)
     parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="Output only the generated query (no status messages), for programmatic use",
+    )
+    parser.add_argument(
         "--trace-json",
         help="Directory to store structured run logs (defaults to ./nl2gql-logs)",
     )
@@ -138,7 +143,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     gen_model = args.gen_model or DEFAULT_OPENAI_MODEL_GEN
     fix_model = args.fix_model or DEFAULT_OPENAI_MODEL_FIX
 
-    spinner = Spinner(enabled=args.spinner if args.spinner is not None else sys.stdout.isatty())
+    # In raw mode, disable spinner and verbose output
+    raw_mode = args.raw
+    spinner = Spinner(enabled=False if raw_mode else (args.spinner if args.spinner is not None else sys.stdout.isatty()))
     reset_usage_log()
     spinner.start(nl_query=args.nl)
     start = time.perf_counter()
@@ -154,8 +161,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         usage = usage_totals()
         if pipeline.last_run_logger:
             pipeline.last_run_logger.log_usage(usage)
-        spinner.stop("✓ Query generated.", color="green")
-        if args.verbose:
+        if not raw_mode:
+            spinner.stop("✓ Query generated.", color="green")
+        if args.verbose and not raw_mode:
             print_timeline(args.nl, timeline, args.max_attempts)
             print(
                 f"\nToken usage → prompt: {usage['prompt_tokens']}, "
@@ -170,11 +178,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(query)
         return 0
     except PipelineFailure as exc:
-        spinner.stop("✗ Pipeline failed.", color="red")
+        if not raw_mode:
+            spinner.stop("✗ Pipeline failed.", color="red")
         usage = usage_totals()
         if pipeline.last_run_logger:
             pipeline.last_run_logger.log_usage(usage)
-        if args.verbose:
+        if args.verbose and not raw_mode:
             print_timeline(args.nl, exc.timeline, args.max_attempts)
             if exc.failures:
                 print("Failures:")
@@ -187,23 +196,23 @@ def main(argv: Optional[List[str]] = None) -> int:
             elapsed_ms = int((time.perf_counter() - start) * 1000)
             print(f"Elapsed: {elapsed_ms} ms")
         print(f"Failed to generate query: {exc}", file=sys.stderr)
-        if args.verbose:
+        if args.verbose and not raw_mode:
             log_dir = pipeline.last_run_logger.run_dir if pipeline.last_run_logger else args.trace_json
             _print_log_hint(str(log_dir) if log_dir else None, color_enabled)
         return 1
     except Exception as exc:
-        spinner.stop("✗ Pipeline failed.", color="red")
+        if not raw_mode:
+            spinner.stop("✗ Pipeline failed.", color="red")
         usage = usage_totals()
         if pipeline.last_run_logger:
             pipeline.last_run_logger.log_usage(usage)
-        if args.verbose:
+        if args.verbose and not raw_mode:
             print(
                 f"\nToken usage → prompt: {usage['prompt_tokens']}, "
                 f"completion: {usage['completion_tokens']}, total: {usage['total_tokens']}"
             )
             elapsed_ms = int((time.perf_counter() - start) * 1000)
             print(f"Elapsed: {elapsed_ms} ms")
-        if args.verbose:
             log_dir = pipeline.last_run_logger.run_dir if pipeline.last_run_logger else args.trace_json
             _print_log_hint(str(log_dir) if log_dir else None, color_enabled)
         print(f"Failed to generate query: {exc}", file=sys.stderr)
