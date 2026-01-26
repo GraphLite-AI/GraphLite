@@ -52,6 +52,11 @@ gradle/
 graphlite-ffi/data/
 my_db/
 
+# NL2GQL pipeline logs
+nl2gql-logs/
+**/nl2gql-logs/
+
 # GitHub Actions local testing
 .secrets
 .env
+nl2gql/config.env

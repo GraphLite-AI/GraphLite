@@ -1,0 +1,208 @@
+[
+  {
+    "name": "ecommerce_orders",
+    "description": "Customers placing orders with products and delivery context",
+    "schema": [
+      "- Customer: id, name, email, signup_date, loyalty_tier, city, state",
+      "- Order: id, placed_at, status, total_amount, channel",
+      "- OrderItem: id, quantity, unit_price",
+      "- Product: id, name, category, price, brand",
+      "- City: id, name, state",
+      "- (Customer)-[:PLACED]->(Order)",
+      "- (Order)-[:HAS_ITEM]->(OrderItem)",
+      "- (OrderItem)-[:FOR_PRODUCT]->(Product)",
+      "- (Customer)-[:LIVES_IN]->(City)"
+    ],
+    "queries": [
+      "Find the top 5 customers by total spend on delivered orders in 2024; return customer name, state, total spend, and count of orders; order by total spend desc then order count desc.",
+      "List product categories with more than 100 distinct customers purchasing in the last 90 days; return category, distinct customer count, and total revenue; order by revenue desc then customer count desc."
+    ]
+  },
+  {
+    "name": "healthcare_appointments",
+    "description": "Patients, doctors, clinics, and appointment outcomes",
+    "schema": [
+      "- Patient: id, name, age, insurance, city, state",
+      "- Doctor: id, name, specialty, years_experience, accepts_new_patients",
+      "- Clinic: id, name, city, state",
+      "- Appointment: id, scheduled_at, status, reason, duration_minutes",
+      "- (Patient)-[:HAS_APPOINTMENT]->(Appointment)",
+      "- (Appointment)-[:WITH_DOCTOR]->(Doctor)",
+      "- (Doctor)-[:PRACTICES_AT]->(Clinic)",
+      "- (Patient)-[:LIVES_IN]->(Clinic)"
+    ],
+    "queries": [
+      "Find doctors whose average appointment duration with patients aged 60+ exceeds 30 minutes; return doctor name, specialty, avg duration, and appointment count; order by avg duration desc then count desc.",
+      "List clinics with at least 5 cancelled appointments in the last 30 days; return clinic name, state, cancel count, and distinct patients affected; order by cancel count desc then patient count desc."
+    ]
+  },
+  {
+    "name": "flight_operations",
+    "description": "Commercial flights with routes, bookings, and carriers",
+    "schema": [
+      "- Airport: id, code, city, country, timezone",
+      "- Carrier: id, name, alliance",
+      "- Flight: id, number, departure_time, arrival_time, status, delay_minutes",
+      "- Booking: id, booked_at, cabin, price, currency",
+      "- Passenger: id, name, loyalty_tier, country",
+      "- (Flight)-[:ORIGIN]->(Airport)",
+      "- (Flight)-[:DESTINATION]->(Airport)",
+      "- (Flight)-[:OPERATED_BY]->(Carrier)",
+      "- (Passenger)-[:MADE_BOOKING]->(Booking)",
+      "- (Booking)-[:FOR_FLIGHT]->(Flight)"
+    ],
+    "queries": [
+      "Find routes with an average arrival delay above 30 minutes over the last 7 days and at least 20 completed flights; return origin code, destination code, average delay, and flight count; order by average delay desc then flight count desc.",
+      "List the top 5 passengers by total spend on international flights between the US and Canada; return passenger name, loyalty_tier, total spend, and trip count; order by total spend desc then trip count desc."
+    ]
+  },
+  {
+    "name": "university_courses",
+    "description": "Students enrolled in courses taught by instructors and grouped by department",
+    "schema": [
+      "- Student: id, name, major, level, gpa",
+      "- Course: id, code, title, credits, level",
+      "- Enrollment: id, grade, enrolled_at, status",
+      "- Instructor: id, name, rank, tenure_status",
+      "- Department: id, name, school",
+      "- (Student)-[:ENROLLED_IN]->(Enrollment)",
+      "- (Enrollment)-[:FOR_COURSE]->(Course)",
+      "- (Course)-[:TAUGHT_BY]->(Instructor)",
+      "- (Instructor)-[:MEMBER_OF]->(Department)",
+      "- (Course)-[:BELONGS_TO]->(Department)"
+    ],
+    "queries": [
+      "Find departments where the average grade in 400-level courses is above 3.3 with at least 50 enrolled students; return department name, average grade, and student count; order by average grade desc then student count desc.",
+      "Find instructors teaching at least two courses with average enrollment over 30 students and dropout rate (status='dropped') under 10%; return instructor name, course count, average enrollment, and dropout rate; order by course count desc then dropout rate asc."
+    ]
+  },
+  {
+    "name": "social_graph",
+    "description": "Users posting, reacting, and tagging content in a social network",
+    "schema": [
+      "- User: id, name, city, join_date, reputation",
+      "- Post: id, created_at, topic, visibility",
+      "- Comment: id, created_at, sentiment",
+      "- Tag: id, name",
+      "- Reaction: id, type, created_at",
+      "- (User)-[:POSTED]->(Post)",
+      "- (User)-[:COMMENTED]->(Comment)",
+      "- (Comment)-[:ON_POST]->(Post)",
+      "- (Reaction)-[:ON_POST]->(Post)",
+      "- (Reaction)-[:BY_USER]->(User)",
+      "- (Post)-[:HAS_TAG]->(Tag)",
+      "- (User)-[:FOLLOWS]->(User)"
+    ],
+    "queries": [
+      "Identify the top 5 tags from the last 7 days ranked by distinct authors posting under them; return tag name, author count, post count, and average sentiment of comments; order by author count desc then post count desc.",
+      "Find users who posted at least 3 times in the last month but received zero comments; return user name, post count, and most common topic; order by post count desc then name asc."
+    ]
+  },
+  {
+    "name": "logistics_supply",
+    "description": "Shipments with packages, carriers, warehouses, facilities, and tracking events",
+    "schema": [
+      "- Warehouse: id, name, region, capacity, status",
+      "- Shipment: id, status, created_at, expected_delivery, priority",
+      "- Package: id, weight, priority, declared_value",
+      "- Carrier: id, name, service_level",
+      "- Facility: id, name, type, state",
+      "- Event: id, type, recorded_at, delay_minutes",
+      "- (Shipment)-[:HAS_PACKAGE]->(Package)",
+      "- (Shipment)-[:HANDLED_BY]->(Carrier)",
+      "- (Shipment)-[:HAS_EVENT]->(Event)",
+      "- (Event)-[:AT_FACILITY]->(Facility)",
+      "- (Shipment)-[:ORIGIN]->(Warehouse)",
+      "- (Shipment)-[:DESTINATION]->(Warehouse)"
+    ],
+    "queries": [
+      "Find shipments with more than 48 total delay minutes across events that are still not delivered; return shipment id, priority, total delay, and last facility; order by total delay desc limit 10.",
+      "List origin-destination warehouse pairs with average delay minutes above 20 for priority shipments in the last 30 days; return origin region, destination region, shipment count, and average delay; order by average delay desc then shipment count desc."
+    ]
+  },
+  {
+    "name": "music_streaming",
+    "description": "Listeners streaming tracks by artists and organizing playlists",
+    "schema": [
+      "- Listener: id, name, country, signup_date, subscription_tier",
+      "- Artist: id, name, country",
+      "- Album: id, title, release_year, genre",
+      "- Track: id, title, duration_seconds, explicit",
+      "- Play: id, played_at, device_type, duration_seconds, completed",
+      "- Playlist: id, title, follower_count, created_at",
+      "- (Track)-[:BY_ARTIST]->(Artist)",
+      "- (Track)-[:ON_ALBUM]->(Album)",
+      "- (Listener)-[:PLAYED]->(Play)",
+      "- (Play)-[:FOR_TRACK]->(Track)",
+      "- (Listener)-[:CURATED]->(Playlist)",
+      "- (Playlist)-[:HAS_TRACK]->(Track)"
+    ],
+    "queries": [
+      "Find the top 5 artists by distinct listeners in the last 30 days; return artist name, listener count, and total plays; order by listener count desc then total plays desc.",
+      "List playlists curated by listeners where at least 60% of plays in the last week were on mobile devices; return playlist title, curator, mobile play share, and total plays; order by mobile play share desc then total plays desc."
+    ]
+  },
+  {
+    "name": "sports_league",
+    "description": "Teams, players, games, stat lines, and venues in a league season",
+    "schema": [
+      "- Team: id, name, conference, division",
+      "- Player: id, name, position, height_cm, weight_kg",
+      "- Game: id, played_on, season, is_playoff, home_score, away_score",
+      "- StatLine: id, points, assists, rebounds, minutes_played",
+      "- Venue: id, name, city, capacity",
+      "- (Team)-[:HAS_PLAYER]->(Player)",
+      "- (Game)-[:HOME_TEAM]->(Team)",
+      "- (Game)-[:AWAY_TEAM]->(Team)",
+      "- (Game)-[:PLAYED_AT]->(Venue)",
+      "- (StatLine)-[:FOR_PLAYER]->(Player)",
+      "- (StatLine)-[:IN_GAME]->(Game)"
+    ],
+    "queries": [
+      "Find teams with a home win rate above 70% in the current season; return team name, home games, home wins, and win rate; order by win rate desc then home wins desc.",
+      "List players averaging at least 7 assists and 15 points in playoff games with minutes_played >= 25; return player name, team, average points, average assists, and game count; order by average assists desc then average points desc."
+    ]
+  },
+  {
+    "name": "library_events",
+    "description": "Libraries circulating books and hosting events for members",
+    "schema": [
+      "- Library: id, name, city, state",
+      "- Book: id, title, genre, published_year",
+      "- Author: id, name, country",
+      "- Member: id, name, joined_at, city",
+      "- Loan: id, loaned_at, returned_at, status",
+      "- Event: id, title, date, topic, attendance",
+      "- (Library)-[:OWNS]->(Book)",
+      "- (Book)-[:WRITTEN_BY]->(Author)",
+      "- (Member)-[:BORROWED]->(Loan)",
+      "- (Loan)-[:FOR_BOOK]->(Book)",
+      "- (Event)-[:AT_LIBRARY]->(Library)",
+      "- (Member)-[:ATTENDED]->(Event)"
+    ],
+    "queries": [
+      "Find authors whose books had more than 50 loans in the last quarter and at least two library events in the same period; return author name, loan count, and event count; order by loan count desc then event count desc.",
+      "List libraries with an overdue rate above 15% for members who joined within the last year; return library name, overdue rate, and total loans from new members; order by overdue rate desc then total loans desc."
+    ]
+  },
+  {
+    "name": "finance_transactions",
+    "description": "Bank customers transacting with merchants using accounts and cards",
+    "schema": [
+      "- Customer: id, name, segment, risk_score",
+      "- Account: id, type, opened_at, status, balance",
+      "- Card: id, network, last_four, status",
+      "- Transaction: id, amount, currency, occurred_at, channel, status, fraud_flag",
+      "- Merchant: id, name, category, country",
+      "- (Customer)-[:OWNS]->(Account)",
+      "- (Account)-[:USES_CARD]->(Card)",
+      "- (Account)-[:HAS_TRANSACTION]->(Transaction)",
+      "- (Transaction)-[:AT_MERCHANT]->(Merchant)",
+      "- (Transaction)-[:PAID_WITH]->(Card)"
+    ],
+    "queries": [
+      "Identify customers with more than 3 declined transactions in the last week and total spend over 2000 during the same period; return customer name, decline count, total spend, and most common channel; order by decline count desc then total spend desc.",
+      "Find merchants with an average transaction amount above 500 and fraud_flag rate over 2% in the last 90 days; return merchant name, average amount, fraud rate, and total transactions; order by average amount desc then fraud rate desc."
+    ]
+  }
+]
