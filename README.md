@@ -216,6 +216,28 @@ That's it! You're now ready to create graphs and run queries:
 $ gql>
 ```
 
+### Natural Language Queries
+
+Query your graph using plain English with the `nl:` prefix. Requires an OpenAI API key.
+
+**Setup:**
+```bash
+# Set for current session
+export OPENAI_API_KEY="your-api-key"
+
+# Or add to ~/.zshrc or ~/.bashrc for persistence
+echo 'export OPENAI_API_KEY="your-api-key"' >> ~/.zshrc
+```
+
+**Usage** (after setting a graph with `SESSION SET GRAPH`):
+```sql
+nl: find all people older than 25
+nl: show companies founded after 2010
+nl: count transactions over $1000
+```
+
+No semicolon needed for `nl:` queries. The pipeline converts natural language to ISO GQL and executes it automatically.
+
 **Next Steps:**
 - **[Using GraphLite as a Crate](docs/Using%20GraphLite%20as%20a%20Crate.md)** - Embed in your Rust application (recommended)
 - **[Quick Start.md](docs/Quick%20Start.md)** - 5-minute tutorial with CLI and first queries
