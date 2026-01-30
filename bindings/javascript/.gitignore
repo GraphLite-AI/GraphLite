@@ -1,0 +1,14 @@
+node_modules/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.eslintcache
+coverage/
+.nyc_output/
+*.tsbuildinfo
+.DS_Store
+test_db/
+test_db*/
+test-ffi.js
