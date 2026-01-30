@@ -1,0 +1,13 @@
+Entities and properties:
+- Person: id, name, age, salary, title
+- Company: id, name, industry
+- City: id, name, state
+
+Relationships:
+- (Person)-[:WORKS_AT]->(Company)
+- (Person)-[:LIVES_IN]->(City)
+- (Company)-[:LOCATED_IN]->(City)
+
+Notes:
+- Salaries are numeric (annual).
+- Cities have unique (name, state) pairs.

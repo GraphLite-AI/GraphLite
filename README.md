@@ -15,6 +15,13 @@ GraphLite uses a single binary and is an ideal solution for applications requiri
 - **Query Optimization** - Cost-based query optimization
 - **Pure Rust** - Memory-safe implementation in Rust
 
+## NL→GQL Pipeline
+
+- **Architecture**: Natural language is grounded to schema-aware intents, rendered into ISO GQL via a generator/refiner loop, then validated by GraphLite’s syntax runner plus an LLM “logic judge” that reviews whether the query honors the original request. This create→execute→verify cycle keeps results auditable without domain-specific prompts.
+- **Approach**: Structural guarantees (labels, edges, properties, grouping, ordering) are enforced with lightweight IR checks; high-level semantics (temporal filters, zero-count asks, ratios, etc.) are delegated to the LLM judge/repair loop so we don’t hand-roll analyzers for every intent class.
+- **LLM AST Judge**: Every candidate ISO GQL tree is summarized into deterministic JSON (nodes, edges, filters, aggregates, order/limit) and reviewed by an LLM via `IntentJudge`. This keeps prompts short, deduplicates hints, and yields actionable “missing requirements” that feed directly into the repair loop without needing one-off validators.
+- **Ideology**: Expand capability by teaching the judge/refiner new reasoning patterns rather than hardcoding schema- or prompt-specific exceptions. Deterministic checks stay minimal and reusable; everything else is enforced generically at runtime.
+
 ## Prerequisites
 
 Before building GraphLite, you need to install Rust and a C compiler/linker.
@@ -208,6 +215,28 @@ That's it! You're now ready to create graphs and run queries:
 ```bash
 $ gql>
 ```
+
+### Natural Language Queries
+
+Query your graph using plain English with the `nl:` prefix. Requires an OpenAI API key.
+
+**Setup:**
+```bash
+# Set for current session
+export OPENAI_API_KEY="your-api-key"
+
+# Or add to ~/.zshrc or ~/.bashrc for persistence
+echo 'export OPENAI_API_KEY="your-api-key"' >> ~/.zshrc
+```
+
+**Usage** (after setting a graph with `SESSION SET GRAPH`):
+```sql
+nl: find all people older than 25
+nl: show companies founded after 2010
+nl: count transactions over $1000
+```
+
+No semicolon needed for `nl:` queries. The pipeline converts natural language to ISO GQL and executes it automatically.
 
 **Next Steps:**
 - **[Using GraphLite as a Crate](docs/Using%20GraphLite%20as%20a%20Crate.md)** - Embed in your Rust application (recommended)
