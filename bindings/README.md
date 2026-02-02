@@ -13,7 +13,7 @@ GraphLite provides bindings for multiple programming languages, all built on top
 | **Rust** | [../graphlite-sdk](../graphlite-sdk/) | Stable | ~100% native | `cargo add graphlite-sdk` |
 | **Python** | [python/](python/) | Stable | ~80-90% native | `pip install graphlite` |
 | **Java** | [java/](java/) | Stable | ~75-85% native | Maven/Gradle |
-| **JavaScript** | javascript/ | Planned | ~70-80% native (WASM) | `npm install graphlite` |
+| **JavaScript** | [javascript/](javascript/) | Beta | ~80-85% native | `npm install graphlite` |
 | **Kotlin** | kotlin/ | Planned | ~75-85% native | Maven/Gradle |
 
 ## Quick Start by Language
@@ -60,6 +60,23 @@ try (GraphLite db = GraphLite.open("./mydb")) {
 ```
 
 **See**: [java/README.md](java/README.md)
+
+### JavaScript/Node.js
+
+JavaScript bindings use ffi-napi for FFI access:
+
+```javascript
+const { GraphLite } = require('graphlite');
+
+async function main() {
+  const db = new GraphLite('./mydb');
+  const session = db.createSession('admin');
+  const result = await db.query(session, 'MATCH (n:Person) RETURN n');
+  db.close();
+}
+```
+
+**See**: [javascript/README.md](javascript/README.md)
 
 ## Architecture
 

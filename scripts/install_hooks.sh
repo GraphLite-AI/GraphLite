@@ -28,7 +28,6 @@ mkdir -p "$HOOKS_DIR"
         echo "❌ Installation cancelled"
         exit 1
     fi
-fi
 
 # Backup existing hook if present
 if [ -f "$HOOKS_DIR/pre-commit" ]; then
