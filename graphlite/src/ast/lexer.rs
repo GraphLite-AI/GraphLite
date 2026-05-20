@@ -427,6 +427,22 @@ fn is_word_boundary(c: char) -> bool {
     !c.is_alphanumeric() && c != '_'
 }
 
+/// Check for an ASCII keyword prefix without slicing through a UTF-8 code point.
+fn ascii_prefix_eq_ignore_case(input: &str, byte_len: usize, expected: &str) -> bool {
+    debug_assert_eq!(byte_len, expected.len());
+    input
+        .get(..byte_len)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(expected))
+}
+
+/// Check for an exact ASCII prefix without slicing through a UTF-8 code point.
+fn ascii_prefix_eq(input: &str, byte_len: usize, expected: &str) -> bool {
+    debug_assert_eq!(byte_len, expected.len());
+    input
+        .get(..byte_len)
+        .is_some_and(|prefix| prefix == expected)
+}
+
 /// Check if a keyword match has a proper word boundary
 fn is_keyword_match(input: &str, keyword: &str) -> bool {
     if input.len() < keyword.len() {
@@ -434,17 +450,14 @@ fn is_keyword_match(input: &str, keyword: &str) -> bool {
     }
 
     // Check if the input starts with the keyword (case insensitive)
-    if !input[..keyword.len()].eq_ignore_ascii_case(keyword) {
+    if !ascii_prefix_eq_ignore_case(input, keyword.len(), keyword) {
         return false;
     }
 
-    // Check if the next character (if any) is a word boundary
-    if input.len() > keyword.len() {
-        let next_char = input.chars().nth(keyword.len()).unwrap_or(' ');
-        is_word_boundary(next_char)
-    } else {
-        true // End of input is a word boundary
-    }
+    input
+        .get(keyword.len()..)
+        .and_then(|rest| rest.chars().next())
+        .is_none_or(is_word_boundary)
 }
 
 fn simple_patterns(input: &str) -> IResult<&str, Token> {
@@ -472,458 +485,458 @@ fn simple_patterns(input: &str) -> IResult<&str, Token> {
     }
     // Keywords (case insensitive check) - longer keywords first
     else if input.len() >= 11
-        && input[..11].eq_ignore_ascii_case("DESTINATION")
+        && ascii_prefix_eq_ignore_case(input, 11, "DESTINATION")
         && (input.len() == 11
             || (!input.chars().nth(11).unwrap().is_alphanumeric()
                 && input.chars().nth(11).unwrap() != '_'))
     {
         Ok((&input[11..], Token::Destination))
     } else if input.len() >= 10
-        && input[..10].eq_ignore_ascii_case("NORMALIZED")
+        && ascii_prefix_eq_ignore_case(input, 10, "NORMALIZED")
         && (input.len() == 10
             || (!input.chars().nth(10).unwrap().is_alphanumeric()
                 && input.chars().nth(10).unwrap() != '_'))
     {
         Ok((&input[10..], Token::Normalized))
     } else if input.len() >= 8
-        && input[..8].eq_ignore_ascii_case("DIRECTED")
+        && ascii_prefix_eq_ignore_case(input, 8, "DIRECTED")
         && (input.len() == 8
             || (!input.chars().nth(8).unwrap().is_alphanumeric()
                 && input.chars().nth(8).unwrap() != '_'))
     {
         Ok((&input[8..], Token::Directed))
     } else if input.len() >= 8
-        && input[..8].eq_ignore_ascii_case("PROPERTY")
+        && ascii_prefix_eq_ignore_case(input, 8, "PROPERTY")
         && (input.len() == 8
             || (!input.chars().nth(8).unwrap().is_alphanumeric()
                 && input.chars().nth(8).unwrap() != '_'))
     {
         Ok((&input[8..], Token::Property))
     } else if input.len() >= 8
-        && input[..8].eq_ignore_ascii_case("DISTINCT")
+        && ascii_prefix_eq_ignore_case(input, 8, "DISTINCT")
         && (input.len() == 8
             || (!input.chars().nth(8).unwrap().is_alphanumeric()
                 && input.chars().nth(8).unwrap() != '_'))
     {
         Ok((&input[8..], Token::Distinct))
     } else if input.len() >= 8
-        && input[..8].eq_ignore_ascii_case("CONTAINS")
+        && ascii_prefix_eq_ignore_case(input, 8, "CONTAINS")
         && (input.len() == 8
             || (!input.chars().nth(8).unwrap().is_alphanumeric()
                 && input.chars().nth(8).unwrap() != '_'))
     {
         Ok((&input[8..], Token::Contains))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("WITHIN")
+        && ascii_prefix_eq_ignore_case(input, 6, "WITHIN")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
     {
         Ok((&input[6..], Token::Within))
     } else if input.len() >= 7
-        && input[..7].eq_ignore_ascii_case("REPLACE")
+        && ascii_prefix_eq_ignore_case(input, 7, "REPLACE")
         && (input.len() == 7
             || (input.chars().nth(7).unwrap_or(' ') != '('
                 && !input.chars().nth(7).unwrap_or(' ').is_alphanumeric()))
     {
         Ok((&input[7..], Token::Replace))
     } else if input.len() >= 7
-        && input[..7].eq_ignore_ascii_case("BOOLEAN")
+        && ascii_prefix_eq_ignore_case(input, 7, "BOOLEAN")
         && (input.len() == 7
             || (!input.chars().nth(7).unwrap().is_alphanumeric()
                 && input.chars().nth(7).unwrap() != '_'))
     {
         Ok((&input[7..], Token::BooleanType))
     } else if input.len() >= 7
-        && input[..7].eq_ignore_ascii_case("INTEGER")
+        && ascii_prefix_eq_ignore_case(input, 7, "INTEGER")
         && (input.len() == 7
             || (!input.chars().nth(7).unwrap().is_alphanumeric()
                 && input.chars().nth(7).unwrap() != '_'))
     {
         Ok((&input[7..], Token::IntegerType))
     } else if input.len() >= 8
-        && input[..8].eq_ignore_ascii_case("SMALLINT")
+        && ascii_prefix_eq_ignore_case(input, 8, "SMALLINT")
         && (input.len() == 8
             || (!input.chars().nth(8).unwrap().is_alphanumeric()
                 && input.chars().nth(8).unwrap() != '_'))
     {
         Ok((&input[8..], Token::SmallIntType))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("BIGINT")
+        && ascii_prefix_eq_ignore_case(input, 6, "BIGINT")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
     {
         Ok((&input[6..], Token::BigIntType))
     } else if input.len() >= 7
-        && input[..7].eq_ignore_ascii_case("DECIMAL")
+        && ascii_prefix_eq_ignore_case(input, 7, "DECIMAL")
         && (input.len() == 7
             || (!input.chars().nth(7).unwrap().is_alphanumeric()
                 && input.chars().nth(7).unwrap() != '_'))
     {
         Ok((&input[7..], Token::DecimalType))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("DOUBLE")
+        && ascii_prefix_eq_ignore_case(input, 6, "DOUBLE")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
     {
         Ok((&input[6..], Token::DoubleType))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("FLOAT")
+        && ascii_prefix_eq_ignore_case(input, 5, "FLOAT")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::FloatType))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("REAL")
+        && ascii_prefix_eq_ignore_case(input, 4, "REAL")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::RealType))
     } else if input.len() >= 7
-        && input[..7].eq_ignore_ascii_case("CASCADE")
+        && ascii_prefix_eq_ignore_case(input, 7, "CASCADE")
         && (input.len() == 7
             || (!input.chars().nth(7).unwrap().is_alphanumeric()
                 && input.chars().nth(7).unwrap() != '_'))
     {
         Ok((&input[7..], Token::Cascade))
     } else if input.len() >= 7
-        && input[..7].eq_ignore_ascii_case("UNKNOWN")
+        && ascii_prefix_eq_ignore_case(input, 7, "UNKNOWN")
         && (input.len() == 7
             || (!input.chars().nth(7).unwrap().is_alphanumeric()
                 && input.chars().nth(7).unwrap() != '_'))
     {
         Ok((&input[7..], Token::Unknown))
     } else if input.len() >= 8
-        && input[..8].eq_ignore_ascii_case("RESTRICT")
+        && ascii_prefix_eq_ignore_case(input, 8, "RESTRICT")
         && (input.len() == 8
             || (!input.chars().nth(8).unwrap().is_alphanumeric()
                 && input.chars().nth(8).unwrap() != '_'))
     {
         Ok((&input[8..], Token::Restrict))
-    } else if input.len() >= 14
-        && input[..14].eq_ignore_ascii_case("CHARACTERISTICS")
-        && (input.len() == 14
-            || (!input.chars().nth(14).unwrap().is_alphanumeric()
-                && input.chars().nth(14).unwrap() != '_'))
+    } else if input.len() >= 15
+        && ascii_prefix_eq_ignore_case(input, 15, "CHARACTERISTICS")
+        && (input.len() == 15
+            || (!input.chars().nth(15).unwrap().is_alphanumeric()
+                && input.chars().nth(15).unwrap() != '_'))
     {
-        Ok((&input[14..], Token::Characteristics))
+        Ok((&input[15..], Token::Characteristics))
     } else if input.len() >= 10
-        && input[..10].eq_ignore_ascii_case("PARAMETERS")
+        && ascii_prefix_eq_ignore_case(input, 10, "PARAMETERS")
         && (input.len() == 10
             || (!input.chars().nth(10).unwrap().is_alphanumeric()
                 && input.chars().nth(10).unwrap() != '_'))
     {
         Ok((&input[10..], Token::Parameters))
     } else if input.len() >= 9
-        && input[..9].eq_ignore_ascii_case("PARAMETER")
+        && ascii_prefix_eq_ignore_case(input, 9, "PARAMETER")
         && (input.len() == 9
             || (!input.chars().nth(9).unwrap().is_alphanumeric()
                 && input.chars().nth(9).unwrap() != '_'))
     {
         Ok((&input[9..], Token::Parameter))
     } else if input.len() >= 7
-        && input[..7].eq_ignore_ascii_case("SESSION")
+        && ascii_prefix_eq_ignore_case(input, 7, "SESSION")
         && (input.len() == 7
             || (!input.chars().nth(7).unwrap().is_alphanumeric()
                 && input.chars().nth(7).unwrap() != '_'))
     {
         Ok((&input[7..], Token::Session))
     } else if input.len() >= 7
-        && input[..7].eq_ignore_ascii_case("BINDING")
+        && ascii_prefix_eq_ignore_case(input, 7, "BINDING")
         && (input.len() == 7
             || (!input.chars().nth(7).unwrap().is_alphanumeric()
                 && input.chars().nth(7).unwrap() != '_'))
     {
         Ok((&input[7..], Token::Binding))
     } else if input.len() >= 7
-        && input[..7].eq_ignore_ascii_case("CURRENT")
+        && ascii_prefix_eq_ignore_case(input, 7, "CURRENT")
         && (input.len() == 7
             || !input.chars().nth(7).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(7).unwrap_or(' ') != '_')
     {
         Ok((&input[7..], Token::Current))
     } else if input.len() >= 8
-        && input[..8].eq_ignore_ascii_case("PASSWORD")
+        && ascii_prefix_eq_ignore_case(input, 8, "PASSWORD")
         && (input.len() == 8
             || (!input.chars().nth(8).unwrap().is_alphanumeric()
                 && input.chars().nth(8).unwrap() != '_'))
     {
         Ok((&input[8..], Token::Password))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("STRING")
+        && ascii_prefix_eq_ignore_case(input, 6, "STRING")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
     {
         Ok((&input[6..], Token::StringType))
     } else if input.len() >= 11
-        && input[..11].eq_ignore_ascii_case("DESCRIPTION")
+        && ascii_prefix_eq_ignore_case(input, 11, "DESCRIPTION")
         && (input.len() == 11
             || !input.chars().nth(11).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(11).unwrap_or(' ') != '_')
     {
         Ok((&input[11..], Token::Description))
     } else if input.len() >= 8
-        && input[..8].eq_ignore_ascii_case("DESCRIBE")
+        && ascii_prefix_eq_ignore_case(input, 8, "DESCRIBE")
         && (input.len() == 8
             || !input.chars().nth(8).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(8).unwrap_or(' ') != '_')
     {
         Ok((&input[8..], Token::Describe))
     } else if input.len() >= 8
-        && input[..8].eq_ignore_ascii_case("VALIDATE")
+        && ascii_prefix_eq_ignore_case(input, 8, "VALIDATE")
         && (input.len() == 8
             || !input.chars().nth(8).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(8).unwrap_or(' ') != '_')
     {
         Ok((&input[8..], Token::Validate))
     } else if input.len() >= 7
-        && input[..7].eq_ignore_ascii_case("VERSION")
+        && ascii_prefix_eq_ignore_case(input, 7, "VERSION")
         && (input.len() == 7
             || !input.chars().nth(7).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(7).unwrap_or(' ') != '_')
     {
         Ok((&input[7..], Token::Version))
     } else if input.len() >= 7
-        && input[..7].eq_ignore_ascii_case("AGAINST")
+        && ascii_prefix_eq_ignore_case(input, 7, "AGAINST")
         && (input.len() == 7
             || !input.chars().nth(7).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(7).unwrap_or(' ') != '_')
     {
         Ok((&input[7..], Token::Against))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("SCHEMA")
+        && ascii_prefix_eq_ignore_case(input, 6, "SCHEMA")
         && (input.len() == 6
             || !input.chars().nth(6).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(6).unwrap_or(' ') != '_')
     {
         Ok((&input[6..], Token::Schema))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("INLINE")
+        && ascii_prefix_eq_ignore_case(input, 6, "INLINE")
         && (input.len() == 6
             || !input.chars().nth(6).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(6).unwrap_or(' ') != '_')
     {
         Ok((&input[6..], Token::Inline))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("ALTER")
+        && ascii_prefix_eq_ignore_case(input, 5, "ALTER")
         && (input.len() == 5
             || !input.chars().nth(5).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(5).unwrap_or(' ') != '_')
     {
         Ok((&input[5..], Token::Alter))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("SHOW")
+        && ascii_prefix_eq_ignore_case(input, 4, "SHOW")
         && (input.len() == 4
             || !input.chars().nth(4).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(4).unwrap_or(' ') != '_')
     {
         Ok((&input[4..], Token::Show))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("DATA")
+        && ascii_prefix_eq_ignore_case(input, 4, "DATA")
         && (input.len() == 4
             || !input.chars().nth(4).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(4).unwrap_or(' ') != '_')
     {
         Ok((&input[4..], Token::Data))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("FILE")
+        && ascii_prefix_eq_ignore_case(input, 4, "FILE")
         && (input.len() == 4
             || !input.chars().nth(4).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(4).unwrap_or(' ') != '_')
     {
         Ok((&input[4..], Token::File))
     } else if input.len() >= 3
-        && input[..3].eq_ignore_ascii_case("URL")
+        && ascii_prefix_eq_ignore_case(input, 3, "URL")
         && (input.len() == 3
             || !input.chars().nth(3).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(3).unwrap_or(' ') != '_')
     {
         Ok((&input[3..], Token::Url))
     } else if input.len() >= 7
-        && input[..7].eq_ignore_ascii_case("ACYCLIC")
+        && ascii_prefix_eq_ignore_case(input, 7, "ACYCLIC")
         && (input.len() == 7
             || (!input.chars().nth(7).unwrap().is_alphanumeric()
                 && input.chars().nth(7).unwrap() != '_'))
     {
         Ok((&input[7..], Token::Acyclic))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("SIMPLE")
+        && ascii_prefix_eq_ignore_case(input, 6, "SIMPLE")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(6).unwrap_or(' ') != '_'))
     {
         Ok((&input[6..], Token::Simple))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("TRAIL")
+        && ascii_prefix_eq_ignore_case(input, 5, "TRAIL")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Trail))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("WALK")
+        && ascii_prefix_eq_ignore_case(input, 4, "WALK")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Walk))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("PATH")
+        && ascii_prefix_eq_ignore_case(input, 4, "PATH")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Path))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("CREATE")
+        && ascii_prefix_eq_ignore_case(input, 6, "CREATE")
         && (input.len() == 6 || !input.chars().nth(6).unwrap_or(' ').is_alphanumeric())
     {
         Ok((&input[6..], Token::Create))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("INSERT")
+        && ascii_prefix_eq_ignore_case(input, 6, "INSERT")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
     {
         Ok((&input[6..], Token::Insert))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("DELETE")
+        && ascii_prefix_eq_ignore_case(input, 6, "DELETE")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
     {
         Ok((&input[6..], Token::Delete))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("REMOVE")
+        && ascii_prefix_eq_ignore_case(input, 6, "REMOVE")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
     {
         Ok((&input[6..], Token::Remove))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("UNWIND")
+        && ascii_prefix_eq_ignore_case(input, 6, "UNWIND")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
     {
         Ok((&input[6..], Token::Unwind))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("STARTS")
+        && ascii_prefix_eq_ignore_case(input, 6, "STARTS")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
     {
         Ok((&input[6..], Token::Starts))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("EXISTS")
+        && ascii_prefix_eq_ignore_case(input, 6, "EXISTS")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
     {
         Ok((&input[6..], Token::Exists))
     } else if input.len() >= 7
-        && input[..7].eq_ignore_ascii_case("MATCHES")
+        && ascii_prefix_eq_ignore_case(input, 7, "MATCHES")
         && (input.len() == 7
             || (!input.chars().nth(7).unwrap().is_alphanumeric()
                 && input.chars().nth(7).unwrap() != '_'))
     {
         Ok((&input[7..], Token::Matches))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("SOURCE")
+        && ascii_prefix_eq_ignore_case(input, 6, "SOURCE")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
     {
         Ok((&input[6..], Token::Source))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("CASE")
+        && ascii_prefix_eq_ignore_case(input, 4, "CASE")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Case))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("CAST")
+        && ascii_prefix_eq_ignore_case(input, 4, "CAST")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Cast))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("WHEN")
+        && ascii_prefix_eq_ignore_case(input, 4, "WHEN")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::When))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("THEN")
+        && ascii_prefix_eq_ignore_case(input, 4, "THEN")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Then))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("ELSE")
+        && ascii_prefix_eq_ignore_case(input, 4, "ELSE")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Else))
     } else if input.len() >= 3
-        && input[..3].eq_ignore_ascii_case("END")
+        && ascii_prefix_eq_ignore_case(input, 3, "END")
         && (input.len() == 3
             || (!input.chars().nth(3).unwrap().is_alphanumeric()
                 && input.chars().nth(3).unwrap() != '_'))
     {
         Ok((&input[3..], Token::End))
     } else if input.len() >= 7
-        && input[..7].eq_ignore_ascii_case("LEADING")
+        && ascii_prefix_eq_ignore_case(input, 7, "LEADING")
         && (input.len() == 7 || !input.chars().nth(7).unwrap_or(' ').is_alphanumeric())
     {
         Ok((&input[7..], Token::Leading))
     } else if input.len() >= 8
-        && input[..8].eq_ignore_ascii_case("TRAILING")
+        && ascii_prefix_eq_ignore_case(input, 8, "TRAILING")
         && (input.len() == 8 || !input.chars().nth(8).unwrap_or(' ').is_alphanumeric())
     {
         Ok((&input[8..], Token::Trailing))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("BOTH")
+        && ascii_prefix_eq_ignore_case(input, 4, "BOTH")
         && (input.len() == 4 || !input.chars().nth(4).unwrap_or(' ').is_alphanumeric())
     {
         Ok((&input[4..], Token::Both))
     } else if input.len() >= 3
-        && input[..3].eq_ignore_ascii_case("LET")
+        && ascii_prefix_eq_ignore_case(input, 3, "LET")
         && (input.len() == 3 || !input.chars().nth(3).unwrap_or(' ').is_alphanumeric())
     {
         Ok((&input[3..], Token::Let))
     } else if input.len() >= 3
-        && input[..3].eq_ignore_ascii_case("FOR")
+        && ascii_prefix_eq_ignore_case(input, 3, "FOR")
         && (input.len() == 3 || !input.chars().nth(3).unwrap_or(' ').is_alphanumeric())
     {
         Ok((&input[3..], Token::For))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("FILTER")
+        && ascii_prefix_eq_ignore_case(input, 6, "FILTER")
         && (input.len() == 6 || !input.chars().nth(6).unwrap_or(' ').is_alphanumeric())
     {
         Ok((&input[6..], Token::Filter))
     } else if input.len() >= 7
-        && input[..7].eq_ignore_ascii_case("DECLARE")
+        && ascii_prefix_eq_ignore_case(input, 7, "DECLARE")
         && (input.len() == 7 || !input.chars().nth(7).unwrap_or(' ').is_alphanumeric())
     {
         Ok((&input[7..], Token::Declare))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("NEXT")
+        && ascii_prefix_eq_ignore_case(input, 4, "NEXT")
         && (input.len() == 4 || !input.chars().nth(4).unwrap_or(' ').is_alphanumeric())
     {
         Ok((&input[4..], Token::Next))
     } else if input.len() >= 2
-        && input[..2].eq_ignore_ascii_case("AT")
+        && ascii_prefix_eq_ignore_case(input, 2, "AT")
         && (input.len() == 2
             || (!input.chars().nth(2).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(2).unwrap_or(' ') != '_'))
@@ -962,98 +975,98 @@ fn simple_patterns(input: &str) -> IResult<&str, Token> {
     } else if is_keyword_match(input, "COMMIT") {
         Ok((&input[6..], Token::Commit))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("VERTEX")
+        && ascii_prefix_eq_ignore_case(input, 6, "VERTEX")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
     {
         Ok((&input[6..], Token::Vertex))
     } else if input.len() >= 8
-        && input[..8].eq_ignore_ascii_case("NODETACH")
+        && ascii_prefix_eq_ignore_case(input, 8, "NODETACH")
         && (input.len() == 8
             || (!input.chars().nth(8).unwrap().is_alphanumeric()
                 && input.chars().nth(8).unwrap() != '_'))
     {
         Ok((&input[8..], Token::NoDetach))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("DETACH")
+        && ascii_prefix_eq_ignore_case(input, 6, "DETACH")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
     {
         Ok((&input[6..], Token::Detach))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("SELECT")
+        && ascii_prefix_eq_ignore_case(input, 6, "SELECT")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
     {
         Ok((&input[6..], Token::Select))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("FROM")
+        && ascii_prefix_eq_ignore_case(input, 4, "FROM")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::From))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("RETURN")
+        && ascii_prefix_eq_ignore_case(input, 6, "RETURN")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
     {
         Ok((&input[6..], Token::Return))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("MATCH")
+        && ascii_prefix_eq_ignore_case(input, 5, "MATCH")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(5).unwrap_or(' ') != '_'))
     {
         Ok((&input[5..], Token::Match))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("WHERE")
+        && ascii_prefix_eq_ignore_case(input, 5, "WHERE")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Where))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("MERGE")
+        && ascii_prefix_eq_ignore_case(input, 5, "MERGE")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Merge))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("STORE")
+        && ascii_prefix_eq_ignore_case(input, 5, "STORE")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Store))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("ORDER")
+        && ascii_prefix_eq_ignore_case(input, 5, "ORDER")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Order))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("LIMIT")
+        && ascii_prefix_eq_ignore_case(input, 5, "LIMIT")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Limit))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("HAVING")
+        && ascii_prefix_eq_ignore_case(input, 6, "HAVING")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
     {
         Ok((&input[6..], Token::Having))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("OFFSET")
+        && ascii_prefix_eq_ignore_case(input, 6, "OFFSET")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
@@ -1062,139 +1075,139 @@ fn simple_patterns(input: &str) -> IResult<&str, Token> {
     } else if is_keyword_match(input, "GRAPH") {
         Ok((&input[5..], Token::Graph))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("GROUP")
+        && ascii_prefix_eq_ignore_case(input, 5, "GROUP")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Group))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("TYPES")
+        && ascii_prefix_eq_ignore_case(input, 5, "TYPES")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Types))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("ROLES")
+        && ascii_prefix_eq_ignore_case(input, 5, "ROLES")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Roles))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("YIELD")
+        && ascii_prefix_eq_ignore_case(input, 5, "YIELD")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Yield))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("RESET")
+        && ascii_prefix_eq_ignore_case(input, 5, "RESET")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Reset))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("CLOSE")
+        && ascii_prefix_eq_ignore_case(input, 5, "CLOSE")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Close))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("VALUE")
+        && ascii_prefix_eq_ignore_case(input, 5, "VALUE")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Value))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("TABLE")
+        && ascii_prefix_eq_ignore_case(input, 5, "TABLE")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Table))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("TYPED")
+        && ascii_prefix_eq_ignore_case(input, 5, "TYPED")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Typed))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("TIME")
+        && ascii_prefix_eq_ignore_case(input, 4, "TIME")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Time))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("ZONE")
+        && ascii_prefix_eq_ignore_case(input, 4, "ZONE")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Zone))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("HOME")
+        && ascii_prefix_eq_ignore_case(input, 4, "HOME")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Home))
     } else if input.len() >= 4
-        && &input[..4] == "USER"
+        && ascii_prefix_eq(input, 4, "USER")
         && (input.len() == 4
             || !input.chars().nth(4).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(4).unwrap_or(' ') != '_')
     {
         Ok((&input[4..], Token::User))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("ROLE")
+        && ascii_prefix_eq_ignore_case(input, 4, "ROLE")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Role))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("GRANT")
+        && ascii_prefix_eq_ignore_case(input, 5, "GRANT")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Grant))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("REVOKE")
+        && ascii_prefix_eq_ignore_case(input, 6, "REVOKE")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
     {
         Ok((&input[6..], Token::Revoke))
     } else if input.len() >= 9
-        && input[..9].eq_ignore_ascii_case("PROCEDURE")
+        && ascii_prefix_eq_ignore_case(input, 9, "PROCEDURE")
         && (input.len() == 9
             || (!input.chars().nth(9).unwrap().is_alphanumeric()
                 && input.chars().nth(9).unwrap() != '_'))
     {
         Ok((&input[9..], Token::Procedure))
     } else if input.len() >= 2
-        && input[..2].eq_ignore_ascii_case("TO")
+        && ascii_prefix_eq_ignore_case(input, 2, "TO")
         && (input.len() == 2
             || (!input.chars().nth(2).unwrap().is_alphanumeric()
                 && input.chars().nth(2).unwrap() != '_'))
     {
         Ok((&input[2..], Token::To))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("NODE")
+        && ascii_prefix_eq_ignore_case(input, 4, "NODE")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         // Only treat as NODE keyword if it's actually uppercase "NODE"
-        if &input[..4] == "NODE" {
+        if ascii_prefix_eq(input, 4, "NODE") {
             Ok((&input[4..], Token::Node))
         } else {
             // "node", "Node", etc. should be identifiers
@@ -1204,166 +1217,166 @@ fn simple_patterns(input: &str) -> IResult<&str, Token> {
             )))
         }
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("EDGE")
+        && ascii_prefix_eq_ignore_case(input, 4, "EDGE")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Edge))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("WITH")
+        && ascii_prefix_eq_ignore_case(input, 4, "WITH")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::With))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("CALL")
+        && ascii_prefix_eq_ignore_case(input, 4, "CALL")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Call))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("LOAD")
+        && ascii_prefix_eq_ignore_case(input, 4, "LOAD")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Load))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("ENDS")
+        && ascii_prefix_eq_ignore_case(input, 4, "ENDS")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Ends))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("LIKE")
+        && ascii_prefix_eq_ignore_case(input, 4, "LIKE")
         && (input.len() == 4 || is_word_boundary(input.chars().nth(4).unwrap_or(' ')))
     {
         Ok((&input[4..], Token::Like))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("TYPE")
+        && ascii_prefix_eq_ignore_case(input, 4, "TYPE")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Type))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("COPY")
+        && ascii_prefix_eq_ignore_case(input, 4, "COPY")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Copy))
     } else if input.len() >= 8
-        && input[..8].eq_ignore_ascii_case("TRUNCATE")
+        && ascii_prefix_eq_ignore_case(input, 8, "TRUNCATE")
         && (input.len() == 8
             || (!input.chars().nth(8).unwrap().is_alphanumeric()
                 && input.chars().nth(8).unwrap() != '_'))
     {
         Ok((&input[8..], Token::Truncate))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("CLEAR")
+        && ascii_prefix_eq_ignore_case(input, 5, "CLEAR")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Clear))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("DROP")
+        && ascii_prefix_eq_ignore_case(input, 4, "DROP")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Drop))
     } else if input.len() >= 8
-        && input[..8].eq_ignore_ascii_case("REGISTER")
+        && ascii_prefix_eq_ignore_case(input, 8, "REGISTER")
         && (input.len() == 8
             || (!input.chars().nth(8).unwrap().is_alphanumeric()
                 && input.chars().nth(8).unwrap() != '_'))
     {
         Ok((&input[8..], Token::Register))
     } else if input.len() >= 10
-        && input[..10].eq_ignore_ascii_case("UNREGISTER")
+        && ascii_prefix_eq_ignore_case(input, 10, "UNREGISTER")
         && (input.len() == 10
             || (!input.chars().nth(10).unwrap().is_alphanumeric()
                 && input.chars().nth(10).unwrap() != '_'))
     {
         Ok((&input[10..], Token::Unregister))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("SKIP")
+        && ascii_prefix_eq_ignore_case(input, 4, "SKIP")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Skip))
     } else if input.len() >= 7
-        && input[..7].eq_ignore_ascii_case("LEADING")
+        && ascii_prefix_eq_ignore_case(input, 7, "LEADING")
         && (input.len() == 7
             || (!input.chars().nth(7).unwrap().is_alphanumeric()
                 && input.chars().nth(7).unwrap() != '_'))
     {
         Ok((&input[7..], Token::Leading))
     } else if input.len() >= 8
-        && input[..8].eq_ignore_ascii_case("TRAILING")
+        && ascii_prefix_eq_ignore_case(input, 8, "TRAILING")
         && (input.len() == 8
             || (!input.chars().nth(8).unwrap().is_alphanumeric()
                 && input.chars().nth(8).unwrap() != '_'))
     {
         Ok((&input[8..], Token::Trailing))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("BOTH")
+        && ascii_prefix_eq_ignore_case(input, 4, "BOTH")
         && (input.len() == 4
             || !input.chars().nth(4).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(4).unwrap_or(' ') != '_')
     {
         Ok((&input[4..], Token::Both))
     } else if input.len() >= 3
-        && input[..3].eq_ignore_ascii_case("SET")
+        && ascii_prefix_eq_ignore_case(input, 3, "SET")
         && (input.len() == 3
             || (!input.chars().nth(3).unwrap().is_alphanumeric()
                 && input.chars().nth(3).unwrap() != '_'))
     {
         Ok((&input[3..], Token::Set))
     } else if input.len() >= 10
-        && input[..10].eq_ignore_ascii_case("DESCENDING")
+        && ascii_prefix_eq_ignore_case(input, 10, "DESCENDING")
         && (input.len() == 10
             || (!input.chars().nth(10).unwrap().is_alphanumeric()
                 && input.chars().nth(10).unwrap() != '_'))
     {
         Ok((&input[10..], Token::Descending))
     } else if input.len() >= 9
-        && input[..9].eq_ignore_ascii_case("INTERSECT")
+        && ascii_prefix_eq_ignore_case(input, 9, "INTERSECT")
         && (input.len() == 9
             || (!input.chars().nth(9).unwrap().is_alphanumeric()
                 && input.chars().nth(9).unwrap() != '_'))
     {
         Ok((&input[9..], Token::Intersect))
     } else if input.len() >= 9
-        && input[..9].eq_ignore_ascii_case("ASCENDING")
+        && ascii_prefix_eq_ignore_case(input, 9, "ASCENDING")
         && (input.len() == 9
             || (!input.chars().nth(9).unwrap().is_alphanumeric()
                 && input.chars().nth(9).unwrap() != '_'))
     {
         Ok((&input[9..], Token::Ascending))
     } else if input.len() >= 6
-        && input[..6].eq_ignore_ascii_case("EXCEPT")
+        && ascii_prefix_eq_ignore_case(input, 6, "EXCEPT")
         && (input.len() == 6
             || (!input.chars().nth(6).unwrap().is_alphanumeric()
                 && input.chars().nth(6).unwrap() != '_'))
     {
         Ok((&input[6..], Token::Except))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("UNION")
+        && ascii_prefix_eq_ignore_case(input, 5, "UNION")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Union))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("NULLS")
+        && ascii_prefix_eq_ignore_case(input, 5, "NULLS")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
@@ -1374,112 +1387,112 @@ fn simple_patterns(input: &str) -> IResult<&str, Token> {
     } else if is_keyword_match(input, "LAST") {
         Ok((&input[4..], Token::Last))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("DESC")
+        && ascii_prefix_eq_ignore_case(input, 4, "DESC")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Desc))
     } else if input.len() >= 3
-        && input[..3].eq_ignore_ascii_case("ASC")
+        && ascii_prefix_eq_ignore_case(input, 3, "ASC")
         && (input.len() == 3
             || (!input.chars().nth(3).unwrap().is_alphanumeric()
                 && input.chars().nth(3).unwrap() != '_'))
     {
         Ok((&input[3..], Token::Asc))
     } else if input.len() >= 3
-        && input[..3].eq_ignore_ascii_case("ALL")
+        && ascii_prefix_eq_ignore_case(input, 3, "ALL")
         && (input.len() == 3
             || (!input.chars().nth(3).unwrap().is_alphanumeric()
                 && input.chars().nth(3).unwrap() != '_'))
     {
         Ok((&input[3..], Token::All))
     } else if input.len() >= 3
-        && input[..3].eq_ignore_ascii_case("ANY")
+        && ascii_prefix_eq_ignore_case(input, 3, "ANY")
         && (input.len() == 3
             || (!input.chars().nth(3).unwrap().is_alphanumeric()
                 && input.chars().nth(3).unwrap() != '_'))
     {
         Ok((&input[3..], Token::Any))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("SOME")
+        && ascii_prefix_eq_ignore_case(input, 4, "SOME")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Some))
     } else if input.len() >= 3
-        && input[..3].eq_ignore_ascii_case("AND")
+        && ascii_prefix_eq_ignore_case(input, 3, "AND")
         && (input.len() == 3
             || (!input.chars().nth(3).unwrap().is_alphanumeric()
                 && input.chars().nth(3).unwrap() != '_'))
     {
         Ok((&input[3..], Token::And))
     } else if input.len() >= 3
-        && input[..3].eq_ignore_ascii_case("NOT")
+        && ascii_prefix_eq_ignore_case(input, 3, "NOT")
         && (input.len() == 3
             || (!input.chars().nth(3).unwrap().is_alphanumeric()
                 && input.chars().nth(3).unwrap() != '_'))
     {
         Ok((&input[3..], Token::Not))
     } else if input.len() >= 3
-        && input[..3].eq_ignore_ascii_case("XOR")
+        && ascii_prefix_eq_ignore_case(input, 3, "XOR")
         && (input.len() == 3
             || (!input.chars().nth(3).unwrap().is_alphanumeric()
                 && input.chars().nth(3).unwrap() != '_'))
     {
         Ok((&input[3..], Token::Xor))
     } else if input.len() >= 2
-        && input[..2].eq_ignore_ascii_case("BY")
+        && ascii_prefix_eq_ignore_case(input, 2, "BY")
         && (input.len() == 2
             || (!input.chars().nth(2).unwrap().is_alphanumeric()
                 && input.chars().nth(2).unwrap() != '_'))
     {
         Ok((&input[2..], Token::By))
     } else if input.len() >= 2
-        && input[..2].eq_ignore_ascii_case("ON")
+        && ascii_prefix_eq_ignore_case(input, 2, "ON")
         && (input.len() == 2
             || (!input.chars().nth(2).unwrap().is_alphanumeric()
                 && input.chars().nth(2).unwrap() != '_'))
     {
         Ok((&input[2..], Token::On))
     } else if input.len() >= 2
-        && input[..2].eq_ignore_ascii_case("AS")
+        && ascii_prefix_eq_ignore_case(input, 2, "AS")
         && (input.len() == 2
             || (!input.chars().nth(2).unwrap().is_alphanumeric()
                 && input.chars().nth(2).unwrap() != '_'))
     {
         Ok((&input[2..], Token::As))
     } else if input.len() >= 2
-        && input[..2].eq_ignore_ascii_case("OR")
+        && ascii_prefix_eq_ignore_case(input, 2, "OR")
         && (input.len() == 2
             || (!input.chars().nth(2).unwrap().is_alphanumeric()
                 && input.chars().nth(2).unwrap() != '_'))
     {
         Ok((&input[2..], Token::Or))
     } else if input.len() >= 2
-        && input[..2].eq_ignore_ascii_case("OF")
+        && ascii_prefix_eq_ignore_case(input, 2, "OF")
         && (input.len() == 2
             || (!input.chars().nth(2).unwrap().is_alphanumeric()
                 && input.chars().nth(2).unwrap() != '_'))
     {
         Ok((&input[2..], Token::Of))
     } else if input.len() >= 2
-        && input[..2].eq_ignore_ascii_case("IS")
+        && ascii_prefix_eq_ignore_case(input, 2, "IS")
         && (input.len() == 2
             || (!input.chars().nth(2).unwrap_or(' ').is_alphanumeric()
                 && input.chars().nth(2).unwrap_or(' ') != '_'))
     {
         Ok((&input[2..], Token::Is))
     } else if input.len() >= 2
-        && input[..2].eq_ignore_ascii_case("IF")
+        && ascii_prefix_eq_ignore_case(input, 2, "IF")
         && (input.len() == 2
             || (!input.chars().nth(2).unwrap().is_alphanumeric()
                 && input.chars().nth(2).unwrap() != '_'))
     {
         Ok((&input[2..], Token::If))
     } else if input.len() >= 2
-        && input[..2].eq_ignore_ascii_case("IN")
+        && ascii_prefix_eq_ignore_case(input, 2, "IN")
         && (input.len() == 2
             || (!input.chars().nth(2).unwrap().is_alphanumeric()
                 && input.chars().nth(2).unwrap() != '_'))
@@ -1488,21 +1501,21 @@ fn simple_patterns(input: &str) -> IResult<&str, Token> {
     }
     // Boolean literals
     else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("true")
+        && ascii_prefix_eq_ignore_case(input, 4, "true")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
     {
         Ok((&input[4..], Token::Boolean(true)))
     } else if input.len() >= 5
-        && input[..5].eq_ignore_ascii_case("false")
+        && ascii_prefix_eq_ignore_case(input, 5, "false")
         && (input.len() == 5
             || (!input.chars().nth(5).unwrap().is_alphanumeric()
                 && input.chars().nth(5).unwrap() != '_'))
     {
         Ok((&input[5..], Token::Boolean(false)))
     } else if input.len() >= 4
-        && input[..4].eq_ignore_ascii_case("NULL")
+        && ascii_prefix_eq_ignore_case(input, 4, "NULL")
         && (input.len() == 4
             || (!input.chars().nth(4).unwrap().is_alphanumeric()
                 && input.chars().nth(4).unwrap() != '_'))
@@ -1863,4 +1876,30 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, String> {
     lexer.tokenize()
 }
 
-// Removed unused test_lexer function
+#[cfg(test)]
+mod tests {
+    use super::{simple_patterns, tokenize, Token};
+
+    #[test]
+    fn tokenize_utf8_string_literal_after_equal_operator() {
+        let title = "# V2 Auth \u{2014} Feedback";
+        let query = format!("= '{title}'");
+        let tokens = tokenize(&query).expect("UTF-8 string should tokenize");
+
+        assert_eq!(
+            tokens,
+            vec![Token::Equal, Token::String(title.to_string()), Token::Eof,]
+        );
+    }
+
+    #[test]
+    fn simple_patterns_does_not_panic_on_utf8_at_keyword_slice_boundary() {
+        let result = std::panic::catch_unwind(|| simple_patterns("# V2 Auth \u{2014} Feedback"));
+
+        assert!(
+            result.is_ok(),
+            "simple_patterns should not panic on UTF-8 input"
+        );
+        assert!(result.unwrap().is_err());
+    }
+}
